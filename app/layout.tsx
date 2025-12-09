@@ -5,6 +5,10 @@ export const metadata: Metadata = {
   title: 'Babblet - Real-Time AI Presentation Analysis',
   description: 'AI-powered tool for professors to analyze student presentations in real-time, generate insightful questions, and provide structured feedback.',
   keywords: ['presentation', 'AI', 'education', 'analysis', 'professor', 'student', 'Babblet'],
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+  },
 };
 
 export default function RootLayout({
