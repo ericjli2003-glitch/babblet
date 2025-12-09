@@ -1,28 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getSession } from '@/lib/session-store';
-
-// Store active connections for broadcasting
-const connections = new Map<string, Set<ReadableStreamDefaultController>>();
-
-// Helper to broadcast events to all connected clients for a session
-export function broadcastToSession(sessionId: string, event: {
-  type: string;
-  data: unknown;
-  timestamp: number;
-}) {
-  const sessionConnections = connections.get(sessionId);
-  if (sessionConnections) {
-    const message = `data: ${JSON.stringify(event)}\n\n`;
-    sessionConnections.forEach((controller) => {
-      try {
-        controller.enqueue(new TextEncoder().encode(message));
-      } catch (e) {
-        // Connection closed, will be cleaned up
-        console.error('Failed to send to connection:', e);
-      }
-    });
-  }
-}
+import { addConnection, removeConnection } from '@/lib/stream-manager';
 
 // GET - Server-Sent Events stream for real-time updates
 export async function GET(request: NextRequest) {
@@ -41,10 +19,7 @@ export async function GET(request: NextRequest) {
   const stream = new ReadableStream({
     start(controller) {
       // Register this connection
-      if (!connections.has(sessionId)) {
-        connections.set(sessionId, new Set());
-      }
-      connections.get(sessionId)!.add(controller);
+      addConnection(sessionId, controller);
 
       // Send initial connection message
       const initMessage = JSON.stringify({
@@ -76,13 +51,7 @@ export async function GET(request: NextRequest) {
       // Cleanup on close
       request.signal.addEventListener('abort', () => {
         clearInterval(heartbeatInterval);
-        const sessionConnections = connections.get(sessionId);
-        if (sessionConnections) {
-          sessionConnections.delete(controller);
-          if (sessionConnections.size === 0) {
-            connections.delete(sessionId);
-          }
-        }
+        removeConnection(sessionId, controller);
       });
     },
   });
@@ -95,4 +64,3 @@ export async function GET(request: NextRequest) {
     },
   });
 }
-

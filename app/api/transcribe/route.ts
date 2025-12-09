@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { addTranscriptSegment, getSession } from '@/lib/session-store';
 import { transcribeAudioChunk } from '@/lib/openai';
-import { broadcastToSession } from '../stream-presentation/route';
+import { broadcastToSession } from '@/lib/stream-manager';
 import type { TranscriptSegment } from '@/lib/types';
 
 // POST - Transcribe audio chunk

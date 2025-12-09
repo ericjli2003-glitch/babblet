@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, updateSessionStatus } from '@/lib/session-store';
-import { broadcastToSession } from '../stream-presentation/route';
+import { broadcastToSession } from '@/lib/stream-manager';
 
 // POST - Upload video and slides
 export async function POST(request: NextRequest) {

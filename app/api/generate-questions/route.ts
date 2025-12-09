@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getSession, addQuestions } from '@/lib/session-store';
 import { generateQuestions } from '@/lib/openai';
-import { broadcastToSession } from '../stream-presentation/route';
+import { broadcastToSession } from '@/lib/stream-manager';
 import type { GeneratedQuestion, KeyClaim, LogicalGap } from '@/lib/types';
 
 // POST - Generate questions based on analysis

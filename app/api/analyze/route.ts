@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getSession, updateAnalysis, getSlideAnalysis } from '@/lib/session-store';
 import { analyzeTranscript } from '@/lib/openai';
-import { broadcastToSession } from '../stream-presentation/route';
+import { broadcastToSession } from '@/lib/stream-manager';
 import type { AnalysisSummary } from '@/lib/types';
 
 // POST - Analyze transcript content

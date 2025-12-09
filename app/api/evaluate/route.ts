@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, updateRubric, getAnalysis } from '@/lib/session-store';
 import { evaluatePresentation } from '@/lib/openai';
-import { broadcastToSession } from '../stream-presentation/route';
+import { broadcastToSession } from '@/lib/stream-manager';
 import type { RubricEvaluation, AnalysisSummary } from '@/lib/types';
 
 // POST - Generate rubric evaluation
