@@ -20,12 +20,19 @@ import type {
 } from './types';
 
 // ============================================
-// OpenAI Client Configuration
+// OpenAI Client Configuration (Lazy-loaded)
 // ============================================
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let _openai: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return _openai;
+}
 
 // ============================================
 // Audio Transcription
@@ -37,11 +44,11 @@ export async function transcribeAudioChunk(
 ): Promise<TranscriptSegment | null> {
   try {
     // Create a File-like object from the buffer for Whisper API
-    const audioFile = new File([audioBuffer], 'audio.webm', {
+    const audioFile = new File([new Uint8Array(audioBuffer)], 'audio.webm', {
       type: 'audio/webm',
     });
 
-    const response = await openai.audio.transcriptions.create({
+    const response = await getOpenAIClient().audio.transcriptions.create({
       file: audioFile,
       model: 'whisper-1',
       language,
@@ -97,7 +104,7 @@ export async function analyzeTranscript(
     : '';
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAIClient().chat.completions.create({
       model: 'gpt-4o',
       messages: [
         { role: 'system', content: ANALYSIS_SYSTEM_PROMPT },
@@ -174,7 +181,7 @@ export async function generateQuestions(
   const gapsSummary = gaps.map(g => `- ${g.description}`).join('\n');
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAIClient().chat.completions.create({
       model: 'gpt-4o',
       messages: [
         { role: 'system', content: QUESTION_GENERATION_PROMPT },
@@ -268,7 +275,7 @@ export async function evaluatePresentation(
   analysis: AnalysisSummary
 ): Promise<RubricEvaluation> {
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAIClient().chat.completions.create({
       model: 'gpt-4o',
       messages: [
         { role: 'system', content: RUBRIC_EVALUATION_PROMPT },
@@ -338,7 +345,7 @@ export async function analyzeSlideImage(
   pageNumber: number
 ): Promise<SlideContent> {
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAIClient().chat.completions.create({
       model: 'gpt-4o',
       messages: [
         { role: 'system', content: VISION_ANALYSIS_PROMPT },
@@ -393,7 +400,7 @@ export async function analyzeAllSlides(
 
   // Aggregate analysis
   const allKeywords = slides.flatMap(s => s.keywords);
-  const keyTopics = [...new Set(allKeywords)].slice(0, 10);
+  const keyTopics = Array.from(new Set(allKeywords)).slice(0, 10);
   
   const allMainPoints = slides.flatMap(s => s.mainPoints);
   const overallTheme = allMainPoints.length > 0 
@@ -413,7 +420,7 @@ export async function analyzeAllSlides(
 
 async function generateOverallTheme(mainPoints: string[]): Promise<string> {
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAIClient().chat.completions.create({
       model: 'gpt-4o',
       messages: [
         {
@@ -440,7 +447,7 @@ async function generateSlideBasedQuestions(slides: SlideContent[]): Promise<stri
       .map(s => `Slide ${s.pageNumber}: ${s.mainPoints.join(', ')}`)
       .join('\n');
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAIClient().chat.completions.create({
       model: 'gpt-4o',
       messages: [
         {
@@ -525,5 +532,5 @@ export function estimateReadingTime(text: string): number {
   return Math.ceil(wordCount / wordsPerMinute);
 }
 
-export default openai;
+export default getOpenAIClient;
 
