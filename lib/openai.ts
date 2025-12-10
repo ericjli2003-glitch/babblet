@@ -54,20 +54,41 @@ export async function transcribeAudioChunk(
   audioBuffer: Buffer,
   language: string = 'en'
 ): Promise<TranscriptSegment | null> {
+  const fs = await import('fs');
+  const path = await import('path');
+  const os = await import('os');
+  
+  // Create temp file path
+  const tempDir = os.tmpdir();
+  const tempFile = path.join(tempDir, `audio-${Date.now()}.webm`);
+  
   try {
-    // Use OpenAI's toFile helper for proper Node.js compatibility
-    const { toFile } = await import('openai/uploads');
+    // Check if buffer has content
+    if (!audioBuffer || audioBuffer.length < 100) {
+      console.log('Audio buffer too small:', audioBuffer?.length);
+      return null;
+    }
+
+    console.log('Processing audio buffer of size:', audioBuffer.length);
+
+    // Write buffer to temp file
+    fs.writeFileSync(tempFile, audioBuffer);
     
-    const audioFile = await toFile(audioBuffer, 'audio.webm', {
-      type: 'audio/webm',
-    });
+    // Create read stream for OpenAI
+    const fileStream = fs.createReadStream(tempFile);
 
     const response = await getOpenAIClient().audio.transcriptions.create({
-      file: audioFile,
+      file: fileStream,
       model: 'whisper-1',
       language,
-      response_format: 'verbose_json',
     });
+
+    // Clean up temp file
+    try {
+      fs.unlinkSync(tempFile);
+    } catch (e) {
+      console.warn('Failed to delete temp file:', e);
+    }
 
     if (!response.text || response.text.trim() === '') {
       return null;
@@ -77,10 +98,18 @@ export async function transcribeAudioChunk(
       id: uuidv4(),
       text: response.text,
       timestamp: Date.now(),
-      duration: response.duration ? response.duration * 1000 : 0,
-      confidence: 0.95, // Whisper doesn't provide confidence, using default
+      duration: 0,
+      confidence: 0.95,
     };
   } catch (error) {
+    // Clean up temp file on error
+    try {
+      const fs2 = await import('fs');
+      fs2.unlinkSync(tempFile);
+    } catch (e) {
+      // Ignore cleanup errors
+    }
+    
     console.error('Transcription error:', error);
     throw new Error(`Failed to transcribe audio: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
