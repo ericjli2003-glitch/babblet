@@ -5,7 +5,6 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Mic,
-  MicOff,
   Square,
   Play,
   Pause,
@@ -15,10 +14,11 @@ import {
   Settings,
   Download,
   Share2,
-  Volume2,
   Loader2,
   CheckCircle,
   AlertCircle,
+  Upload,
+  Video,
 } from 'lucide-react';
 import TranscriptFeed from '@/components/TranscriptFeed';
 import QuestionBank from '@/components/QuestionBank';
@@ -44,8 +44,10 @@ function LiveDashboardContent() {
   // State
   const [status, setStatus] = useState<PresentationStatus>('idle');
   const [isRecording, setIsRecording] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
   const [analysis, setAnalysis] = useState<AnalysisSummary | null>(null);
   const [questions, setQuestions] = useState<{
@@ -58,6 +60,8 @@ function LiveDashboardContent() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
   // Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -65,10 +69,11 @@ function LiveDashboardContent() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
   const startTimeRef = useRef<number>(0);
   const analysisIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastAnalysisTimeRef = useRef<number>(0);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoChunkIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Connect to SSE stream for real-time updates
   useEffect(() => {
@@ -141,16 +146,133 @@ function LiveDashboardContent() {
 
   // Audio level visualization
   const updateAudioLevel = useCallback(() => {
-    if (analyserRef.current && isRecording) {
+    if (analyserRef.current && (isRecording || isPlaying)) {
       const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
       analyserRef.current.getByteFrequencyData(dataArray);
       const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
       setAudioLevel(average / 255);
       requestAnimationFrame(updateAudioLevel);
     }
-  }, [isRecording]);
+  }, [isRecording, isPlaying]);
 
-  // Start recording
+  // Handle video file selection
+  const handleVideoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setVideoFile(file);
+      const url = URL.createObjectURL(file);
+      setVideoUrl(url);
+    }
+  }, []);
+
+  // Process video - extract audio and send for transcription
+  const processVideo = async () => {
+    if (!videoRef.current || !videoUrl) return;
+
+    const video = videoRef.current;
+    
+    try {
+      // Create audio context
+      audioContextRef.current = new AudioContext();
+      
+      // Create media element source from video
+      const source = audioContextRef.current.createMediaElementSource(video);
+      
+      // Create analyser for visualization
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      analyserRef.current.fftSize = 256;
+      
+      // Create destination for recording
+      const destination = audioContextRef.current.createMediaStreamDestination();
+      
+      // Connect: source -> analyser -> destination (for recording)
+      source.connect(analyserRef.current);
+      analyserRef.current.connect(audioContextRef.current.destination); // So we can hear it
+      source.connect(destination);
+      
+      // Set up MediaRecorder to capture audio
+      const mediaRecorder = new MediaRecorder(destination.stream, {
+        mimeType: 'audio/webm;codecs=opus',
+      });
+      mediaRecorderRef.current = mediaRecorder;
+      
+      startTimeRef.current = Date.now();
+      
+      mediaRecorder.ondataavailable = async (event) => {
+        if (event.data.size > 0) {
+          // Send chunk to server for transcription
+          const formData = new FormData();
+          formData.append('audio', event.data);
+          formData.append('sessionId', sessionId || '');
+          formData.append('timestamp', String(video.currentTime * 1000));
+
+          try {
+            await fetch('/api/transcribe', {
+              method: 'POST',
+              body: formData,
+            });
+          } catch (e) {
+            console.error('Failed to send audio chunk:', e);
+          }
+        }
+      };
+      
+      // Start recording chunks every 5 seconds
+      mediaRecorder.start(5000);
+      
+      // Play the video
+      video.play();
+      setIsPlaying(true);
+      setStatus('recording');
+      updateAudioLevel();
+      
+      // Set up periodic analysis
+      analysisIntervalRef.current = setInterval(() => {
+        const now = Date.now();
+        if (now - lastAnalysisTimeRef.current >= 15000 && transcript.length > 0) {
+          triggerAnalysis();
+          lastAnalysisTimeRef.current = now;
+        }
+      }, 5000);
+      
+      // Handle video end
+      video.onended = async () => {
+        mediaRecorder.stop();
+        setIsPlaying(false);
+        setStatus('processing');
+        
+        if (analysisIntervalRef.current) {
+          clearInterval(analysisIntervalRef.current);
+        }
+        
+        // Final analysis and rubric
+        await triggerAnalysis();
+        await generateRubric();
+        
+        setStatus('completed');
+      };
+      
+    } catch (error) {
+      console.error('Failed to process video:', error);
+    }
+  };
+
+  // Pause/Resume video
+  const togglePlayPause = () => {
+    if (!videoRef.current) return;
+    
+    if (isPlaying) {
+      videoRef.current.pause();
+      mediaRecorderRef.current?.pause();
+      setIsPlaying(false);
+    } else {
+      videoRef.current.play();
+      mediaRecorderRef.current?.resume();
+      setIsPlaying(true);
+    }
+  };
+
+  // Start live recording
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -169,13 +291,10 @@ function LiveDashboardContent() {
       });
       mediaRecorderRef.current = mediaRecorder;
 
-      audioChunksRef.current = [];
       startTimeRef.current = Date.now();
 
       mediaRecorder.ondataavailable = async (event) => {
         if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-          
           // Send chunk to server for transcription
           const formData = new FormData();
           formData.append('audio', event.data);
@@ -233,7 +352,7 @@ function LiveDashboardContent() {
 
       setStatus('completed');
     }
-  }, [isRecording, transcript]);
+  }, [isRecording]);
 
   // Trigger analysis
   const triggerAnalysis = async () => {
@@ -300,7 +419,7 @@ function LiveDashboardContent() {
     }
   };
 
-  // Timer
+  // Timer for live recording
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isRecording) {
@@ -310,6 +429,18 @@ function LiveDashboardContent() {
     }
     return () => clearInterval(interval);
   }, [isRecording]);
+
+  // Update current time from video
+  useEffect(() => {
+    if (videoRef.current && isPlaying) {
+      const video = videoRef.current;
+      const updateTime = () => {
+        setCurrentTime(video.currentTime * 1000);
+      };
+      video.addEventListener('timeupdate', updateTime);
+      return () => video.removeEventListener('timeupdate', updateTime);
+    }
+  }, [isPlaying]);
 
   // Format time
   const formatTime = (ms: number) => {
@@ -377,10 +508,13 @@ function LiveDashboardContent() {
               {/* Timer */}
               <div className="px-4 py-2 bg-surface-100 rounded-xl font-mono text-lg font-medium text-surface-700">
                 {formatTime(currentTime)}
+                {mode === 'upload' && videoDuration > 0 && (
+                  <span className="text-surface-400"> / {formatTime(videoDuration * 1000)}</span>
+                )}
               </div>
 
               {/* Audio level indicator */}
-              {isRecording && (
+              {(isRecording || isPlaying) && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-red-50 rounded-xl">
                   <div className="pulse-dot" />
                   <div className="flex items-end gap-0.5 h-6">
@@ -417,59 +551,116 @@ function LiveDashboardContent() {
 
       {/* Main content */}
       <div className="flex-1 flex">
-        {/* Sidebar - Recording controls for live mode */}
-        {mode === 'live' && (
-          <aside className="w-20 bg-white border-r border-surface-200 flex flex-col items-center py-6 gap-4">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={isRecording ? stopRecording : startRecording}
-              disabled={status === 'processing'}
-              className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${
-                isRecording
-                  ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
-                  : 'bg-gradient-primary text-white shadow-glow'
-              } disabled:opacity-50`}
-            >
-              {status === 'processing' ? (
-                <Loader2 className="w-6 h-6 animate-spin" />
-              ) : isRecording ? (
-                <Square className="w-6 h-6" />
+        {/* Sidebar - Controls */}
+        <aside className="w-20 bg-white border-r border-surface-200 flex flex-col items-center py-6 gap-4">
+          {mode === 'live' ? (
+            <>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={isRecording ? stopRecording : startRecording}
+                disabled={status === 'processing'}
+                className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${
+                  isRecording
+                    ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+                    : 'bg-gradient-primary text-white shadow-glow'
+                } disabled:opacity-50`}
+              >
+                {status === 'processing' ? (
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                ) : isRecording ? (
+                  <Square className="w-6 h-6" />
+                ) : (
+                  <Mic className="w-6 h-6" />
+                )}
+              </motion.button>
+            </>
+          ) : (
+            <>
+              {!videoUrl ? (
+                <label className="w-14 h-14 rounded-2xl bg-gradient-primary text-white shadow-glow flex items-center justify-center cursor-pointer hover:scale-105 transition-transform">
+                  <Upload className="w-6 h-6" />
+                  <input
+                    type="file"
+                    accept="video/*"
+                    onChange={handleVideoUpload}
+                    className="hidden"
+                  />
+                </label>
               ) : (
-                <Mic className="w-6 h-6" />
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={status === 'idle' ? processVideo : togglePlayPause}
+                  disabled={status === 'processing'}
+                  className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${
+                    isPlaying
+                      ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+                      : 'bg-gradient-primary text-white shadow-glow'
+                  } disabled:opacity-50`}
+                >
+                  {status === 'processing' ? (
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  ) : isPlaying ? (
+                    <Pause className="w-6 h-6" />
+                  ) : (
+                    <Play className="w-6 h-6" />
+                  )}
+                </motion.button>
               )}
-            </motion.button>
+            </>
+          )}
 
-            <div className="w-10 h-px bg-surface-200" />
+          <div className="w-10 h-px bg-surface-200" />
 
-            <button
-              onClick={triggerAnalysis}
-              disabled={transcript.length === 0 || isAnalyzing}
-              className="w-12 h-12 rounded-xl bg-surface-100 text-surface-600 hover:bg-surface-200 flex items-center justify-center transition-colors disabled:opacity-50"
-            >
-              {isAnalyzing ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <RotateCcw className="w-5 h-5" />
-              )}
-            </button>
+          <button
+            onClick={triggerAnalysis}
+            disabled={transcript.length === 0 || isAnalyzing}
+            className="w-12 h-12 rounded-xl bg-surface-100 text-surface-600 hover:bg-surface-200 flex items-center justify-center transition-colors disabled:opacity-50"
+          >
+            {isAnalyzing ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <RotateCcw className="w-5 h-5" />
+            )}
+          </button>
 
-            <button
-              onClick={triggerQuestionGeneration}
-              disabled={!analysis || isGeneratingQuestions}
-              className="w-12 h-12 rounded-xl bg-surface-100 text-surface-600 hover:bg-surface-200 flex items-center justify-center transition-colors disabled:opacity-50"
-            >
-              {isGeneratingQuestions ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Sparkles className="w-5 h-5" />
-              )}
-            </button>
-          </aside>
-        )}
+          <button
+            onClick={triggerQuestionGeneration}
+            disabled={!analysis || isGeneratingQuestions}
+            className="w-12 h-12 rounded-xl bg-surface-100 text-surface-600 hover:bg-surface-200 flex items-center justify-center transition-colors disabled:opacity-50"
+          >
+            {isGeneratingQuestions ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Sparkles className="w-5 h-5" />
+            )}
+          </button>
+        </aside>
 
         {/* Main panels */}
         <main className="flex-1 flex flex-col">
+          {/* Video player for upload mode */}
+          {mode === 'upload' && (
+            <div className="bg-surface-900 p-4">
+              {!videoUrl ? (
+                <div className="flex flex-col items-center justify-center py-12 text-surface-400">
+                  <Video className="w-16 h-16 mb-4 opacity-50" />
+                  <p className="text-lg mb-2">No video selected</p>
+                  <p className="text-sm">Click the upload button on the left to select a video</p>
+                </div>
+              ) : (
+                <video
+                  ref={videoRef}
+                  src={videoUrl}
+                  className="w-full max-h-64 rounded-xl"
+                  onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
+                  controls={false}
+                />
+              )}
+            </div>
+          )}
+
           {/* Panel tabs */}
           <div className="bg-white border-b border-surface-200 px-6">
             <div className="flex gap-1">
@@ -509,7 +700,7 @@ function LiveDashboardContent() {
                   <div className="h-full bg-white m-4 rounded-3xl shadow-soft overflow-hidden">
                     <TranscriptFeed
                       segments={transcript}
-                      isLive={isRecording}
+                      isLive={isRecording || isPlaying}
                       currentTime={currentTime}
                       highlightKeywords={analysis?.keyClaims.flatMap((c) => c.claim.split(' ').slice(0, 3)) || []}
                     />
@@ -617,4 +808,3 @@ export default function LiveDashboard() {
     </Suspense>
   );
 }
-
