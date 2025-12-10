@@ -55,8 +55,10 @@ export async function transcribeAudioChunk(
   language: string = 'en'
 ): Promise<TranscriptSegment | null> {
   try {
-    // Create a File-like object from the buffer for Whisper API
-    const audioFile = new File([new Uint8Array(audioBuffer)], 'audio.webm', {
+    // Use OpenAI's toFile helper for proper Node.js compatibility
+    const { toFile } = await import('openai/uploads');
+    
+    const audioFile = await toFile(audioBuffer, 'audio.webm', {
       type: 'audio/webm',
     });
 
@@ -65,7 +67,6 @@ export async function transcribeAudioChunk(
       model: 'whisper-1',
       language,
       response_format: 'verbose_json',
-      timestamp_granularities: ['word', 'segment'],
     });
 
     if (!response.text || response.text.trim() === '') {
