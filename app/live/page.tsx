@@ -73,7 +73,9 @@ function LiveDashboardContent() {
   const analysisIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastAnalysisTimeRef = useRef<number>(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const videoChunkIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const transcriptionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTranscribedIndexRef = useRef<number>(0);
 
   // Connect to SSE stream for real-time updates
   useEffect(() => {
@@ -165,6 +167,33 @@ function LiveDashboardContent() {
     }
   }, []);
 
+  // Send accumulated audio for transcription
+  const sendAudioForTranscription = async (currentTime: number) => {
+    if (audioChunksRef.current.length === 0) return;
+    
+    // Create a complete audio file from all chunks
+    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+    
+    // Only send if we have enough data (at least 10KB)
+    if (audioBlob.size < 10000) return;
+    
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'recording.webm');
+    formData.append('sessionId', sessionId || '');
+    formData.append('timestamp', String(currentTime));
+
+    try {
+      await fetch('/api/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+      // Clear chunks after successful transcription
+      audioChunksRef.current = [];
+    } catch (e) {
+      console.error('Failed to send audio:', e);
+    }
+  };
+
   // Process video - extract audio and send for transcription
   const processVideo = async () => {
     if (!videoRef.current || !videoUrl) return;
@@ -190,6 +219,9 @@ function LiveDashboardContent() {
       analyserRef.current.connect(audioContextRef.current.destination); // So we can hear it
       source.connect(destination);
       
+      // Reset chunks
+      audioChunksRef.current = [];
+      
       // Set up MediaRecorder to capture audio
       const mediaRecorder = new MediaRecorder(destination.stream, {
         mimeType: 'audio/webm;codecs=opus',
@@ -198,27 +230,22 @@ function LiveDashboardContent() {
       
       startTimeRef.current = Date.now();
       
-      mediaRecorder.ondataavailable = async (event) => {
+      // Collect chunks - don't send individually
+      mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
-          // Send chunk to server for transcription
-          const formData = new FormData();
-          formData.append('audio', event.data);
-          formData.append('sessionId', sessionId || '');
-          formData.append('timestamp', String(video.currentTime * 1000));
-
-          try {
-            await fetch('/api/transcribe', {
-              method: 'POST',
-              body: formData,
-            });
-          } catch (e) {
-            console.error('Failed to send audio chunk:', e);
-          }
+          audioChunksRef.current.push(event.data);
         }
       };
       
-      // Start recording chunks every 5 seconds
-      mediaRecorder.start(5000);
+      // Start recording - collect data frequently
+      mediaRecorder.start(1000);
+      
+      // Send accumulated audio every 8 seconds
+      transcriptionIntervalRef.current = setInterval(() => {
+        if (videoRef.current) {
+          sendAudioForTranscription(videoRef.current.currentTime * 1000);
+        }
+      }, 8000);
       
       // Play the video
       video.play();
@@ -238,6 +265,14 @@ function LiveDashboardContent() {
       // Handle video end
       video.onended = async () => {
         mediaRecorder.stop();
+        
+        if (transcriptionIntervalRef.current) {
+          clearInterval(transcriptionIntervalRef.current);
+        }
+        
+        // Send final audio
+        await sendAudioForTranscription(video.duration * 1000);
+        
         setIsPlaying(false);
         setStatus('processing');
         
@@ -285,6 +320,9 @@ function LiveDashboardContent() {
       analyserRef.current.fftSize = 256;
       source.connect(analyserRef.current);
 
+      // Reset chunks
+      audioChunksRef.current = [];
+
       // Set up MediaRecorder
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: 'audio/webm;codecs=opus',
@@ -293,27 +331,21 @@ function LiveDashboardContent() {
 
       startTimeRef.current = Date.now();
 
-      mediaRecorder.ondataavailable = async (event) => {
+      // Collect chunks - don't send individually
+      mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
-          // Send chunk to server for transcription
-          const formData = new FormData();
-          formData.append('audio', event.data);
-          formData.append('sessionId', sessionId || '');
-          formData.append('timestamp', String(Date.now() - startTimeRef.current));
-
-          try {
-            await fetch('/api/transcribe', {
-              method: 'POST',
-              body: formData,
-            });
-          } catch (e) {
-            console.error('Failed to send audio chunk:', e);
-          }
+          audioChunksRef.current.push(event.data);
         }
       };
 
-      // Collect audio every 5 seconds
-      mediaRecorder.start(5000);
+      // Collect audio frequently
+      mediaRecorder.start(1000);
+      
+      // Send accumulated audio every 8 seconds
+      transcriptionIntervalRef.current = setInterval(() => {
+        sendAudioForTranscription(Date.now() - startTimeRef.current);
+      }, 8000);
+      
       setIsRecording(true);
       setStatus('recording');
       updateAudioLevel();
@@ -342,6 +374,13 @@ function LiveDashboardContent() {
       if (analysisIntervalRef.current) {
         clearInterval(analysisIntervalRef.current);
       }
+      
+      if (transcriptionIntervalRef.current) {
+        clearInterval(transcriptionIntervalRef.current);
+      }
+
+      // Send final audio
+      await sendAudioForTranscription(Date.now() - startTimeRef.current);
 
       setIsRecording(false);
       setStatus('processing');
