@@ -24,18 +24,10 @@ type InputMode = 'upload' | 'live' | null;
 export default function HomePage() {
   const router = useRouter();
   const [selectedMode, setSelectedMode] = useState<InputMode>(null);
-  const [videoFile, setVideoFile] = useState<File | null>(null);
   const [slidesFile, setSlidesFile] = useState<File | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [presenterName, setPresenterName] = useState('');
   const [presentationTitle, setPresentationTitle] = useState('');
-
-  const handleVideoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && (file.type.includes('video') || file.name.endsWith('.mov') || file.name.endsWith('.mp4'))) {
-      setVideoFile(file);
-    }
-  }, []);
 
   const handleStartSession = async () => {
     setIsStarting(true);
@@ -55,23 +47,6 @@ export default function HomePage() {
       const data = await response.json();
       
       if (data.sessionId) {
-        // If there's a video file, upload it
-        if (selectedMode === 'upload' && videoFile) {
-          const formData = new FormData();
-          formData.append('video', videoFile);
-          formData.append('sessionId', data.sessionId);
-          
-          if (slidesFile) {
-            formData.append('slides', slidesFile);
-          }
-
-          // Start upload in background, navigate immediately
-          fetch('/api/upload', {
-            method: 'POST',
-            body: formData,
-          });
-        }
-
         // Navigate to live dashboard
         router.push(`/live?sessionId=${data.sessionId}&mode=${selectedMode}`);
       }
@@ -240,47 +215,25 @@ export default function HomePage() {
                     </div>
                   </div>
 
-                  {/* Video Upload (only for upload mode) */}
+                  {/* Video Upload info (only for upload mode) */}
                   {selectedMode === 'upload' && (
-                    <div>
-                      <label className="block text-sm font-medium text-surface-700 mb-2">
-                        Video File
-                      </label>
-                      <div
-                        className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-colors ${
-                          videoFile
-                            ? 'border-primary-500 bg-primary-50/50'
-                            : 'border-surface-300 hover:border-primary-400 hover:bg-surface-50'
-                        }`}
-                      >
-                        <input
-                          type="file"
-                          accept="video/*,.mp4,.mov,.webm"
-                          onChange={handleVideoUpload}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        />
-                        {videoFile ? (
-                          <div className="flex items-center justify-center gap-3">
-                            <FileVideo className="w-8 h-8 text-primary-600" />
-                            <div className="text-left">
-                              <p className="font-medium text-surface-900">{videoFile.name}</p>
-                              <p className="text-sm text-surface-500">
-                                {(videoFile.size / (1024 * 1024)).toFixed(2)} MB
-                              </p>
-                            </div>
+                    <div className="p-6 rounded-2xl bg-gradient-subtle border border-primary-200">
+                      <div className="flex items-start gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-white shadow-soft flex items-center justify-center flex-shrink-0">
+                          <FileVideo className="w-6 h-6 text-primary-600" />
+                        </div>
+                        <div>
+                          <h4 className="font-medium text-surface-900 mb-1">Video Selection</h4>
+                          <p className="text-sm text-surface-600">
+                            You&apos;ll select your video file on the next screen. The AI will extract audio 
+                            and transcribe as the video plays, with full playback controls.
+                          </p>
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            <span className="px-2 py-1 bg-white rounded-lg text-xs text-surface-600">MP4</span>
+                            <span className="px-2 py-1 bg-white rounded-lg text-xs text-surface-600">MOV</span>
+                            <span className="px-2 py-1 bg-white rounded-lg text-xs text-surface-600">WebM</span>
                           </div>
-                        ) : (
-                          <>
-                            <FileVideo className="w-12 h-12 text-surface-400 mx-auto mb-3" />
-                            <p className="text-surface-600">
-                              Drag & drop or{' '}
-                              <span className="text-primary-600 font-medium">browse</span>
-                            </p>
-                            <p className="text-sm text-surface-400 mt-1">
-                              MP4, MOV, WebM up to 500MB
-                            </p>
-                          </>
-                        )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -296,7 +249,7 @@ export default function HomePage() {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={handleStartSession}
-                    disabled={isStarting || (selectedMode === 'upload' && !videoFile)}
+                    disabled={isStarting}
                     className="w-full btn-primary py-4 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isStarting ? (
@@ -306,7 +259,7 @@ export default function HomePage() {
                       </>
                     ) : (
                       <>
-                        {selectedMode === 'upload' ? 'Start Analysis' : 'Start Recording'}
+                        {selectedMode === 'upload' ? 'Continue to Upload' : 'Start Recording'}
                         <ArrowRight className="w-5 h-5 ml-2" />
                       </>
                     )}

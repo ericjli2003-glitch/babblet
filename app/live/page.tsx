@@ -692,7 +692,7 @@ function LiveDashboardContent() {
                 <div className="flex flex-col items-center justify-center py-12 text-surface-400">
                   <Video className="w-16 h-16 mb-4 opacity-50" />
                   <p className="text-lg mb-2">No video selected</p>
-                  <p className="text-sm mb-6">Click the upload button on the left to select a video</p>
+                  <p className="text-sm mb-6">Select a video to analyze</p>
                   <label className="px-6 py-3 bg-gradient-primary text-white font-medium rounded-xl cursor-pointer hover:shadow-glow transition-shadow">
                     <Upload className="w-5 h-5 inline mr-2" />
                     Select Video File
@@ -705,26 +705,86 @@ function LiveDashboardContent() {
                   </label>
                 </div>
               ) : (
-                <div className="relative">
-                  <video
-                    ref={videoRef}
-                    src={videoUrl}
-                    className="w-full max-h-64 rounded-xl"
-                    onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
-                    controls={false}
-                  />
-                  {status === 'idle' && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-xl">
-                      <motion.button
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={processVideo}
-                        className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-lg"
-                      >
-                        <Play className="w-8 h-8 text-primary-600 ml-1" />
-                      </motion.button>
+                <div className="space-y-3">
+                  <div className="relative rounded-xl overflow-hidden bg-black">
+                    <video
+                      ref={videoRef}
+                      src={videoUrl}
+                      className="w-full max-h-72"
+                      onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
+                      onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime * 1000)}
+                      onEnded={async () => {
+                        if (mediaRecorderRef.current) {
+                          mediaRecorderRef.current.stop();
+                        }
+                        setIsPlaying(false);
+                        setStatus('processing');
+                        if (analysisIntervalRef.current) {
+                          clearInterval(analysisIntervalRef.current);
+                        }
+                        await triggerAnalysis();
+                        await generateRubric();
+                        setStatus('completed');
+                      }}
+                    />
+                    {status === 'idle' && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                        <motion.button
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={processVideo}
+                          className="w-20 h-20 bg-white/90 backdrop-blur rounded-full flex items-center justify-center shadow-xl"
+                        >
+                          <Play className="w-10 h-10 text-primary-600 ml-1" />
+                        </motion.button>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Video Controls */}
+                  <div className="flex items-center gap-4 px-2">
+                    {/* Play/Pause Button */}
+                    <button
+                      onClick={togglePlayPause}
+                      disabled={status === 'idle' || status === 'processing'}
+                      className="p-2 rounded-lg bg-surface-800 text-white hover:bg-surface-700 disabled:opacity-50 transition-colors"
+                    >
+                      {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                    </button>
+                    
+                    {/* Progress Bar */}
+                    <div className="flex-1 relative">
+                      <input
+                        type="range"
+                        min={0}
+                        max={videoDuration || 100}
+                        value={currentTime / 1000}
+                        onChange={(e) => {
+                          if (videoRef.current) {
+                            videoRef.current.currentTime = parseFloat(e.target.value);
+                            setCurrentTime(parseFloat(e.target.value) * 1000);
+                          }
+                        }}
+                        className="w-full h-2 bg-surface-700 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary-500 [&::-webkit-slider-thumb]:cursor-pointer"
+                      />
                     </div>
-                  )}
+                    
+                    {/* Time Display */}
+                    <span className="text-white text-sm font-mono min-w-[100px] text-right">
+                      {formatTime(currentTime)} / {formatTime(videoDuration * 1000)}
+                    </span>
+                    
+                    {/* Change Video */}
+                    <label className="p-2 rounded-lg bg-surface-800 text-white hover:bg-surface-700 cursor-pointer transition-colors">
+                      <Upload className="w-5 h-5" />
+                      <input
+                        type="file"
+                        accept="video/*"
+                        onChange={handleVideoUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
                 </div>
               )}
             </div>
