@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { addTranscriptSegment, getSession } from '@/lib/session-store';
-import { transcribeAudioChunk } from '@/lib/openai';
+import { transcribeAudioChunk, isOpenAIConfigured } from '@/lib/openai';
 import { broadcastToSession } from '@/lib/stream-manager';
 import type { TranscriptSegment } from '@/lib/types';
 
@@ -28,6 +28,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if OpenAI is configured
+    if (!isOpenAIConfigured()) {
+      console.error('OPENAI_API_KEY is not configured in environment variables');
+      const mockSegment: TranscriptSegment = {
+        id: uuidv4(),
+        text: `[API Key Missing] Please add OPENAI_API_KEY to your Vercel environment variables and redeploy.`,
+        timestamp: parseInt(timestamp || '0', 10),
+        duration: 5000,
+        confidence: 0,
+      };
+      
+      addTranscriptSegment(sessionId, mockSegment);
+      broadcastToSession(sessionId, {
+        type: 'transcript_update',
+        data: { segment: mockSegment, fullTranscript: '' },
+        timestamp: Date.now(),
+      });
+      
+      return NextResponse.json({ success: false, segment: mockSegment, error: 'API key not configured' });
+    }
+
     // Convert Blob to Buffer for OpenAI
     const arrayBuffer = await audioFile.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
@@ -48,15 +69,17 @@ export async function POST(request: NextRequest) {
         timestamp: parseInt(timestamp || '0', 10),
       };
     } catch (openaiError) {
-      // If OpenAI fails (e.g., no API key), create a mock segment for development
-      console.warn('OpenAI transcription failed, using mock data:', openaiError);
+      // Log the actual error for debugging
+      console.error('OpenAI transcription error:', openaiError);
+      
+      const errorMessage = openaiError instanceof Error ? openaiError.message : 'Unknown error';
       
       segment = {
         id: uuidv4(),
-        text: `[Audio chunk received at ${new Date().toLocaleTimeString()}] - Transcription requires OPENAI_API_KEY`,
+        text: `[Transcription Error] ${errorMessage}`,
         timestamp: parseInt(timestamp || '0', 10),
         duration: 5000,
-        confidence: 0.5,
+        confidence: 0,
       };
     }
 
