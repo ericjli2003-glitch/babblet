@@ -640,6 +640,51 @@ function LiveDashboardContent() {
 
         {/* Main panels */}
         <main className="flex-1 flex flex-col">
+          {/* Welcome/Start prompt for live mode */}
+          {mode === 'live' && status === 'idle' && !isRecording && (
+            <div className="bg-gradient-to-br from-primary-500/5 to-accent-500/5 p-8">
+              <div className="max-w-2xl mx-auto text-center">
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="w-20 h-20 mx-auto mb-6 rounded-3xl bg-gradient-primary flex items-center justify-center shadow-glow"
+                >
+                  <Mic className="w-10 h-10 text-white" />
+                </motion.div>
+                <h2 className="text-2xl font-bold text-surface-900 mb-3">
+                  Ready to Record
+                </h2>
+                <p className="text-surface-600 mb-6">
+                  Click the microphone button on the left to start recording. 
+                  The AI will transcribe and analyze the presentation in real-time.
+                </p>
+                <div className="flex flex-wrap justify-center gap-4 text-sm text-surface-500">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span>Real-time transcription</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-primary-500" />
+                    <span>AI analysis every 15s</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-accent-500" />
+                    <span>Smart question generation</span>
+                  </div>
+                </div>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={startRecording}
+                  className="mt-8 px-8 py-4 bg-gradient-primary text-white font-semibold rounded-2xl shadow-glow hover:shadow-lg transition-shadow"
+                >
+                  <Mic className="w-5 h-5 inline mr-2" />
+                  Start Recording
+                </motion.button>
+              </div>
+            </div>
+          )}
+
           {/* Video player for upload mode */}
           {mode === 'upload' && (
             <div className="bg-surface-900 p-4">
@@ -647,16 +692,40 @@ function LiveDashboardContent() {
                 <div className="flex flex-col items-center justify-center py-12 text-surface-400">
                   <Video className="w-16 h-16 mb-4 opacity-50" />
                   <p className="text-lg mb-2">No video selected</p>
-                  <p className="text-sm">Click the upload button on the left to select a video</p>
+                  <p className="text-sm mb-6">Click the upload button on the left to select a video</p>
+                  <label className="px-6 py-3 bg-gradient-primary text-white font-medium rounded-xl cursor-pointer hover:shadow-glow transition-shadow">
+                    <Upload className="w-5 h-5 inline mr-2" />
+                    Select Video File
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={handleVideoUpload}
+                      className="hidden"
+                    />
+                  </label>
                 </div>
               ) : (
-                <video
-                  ref={videoRef}
-                  src={videoUrl}
-                  className="w-full max-h-64 rounded-xl"
-                  onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
-                  controls={false}
-                />
+                <div className="relative">
+                  <video
+                    ref={videoRef}
+                    src={videoUrl}
+                    className="w-full max-h-64 rounded-xl"
+                    onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
+                    controls={false}
+                  />
+                  {status === 'idle' && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-xl">
+                      <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={processVideo}
+                        className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-lg"
+                      >
+                        <Play className="w-8 h-8 text-primary-600 ml-1" />
+                      </motion.button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
