@@ -2,7 +2,6 @@
 
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import Image from 'next/image';
 import { 
   Mic, 
   Brain, 
@@ -11,7 +10,8 @@ import {
   ArrowRight,
   Volume2,
   FileText,
-  Lightbulb
+  Lightbulb,
+  Sparkles
 } from 'lucide-react';
 
 export default function Home() {
@@ -22,7 +22,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-glow">
-              <Image src="/icon.svg" alt="Babblet" width={24} height={24} className="w-6 h-6" />
+              <Sparkles className="w-5 h-5 text-white" />
             </div>
             <span className="text-xl font-semibold gradient-text">Babblet</span>
           </div>
@@ -165,7 +165,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t border-surface-200 py-6 text-center">
         <p className="text-surface-400 text-sm">
-          Powered by <span className="gradient-text font-medium">Babblet AI</span> · Built with Gemini & GPT-4
+          Powered by <span className="gradient-text font-medium">Babblet AI</span>
         </p>
       </footer>
     </div>

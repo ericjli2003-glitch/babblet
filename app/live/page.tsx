@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import Image from 'next/image';
 import { 
   Mic, 
   MicOff, 
@@ -11,7 +10,8 @@ import {
   FileText,
   MessageCircleQuestion,
   LayoutGrid,
-  ArrowLeft
+  ArrowLeft,
+  Sparkles
 } from 'lucide-react';
 import Link from 'next/link';
 import WaveformVisualizer from '@/components/WaveformVisualizer';
@@ -214,7 +214,7 @@ export default function LivePage() {
             
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-gradient-primary flex items-center justify-center shadow-soft">
-                <Image src="/icon.svg" alt="Babblet" width={20} height={20} className="w-5 h-5" />
+                <Sparkles className="w-5 h-5 text-white" />
               </div>
               <span className="font-semibold text-lg gradient-text">Babblet</span>
             </div>
