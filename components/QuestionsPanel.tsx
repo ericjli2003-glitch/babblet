@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import type { GeneratedQuestion, QuestionType } from '@/lib/types';
 import QuestionCard from './QuestionCard';
 
@@ -33,12 +33,12 @@ export default function QuestionsPanel({ questions }: QuestionsPanelProps) {
     });
 
   return (
-    <div className="bg-slate-900/50 rounded-2xl border border-white/10 overflow-hidden h-full flex flex-col">
-      <div className="px-4 py-3 border-b border-white/10">
+    <div className="card-neumorphic overflow-hidden h-full flex flex-col">
+      <div className="px-4 py-3 border-b border-surface-200 bg-white">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-white">
+          <h3 className="font-semibold text-surface-900">
             Generated Questions
-            <span className="ml-2 px-2 py-0.5 bg-purple-500/20 text-purple-300 text-sm rounded-full">
+            <span className="ml-2 px-2 py-0.5 bg-gradient-subtle text-primary-600 text-sm rounded-full">
               {questions.length}
             </span>
           </h3>
@@ -46,7 +46,7 @@ export default function QuestionsPanel({ questions }: QuestionsPanelProps) {
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as 'time' | 'priority')}
-            className="bg-slate-800 text-white text-sm px-3 py-1 rounded-lg border border-white/10 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="input-field !w-auto !py-1.5 !px-3 text-sm"
           >
             <option value="time">Newest First</option>
             <option value="priority">By Priority</option>
@@ -60,8 +60,8 @@ export default function QuestionsPanel({ questions }: QuestionsPanelProps) {
               onClick={() => setFilter(option.value)}
               className={`px-3 py-1 text-sm rounded-full transition-all ${
                 filter === option.value
-                  ? 'bg-purple-500 text-white'
-                  : 'bg-slate-800 text-white/60 hover:text-white hover:bg-slate-700'
+                  ? 'bg-gradient-primary text-white shadow-soft'
+                  : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
               }`}
             >
               {option.label}
@@ -70,9 +70,9 @@ export default function QuestionsPanel({ questions }: QuestionsPanelProps) {
         </div>
       </div>
       
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-white">
         {filteredQuestions.length === 0 ? (
-          <div className="text-center text-white/40 py-8">
+          <div className="text-center text-surface-400 py-8">
             <p className="text-lg">No questions yet</p>
             <p className="text-sm mt-1">Questions will appear as the presentation progresses</p>
           </div>
@@ -91,4 +91,3 @@ export default function QuestionsPanel({ questions }: QuestionsPanelProps) {
     </div>
   );
 }
-

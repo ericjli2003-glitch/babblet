@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 import { 
   Mic, 
   MicOff, 
   Square, 
-  Sparkles,
   Clock,
   FileText,
   MessageCircleQuestion,
@@ -200,55 +200,52 @@ export default function LivePage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-purple-950">
+    <div className="min-h-screen bg-[var(--background)]">
       {/* Header */}
-      <header className="border-b border-white/10 bg-slate-900/50 backdrop-blur-xl sticky top-0 z-50">
+      <header className="border-b border-surface-200 bg-white/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link 
               href="/"
-              className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+              className="p-2 rounded-xl hover:bg-surface-100 transition-colors"
             >
-              <ArrowLeft className="w-5 h-5 text-white/70" />
+              <ArrowLeft className="w-5 h-5 text-surface-500" />
             </Link>
             
-            <div className="flex items-center gap-2">
-              <div className="flex">
-                <Sparkles className="w-6 h-6 text-purple-400" />
-                <Sparkles className="w-4 h-4 text-blue-400 -ml-2 mt-2" />
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-gradient-primary flex items-center justify-center shadow-soft">
+                <Image src="/icon.svg" alt="Babblet" width={20} height={20} className="w-5 h-5" />
               </div>
-              <span className="font-bold text-xl bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
-                Babblet
-              </span>
+              <span className="font-semibold text-lg gradient-text">Babblet</span>
             </div>
           </div>
           
           <div className="flex items-center gap-4">
             {/* Duration */}
             {status !== 'idle' && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-lg">
-                <Clock className="w-4 h-4 text-purple-400" />
-                <span className="font-mono text-white">{formatDuration(duration)}</span>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-100 rounded-lg">
+                <Clock className="w-4 h-4 text-primary-500" />
+                <span className="font-mono text-surface-700">{formatDuration(duration)}</span>
               </div>
             )}
             
             {/* View mode toggle */}
-            <div className="flex bg-slate-800 rounded-lg p-1">
+            <div className="flex bg-surface-100 rounded-xl p-1">
               <button
                 onClick={() => setViewMode('split')}
-                className={`p-2 rounded transition-colors ${viewMode === 'split' ? 'bg-purple-500 text-white' : 'text-white/60 hover:text-white'}`}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'split' ? 'bg-white shadow-soft text-primary-500' : 'text-surface-500 hover:text-surface-700'}`}
               >
                 <LayoutGrid className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode('transcript')}
-                className={`p-2 rounded transition-colors ${viewMode === 'transcript' ? 'bg-purple-500 text-white' : 'text-white/60 hover:text-white'}`}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'transcript' ? 'bg-white shadow-soft text-primary-500' : 'text-surface-500 hover:text-surface-700'}`}
               >
                 <FileText className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode('questions')}
-                className={`p-2 rounded transition-colors ${viewMode === 'questions' ? 'bg-purple-500 text-white' : 'text-white/60 hover:text-white'}`}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'questions' ? 'bg-white shadow-soft text-primary-500' : 'text-surface-500 hover:text-surface-700'}`}
               >
                 <MessageCircleQuestion className="w-4 h-4" />
               </button>
@@ -264,7 +261,7 @@ export default function LivePage() {
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-4 p-4 bg-red-500/20 border border-red-500/40 rounded-lg text-red-300"
+            className="mb-4 p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-600"
           >
             {error || recorderError}
           </motion.div>
@@ -272,7 +269,7 @@ export default function LivePage() {
 
         {/* Control bar */}
         <div className="mb-6">
-          <div className="bg-slate-900/70 backdrop-blur-sm rounded-2xl border border-white/10 p-6">
+          <div className="card-neumorphic p-6">
             <div className="flex items-center justify-between">
               {/* Waveform */}
               <div className="flex-1 max-w-md">
@@ -286,11 +283,11 @@ export default function LivePage() {
               <div className="flex items-center gap-4">
                 {status === 'idle' && (
                   <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                     onClick={handleStartListening}
                     disabled={isInitializing}
-                    className="flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-purple-500 to-blue-500 text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-purple-500/30 transition-all disabled:opacity-50"
+                    className="btn-primary gap-3"
                   >
                     {isInitializing ? (
                       <>
@@ -307,22 +304,20 @@ export default function LivePage() {
                 )}
                 
                 {status === 'listening' && (
-                  <>
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={handleStopListening}
-                      className="flex items-center gap-3 px-6 py-3 bg-red-500 text-white font-semibold rounded-xl hover:bg-red-600 transition-colors"
-                    >
-                      <Square className="w-5 h-5" />
-                      Stop
-                    </motion.button>
-                  </>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleStopListening}
+                    className="flex items-center gap-3 px-6 py-3 bg-rose-500 text-white font-medium rounded-2xl hover:bg-rose-600 shadow-soft transition-all"
+                  >
+                    <Square className="w-5 h-5" />
+                    Stop
+                  </motion.button>
                 )}
                 
                 {status === 'ended' && (
                   <div className="flex items-center gap-3">
-                    <span className="text-white/60">Session ended</span>
+                    <span className="text-surface-500">Session ended</span>
                     <button
                       onClick={() => {
                         setSessionId(null);
@@ -333,7 +328,7 @@ export default function LivePage() {
                         setSummary('');
                         setDuration(0);
                       }}
-                      className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+                      className="btn-secondary"
                     >
                       New Session
                     </button>
@@ -344,16 +339,16 @@ export default function LivePage() {
               {/* Stats */}
               <div className="flex items-center gap-6 text-sm">
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-white">{transcripts.length}</div>
-                  <div className="text-white/50">Segments</div>
+                  <div className="text-2xl font-bold text-surface-900">{transcripts.length}</div>
+                  <div className="text-surface-400">Segments</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-purple-400">{semanticEvents.length}</div>
-                  <div className="text-white/50">Events</div>
+                  <div className="text-2xl font-bold text-primary-500">{semanticEvents.length}</div>
+                  <div className="text-surface-400">Events</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-400">{questions.length}</div>
-                  <div className="text-white/50">Questions</div>
+                  <div className="text-2xl font-bold text-accent-500">{questions.length}</div>
+                  <div className="text-surface-400">Questions</div>
                 </div>
               </div>
             </div>
@@ -383,13 +378,15 @@ export default function LivePage() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mt-6 bg-gradient-to-br from-purple-900/40 to-blue-900/40 rounded-2xl border border-purple-500/30 p-6"
+            className="mt-6 card-neumorphic p-6 bg-gradient-subtle"
           >
-            <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-purple-400" />
+            <h3 className="text-lg font-semibold text-surface-900 mb-3 flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-gradient-primary flex items-center justify-center">
+                <FileText className="w-3.5 h-3.5 text-white" />
+              </span>
               AI Summary
             </h3>
-            <p className="text-white/80 leading-relaxed">{summary}</p>
+            <p className="text-surface-600 leading-relaxed">{summary}</p>
           </motion.div>
         )}
       </main>

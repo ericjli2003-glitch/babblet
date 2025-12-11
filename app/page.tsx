@@ -2,9 +2,9 @@
 
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import Image from 'next/image';
 import { 
   Mic, 
-  Sparkles, 
   Brain, 
   MessageCircleQuestion,
   Zap,
@@ -16,29 +16,20 @@ import {
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-purple-950 overflow-hidden">
-      {/* Animated background */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse delay-1000" />
-      </div>
-
+    <div className="min-h-screen bg-[var(--background)]">
       {/* Header */}
-      <header className="relative z-10 border-b border-white/10 bg-slate-900/30 backdrop-blur-xl">
+      <header className="border-b border-surface-200 bg-white/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="relative">
-              <Sparkles className="w-8 h-8 text-purple-400" />
-              <Sparkles className="w-5 h-5 text-blue-400 absolute -right-1 bottom-0" />
+            <div className="w-10 h-10 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-glow">
+              <Image src="/icon.svg" alt="Babblet" width={24} height={24} className="w-6 h-6" />
             </div>
-            <span className="font-bold text-2xl bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
-              Babblet
-            </span>
+            <span className="text-xl font-semibold gradient-text">Babblet</span>
           </div>
           
           <Link 
             href="/live"
-            className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 border border-purple-500/40 text-purple-300 rounded-lg hover:bg-purple-500/30 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-subtle border border-primary-200 text-primary-600 rounded-xl hover:shadow-soft transition-all"
           >
             <Mic className="w-4 h-4" />
             Open Dashboard
@@ -47,36 +38,34 @@ export default function Home() {
       </header>
 
       {/* Hero section */}
-      <main className="relative z-10 max-w-7xl mx-auto px-6 pt-20 pb-32">
+      <main className="max-w-7xl mx-auto px-6 pt-20 pb-32">
         <div className="text-center mb-16">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
+            <h1 className="text-5xl md:text-7xl font-bold text-surface-900 mb-6 leading-tight">
               Real-Time{' '}
-              <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
-                AI Questions
-              </span>
+              <span className="gradient-text">AI Questions</span>
               <br />
               For Student Presentations
             </h1>
             
-            <p className="text-xl text-white/60 max-w-2xl mx-auto mb-10">
+            <p className="text-xl text-surface-500 max-w-2xl mx-auto mb-10">
               Listen to student presentations in real-time. Babblet uses Gemini for audio understanding 
               and GPT-4 to generate insightful questions—from clarifying queries to critical thinking challenges.
             </p>
             
             <Link href="/live">
               <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="group inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-purple-500 to-blue-500 text-white font-semibold text-lg rounded-xl hover:shadow-2xl hover:shadow-purple-500/30 transition-all"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="btn-primary text-lg gap-3"
               >
                 <Mic className="w-6 h-6" />
                 Start Listening
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight className="w-5 h-5" />
               </motion.button>
             </Link>
           </motion.div>
@@ -93,19 +82,16 @@ export default function Home() {
             icon={Volume2}
             title="Real-Time Audio"
             description="Streams audio in 500ms chunks for instant transcription and analysis."
-            gradient="from-purple-500 to-pink-500"
           />
           <FeatureCard
             icon={Brain}
             title="Semantic Detection"
             description="Gemini identifies claims, definitions, examples, and topic shifts as they happen."
-            gradient="from-pink-500 to-orange-500"
           />
           <FeatureCard
             icon={MessageCircleQuestion}
             title="Smart Questions"
             description="GPT-4 generates contextual questions: follow-ups, clarifying, critical thinking."
-            gradient="from-blue-500 to-cyan-500"
           />
         </motion.div>
 
@@ -114,11 +100,11 @@ export default function Home() {
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.4 }}
-          className="bg-slate-900/50 backdrop-blur-sm rounded-3xl border border-white/10 p-8"
+          className="card-neumorphic p-8"
         >
-          <h2 className="text-3xl font-bold text-white mb-8 text-center">How It Works</h2>
+          <h2 className="text-3xl font-bold text-surface-900 mb-8 text-center">How It Works</h2>
           
-          <div className="grid md:grid-cols-4 gap-4">
+          <div className="grid md:grid-cols-4 gap-6">
             <WorkflowStep
               step={1}
               icon={Mic}
@@ -156,7 +142,7 @@ export default function Home() {
           <QuestionTypeCard
             type="Follow-up"
             example="Can you elaborate on how this relates to...?"
-            color="blue"
+            color="primary"
           />
           <QuestionTypeCard
             type="Clarifying"
@@ -166,20 +152,20 @@ export default function Home() {
           <QuestionTypeCard
             type="Critical Thinking"
             example="What would happen if...?"
-            color="purple"
+            color="accent"
           />
           <QuestionTypeCard
             type="Misconception"
             example="Are you sure that...?"
-            color="red"
+            color="rose"
           />
         </motion.div>
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-white/10 py-6 text-center">
-        <p className="text-white/40 text-sm">
-          Powered by <span className="text-purple-400">Babblet AI</span> · Built with Gemini & GPT-4
+      <footer className="border-t border-surface-200 py-6 text-center">
+        <p className="text-surface-400 text-sm">
+          Powered by <span className="gradient-text font-medium">Babblet AI</span> · Built with Gemini & GPT-4
         </p>
       </footer>
     </div>
@@ -190,20 +176,18 @@ function FeatureCard({
   icon: Icon, 
   title, 
   description, 
-  gradient 
 }: { 
   icon: React.ElementType;
   title: string; 
   description: string; 
-  gradient: string;
 }) {
   return (
-    <div className="group relative bg-slate-900/50 backdrop-blur-sm rounded-2xl border border-white/10 p-6 hover:border-white/20 transition-all">
-      <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center mb-4`}>
+    <div className="card-neumorphic p-6 group">
+      <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center mb-4 shadow-soft group-hover:shadow-glow transition-all">
         <Icon className="w-6 h-6 text-white" />
       </div>
-      <h3 className="text-xl font-semibold text-white mb-2">{title}</h3>
-      <p className="text-white/60">{description}</p>
+      <h3 className="text-xl font-semibold text-surface-900 mb-2">{title}</h3>
+      <p className="text-surface-500">{description}</p>
     </div>
   );
 }
@@ -222,15 +206,15 @@ function WorkflowStep({
   return (
     <div className="text-center">
       <div className="relative inline-block mb-4">
-        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+        <div className="w-16 h-16 rounded-full bg-gradient-primary flex items-center justify-center shadow-soft">
           <Icon className="w-7 h-7 text-white" />
         </div>
-        <span className="absolute -top-1 -right-1 w-6 h-6 bg-slate-800 rounded-full flex items-center justify-center text-xs font-bold text-purple-400 border-2 border-purple-500">
+        <span className="absolute -top-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center text-xs font-bold text-primary-500 border-2 border-primary-500 shadow-soft">
           {step}
         </span>
       </div>
-      <h4 className="font-semibold text-white mb-1">{title}</h4>
-      <p className="text-sm text-white/50">{description}</p>
+      <h4 className="font-semibold text-surface-900 mb-1">{title}</h4>
+      <p className="text-sm text-surface-500">{description}</p>
     </div>
   );
 }
@@ -242,19 +226,19 @@ function QuestionTypeCard({
 }: {
   type: string;
   example: string;
-  color: 'blue' | 'amber' | 'purple' | 'red';
+  color: 'primary' | 'amber' | 'accent' | 'rose';
 }) {
   const colorClasses = {
-    blue: 'from-blue-500/20 to-blue-600/10 border-blue-500/30',
-    amber: 'from-amber-500/20 to-amber-600/10 border-amber-500/30',
-    purple: 'from-purple-500/20 to-purple-600/10 border-purple-500/30',
-    red: 'from-red-500/20 to-red-600/10 border-red-500/30',
+    primary: 'bg-primary-50 border-primary-200 text-primary-700',
+    amber: 'bg-amber-50 border-amber-200 text-amber-700',
+    accent: 'bg-accent-50 border-accent-200 text-accent-700',
+    rose: 'bg-rose-50 border-rose-200 text-rose-700',
   };
   
   return (
-    <div className={`bg-gradient-to-br ${colorClasses[color]} border rounded-xl p-4`}>
-      <h4 className="font-semibold text-white mb-2">{type}</h4>
-      <p className="text-sm text-white/60 italic">&ldquo;{example}&rdquo;</p>
+    <div className={`rounded-2xl border p-4 ${colorClasses[color]}`}>
+      <h4 className="font-semibold mb-2">{type}</h4>
+      <p className="text-sm opacity-80 italic">&ldquo;{example}&rdquo;</p>
     </div>
   );
 }

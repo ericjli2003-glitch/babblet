@@ -50,12 +50,17 @@ export default function WaveformVisualizer({
         const barHeight = height * canvas.height * 0.8;
         const y = (canvas.height - barHeight) / 2;
 
-        // Gradient color based on position and activity
-        const hue = isActive ? 260 + (i / barsRef.current.length) * 40 : 220;
-        const saturation = isActive ? 80 : 30;
-        const lightness = isActive ? 60 + height * 20 : 50;
+        // Gradient from primary (#5B7CFF) to accent (#A66BFF)
+        const gradient = ctx.createLinearGradient(x, y, x, y + barHeight);
+        if (isActive) {
+          gradient.addColorStop(0, '#5B7CFF');
+          gradient.addColorStop(1, '#A66BFF');
+        } else {
+          gradient.addColorStop(0, '#d4d4d8');
+          gradient.addColorStop(1, '#e4e4e7');
+        }
         
-        ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+        ctx.fillStyle = gradient;
         ctx.beginPath();
         ctx.roundRect(x, y, barWidth - gap, barHeight, 3);
         ctx.fill();
@@ -88,7 +93,7 @@ export default function WaveformVisualizer({
           <motion.span
             animate={{ opacity: [0.5, 1, 0.5] }}
             transition={{ duration: 1.5, repeat: Infinity }}
-            className="text-sm font-medium text-purple-400"
+            className="text-sm font-medium gradient-text"
           >
             Listening...
           </motion.span>
@@ -97,4 +102,3 @@ export default function WaveformVisualizer({
     </div>
   );
 }
-
