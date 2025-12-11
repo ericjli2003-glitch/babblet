@@ -88,11 +88,11 @@ function LiveDashboardContent() {
       const updated = { ...prev };
       newQuestions.forEach((q) => {
         // Avoid duplicates
-        const isDuplicate = 
+        const isDuplicate =
           updated.clarifying.some(eq => eq.id === q.id) ||
           updated.criticalThinking.some(eq => eq.id === q.id) ||
           updated.expansion.some(eq => eq.id === q.id);
-        
+
         if (!isDuplicate) {
           switch (q.category) {
             case 'clarifying':
@@ -161,6 +161,8 @@ function LiveDashboardContent() {
   const lastAnalysisTimeRef = useRef<number>(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const videoChunkIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const sendAudioIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Connect to SSE stream for real-time updates
   useEffect(() => {
@@ -285,33 +287,55 @@ function LiveDashboardContent() {
 
       startTimeRef.current = Date.now();
 
-      mediaRecorder.ondataavailable = async (event) => {
+      // Accumulate audio chunks (individual chunks aren't valid audio files)
+      audioChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
-          // Send chunk to server for transcription
-          const formData = new FormData();
-          formData.append('audio', event.data);
-          formData.append('sessionId', sessionId || '');
-          formData.append('timestamp', String(video.currentTime * 1000));
-
-          try {
-            const response = await fetch('/api/transcribe', {
-              method: 'POST',
-              body: formData,
-            });
-            const data = await response.json();
-
-            // Update transcript directly from response (don't rely on SSE)
-            if (data.segment && data.segment.text) {
-              setTranscript((prev) => [...prev, data.segment]);
-            }
-          } catch (e) {
-            console.error('Failed to send audio chunk:', e);
-          }
+          audioChunksRef.current.push(event.data);
         }
       };
 
-      // Start recording chunks every 5 seconds
-      mediaRecorder.start(5000);
+      // Send accumulated chunks every 8 seconds as a valid audio file
+      sendAudioIntervalRef.current = setInterval(async () => {
+        if (audioChunksRef.current.length > 0 && video) {
+          // Combine all chunks into a single valid WebM file
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
+          const currentTimestamp = video.currentTime * 1000;
+          
+          // Keep only the last chunk for continuity (it has header info)
+          audioChunksRef.current = [];
+          
+          if (audioBlob.size > 1000) {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'audio.webm');
+            formData.append('sessionId', sessionId || '');
+            formData.append('timestamp', String(currentTimestamp));
+
+            try {
+              const response = await fetch('/api/transcribe', {
+                method: 'POST',
+                body: formData,
+              });
+              const data = await response.json();
+
+              // Update transcript directly from response
+              if (data.segment && data.segment.text) {
+                setTranscript((prev) => [...prev, data.segment]);
+              }
+              
+              if (data.error) {
+                console.log('[Audio] Transcription message:', data.error);
+              }
+            } catch (e) {
+              console.error('Failed to send audio chunk:', e);
+            }
+          }
+        }
+      }, 8000);
+
+      // Collect small chunks frequently for better audio quality
+      mediaRecorder.start(1000);
 
       // Play the video
       video.play();
@@ -336,6 +360,33 @@ function LiveDashboardContent() {
 
         if (analysisIntervalRef.current) {
           clearInterval(analysisIntervalRef.current);
+        }
+        
+        if (sendAudioIntervalRef.current) {
+          clearInterval(sendAudioIntervalRef.current);
+        }
+        
+        // Send any remaining audio chunks
+        if (audioChunksRef.current.length > 0) {
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
+          audioChunksRef.current = [];
+          
+          if (audioBlob.size > 1000) {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'audio.webm');
+            formData.append('sessionId', sessionId || '');
+            formData.append('timestamp', String(video.currentTime * 1000));
+
+            try {
+              const response = await fetch('/api/transcribe', { method: 'POST', body: formData });
+              const data = await response.json();
+              if (data.segment && data.segment.text) {
+                setTranscript((prev) => [...prev, data.segment]);
+              }
+            } catch (e) {
+              console.error('Failed to send final audio chunk:', e);
+            }
+          }
         }
 
         // Final analysis and rubric
@@ -386,33 +437,55 @@ function LiveDashboardContent() {
 
       startTimeRef.current = Date.now();
 
-      mediaRecorder.ondataavailable = async (event) => {
+      // Accumulate audio chunks (individual chunks aren't valid audio files)
+      audioChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
-          // Send chunk to server for transcription
-          const formData = new FormData();
-          formData.append('audio', event.data);
-          formData.append('sessionId', sessionId || '');
-          formData.append('timestamp', String(Date.now() - startTimeRef.current));
-
-          try {
-            const response = await fetch('/api/transcribe', {
-              method: 'POST',
-              body: formData,
-            });
-            const data = await response.json();
-
-            // Update transcript directly from response (don't rely on SSE)
-            if (data.segment && data.segment.text) {
-              setTranscript((prev) => [...prev, data.segment]);
-            }
-          } catch (e) {
-            console.error('Failed to send audio chunk:', e);
-          }
+          audioChunksRef.current.push(event.data);
         }
       };
 
-      // Collect audio every 5 seconds
-      mediaRecorder.start(5000);
+      // Send accumulated chunks every 8 seconds as a valid audio file
+      sendAudioIntervalRef.current = setInterval(async () => {
+        if (audioChunksRef.current.length > 0) {
+          // Combine all chunks into a single valid WebM file
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
+          const currentTimestamp = Date.now() - startTimeRef.current;
+          
+          // Clear chunks after combining
+          audioChunksRef.current = [];
+          
+          if (audioBlob.size > 1000) {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'audio.webm');
+            formData.append('sessionId', sessionId || '');
+            formData.append('timestamp', String(currentTimestamp));
+
+            try {
+              const response = await fetch('/api/transcribe', {
+                method: 'POST',
+                body: formData,
+              });
+              const data = await response.json();
+
+              // Update transcript directly from response
+              if (data.segment && data.segment.text) {
+                setTranscript((prev) => [...prev, data.segment]);
+              }
+              
+              if (data.error) {
+                console.log('[Audio] Transcription message:', data.error);
+              }
+            } catch (e) {
+              console.error('Failed to send audio chunk:', e);
+            }
+          }
+        }
+      }, 8000);
+
+      // Collect small chunks frequently for better audio quality
+      mediaRecorder.start(1000);
       setIsRecording(true);
       setStatus('recording');
       updateAudioLevel();
@@ -441,6 +514,33 @@ function LiveDashboardContent() {
       if (analysisIntervalRef.current) {
         clearInterval(analysisIntervalRef.current);
       }
+      
+      if (sendAudioIntervalRef.current) {
+        clearInterval(sendAudioIntervalRef.current);
+      }
+
+      // Send any remaining audio chunks
+      if (audioChunksRef.current.length > 0) {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
+        audioChunksRef.current = [];
+        
+        if (audioBlob.size > 1000) {
+          const formData = new FormData();
+          formData.append('audio', audioBlob, 'audio.webm');
+          formData.append('sessionId', sessionId || '');
+          formData.append('timestamp', String(Date.now() - startTimeRef.current));
+
+          try {
+            const response = await fetch('/api/transcribe', { method: 'POST', body: formData });
+            const data = await response.json();
+            if (data.segment && data.segment.text) {
+              setTranscript((prev) => [...prev, data.segment]);
+            }
+          } catch (e) {
+            console.error('Failed to send final audio chunk:', e);
+          }
+        }
+      }
 
       setIsRecording(false);
       setStatus('processing');
@@ -451,7 +551,7 @@ function LiveDashboardContent() {
 
       setStatus('completed');
     }
-  }, [isRecording]);
+  }, [isRecording, sessionId]);
 
   // Trigger analysis
   const triggerAnalysis = async () => {
@@ -618,10 +718,10 @@ function LiveDashboardContent() {
                   <div className="flex items-center gap-2 text-xs">
                     <span
                       className={`flex items-center gap-1 ${connectionStatus === 'connected'
-                          ? 'text-emerald-600'
-                          : connectionStatus === 'connecting'
-                            ? 'text-amber-600'
-                            : 'text-red-600'
+                        ? 'text-emerald-600'
+                        : connectionStatus === 'connecting'
+                          ? 'text-amber-600'
+                          : 'text-red-600'
                         }`}
                     >
                       {connectionStatus === 'connected' ? (
@@ -676,7 +776,7 @@ function LiveDashboardContent() {
                 <button className="p-2 text-surface-500 hover:text-surface-700 hover:bg-surface-100 rounded-xl transition-colors">
                   <Download className="w-5 h-5" />
                 </button>
-                <button 
+                <button
                   onClick={() => setShowShareModal(true)}
                   className="p-2 text-surface-500 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-colors"
                   title="Share session with professor"
@@ -701,8 +801,8 @@ function LiveDashboardContent() {
                 onClick={isRecording ? stopRecording : startRecording}
                 disabled={status === 'processing'}
                 className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${isRecording
-                    ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
-                    : 'bg-gradient-primary text-white shadow-glow'
+                  ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+                  : 'bg-gradient-primary text-white shadow-glow'
                   } disabled:opacity-50`}
               >
                 {status === 'processing' ? (
@@ -733,8 +833,8 @@ function LiveDashboardContent() {
                   onClick={status === 'idle' ? processVideo : togglePlayPause}
                   disabled={status === 'processing'}
                   className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${isPlaying
-                      ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
-                      : 'bg-gradient-primary text-white shadow-glow'
+                    ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+                    : 'bg-gradient-primary text-white shadow-glow'
                     } disabled:opacity-50`}
                 >
                   {status === 'processing' ? (
@@ -936,8 +1036,8 @@ function LiveDashboardContent() {
                   key={panel.id}
                   onClick={() => setActivePanel(panel.id)}
                   className={`relative px-4 py-3 text-sm font-medium transition-colors ${activePanel === panel.id
-                      ? 'text-primary-600'
-                      : 'text-surface-500 hover:text-surface-700'
+                    ? 'text-primary-600'
+                    : 'text-surface-500 hover:text-surface-700'
                     }`}
                 >
                   {panel.label}
@@ -1028,12 +1128,12 @@ function LiveDashboardContent() {
               Status:{' '}
               <span
                 className={`font-medium ${status === 'recording'
-                    ? 'text-red-600'
-                    : status === 'completed'
-                      ? 'text-emerald-600'
-                      : status === 'processing'
-                        ? 'text-amber-600'
-                        : 'text-surface-600'
+                  ? 'text-red-600'
+                  : status === 'completed'
+                    ? 'text-emerald-600'
+                    : status === 'processing'
+                      ? 'text-amber-600'
+                      : 'text-surface-600'
                   }`}
               >
                 {status.charAt(0).toUpperCase() + status.slice(1)}
@@ -1119,7 +1219,7 @@ function LiveDashboardContent() {
               <div className="bg-primary-50 rounded-xl p-4 mb-4">
                 <h4 className="text-sm font-medium text-primary-700 mb-1">Real-Time Sync</h4>
                 <p className="text-xs text-primary-600">
-                  {pusherConnected 
+                  {pusherConnected
                     ? '✅ Anyone with this link will see transcript, questions, and analysis update in real-time!'
                     : '⚠️ Real-time sync requires Pusher configuration. Updates will still work but may require page refresh.'}
                 </p>

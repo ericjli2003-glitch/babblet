@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
       timestamp: Date.now(),
       sessionId,
     });
-    
+
     // Broadcast via Pusher for real-time multi-user support
     await broadcastRubric(sessionId, rubric);
 

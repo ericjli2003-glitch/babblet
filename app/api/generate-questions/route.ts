@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
       // Mock questions if OpenAI not configured
       const categories: QuestionCategory[] = ['clarifying', 'critical-thinking', 'expansion'];
       const difficulties: QuestionDifficulty[] = ['easy', 'medium', 'hard'];
-      
+
       questions = [
         {
           id: uuidv4(),
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
       timestamp: Date.now(),
       sessionId,
     });
-    
+
     // Broadcast via Pusher for real-time multi-user support
     await broadcastQuestions(sessionId, questions);
 
