@@ -2,10 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getSession, createSession, addTranscriptSegment, broadcastToSession } from '@/lib/session-store';
 import { transcribeAudio, isGeminiConfigured } from '@/lib/gemini';
+import { broadcastTranscript } from '@/lib/pusher';
 import type { TranscriptSegment } from '@/lib/types';
-
-// Track sessions that have been auto-created on this instance
-const autoCreatedSessions = new Set<string>();
 
 export async function POST(request: NextRequest) {
   try {
@@ -86,13 +84,16 @@ export async function POST(request: NextRequest) {
 
       addTranscriptSegment(sessionId, segment);
 
-      // Broadcast to connected clients
+      // Broadcast to connected clients via SSE (legacy)
       broadcastToSession(sessionId, {
         type: 'transcript_update',
         data: { segment },
         timestamp: Date.now(),
         sessionId,
       });
+      
+      // Broadcast via Pusher for real-time multi-user support
+      await broadcastTranscript(sessionId, segment);
 
       return NextResponse.json({
         success: true,

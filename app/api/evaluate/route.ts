@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, getFullTranscript, setRubric, broadcastToSession } from '@/lib/session-store';
 import { generateRubricEvaluation, isOpenAIConfigured } from '@/lib/openai-questions';
+import { broadcastRubric } from '@/lib/pusher';
 import type { RubricEvaluation } from '@/lib/types';
 
 export async function POST(request: NextRequest) {
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    
+
     console.log(`[Evaluate] Processing transcript: ${transcript.slice(0, 100)}...`);
 
     let rubric: RubricEvaluation;
@@ -67,12 +68,16 @@ export async function POST(request: NextRequest) {
 
     setRubric(sessionId, rubric);
 
+    // Broadcast via SSE (legacy)
     broadcastToSession(sessionId, {
       type: 'rubric_update',
       data: { rubric },
       timestamp: Date.now(),
       sessionId,
     });
+    
+    // Broadcast via Pusher for real-time multi-user support
+    await broadcastRubric(sessionId, rubric);
 
     return NextResponse.json({ success: true, rubric });
   } catch (error) {

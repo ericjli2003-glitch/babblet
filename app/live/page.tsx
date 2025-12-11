@@ -19,11 +19,15 @@ import {
   AlertCircle,
   Upload,
   Video,
+  Link,
+  Copy,
+  Check,
 } from 'lucide-react';
 import TranscriptFeed from '@/components/TranscriptFeed';
 import QuestionBank from '@/components/QuestionBank';
 import SummaryCard from '@/components/SummaryCard';
 import RubricCard from '@/components/RubricCard';
+import { usePusher } from '@/lib/hooks/usePusher';
 import type {
   TranscriptSegment,
   AnalysisSummary,
@@ -37,7 +41,7 @@ type ActivePanel = 'transcript' | 'analysis' | 'questions' | 'rubric';
 function LiveDashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  
+
   const sessionId = searchParams.get('sessionId');
   const mode = searchParams.get('mode') as 'live' | 'upload' | null;
 
@@ -62,6 +66,89 @@ function LiveDashboardContent() {
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  // Pusher callbacks for real-time updates from other users
+  const handlePusherTranscript = useCallback((segment: TranscriptSegment) => {
+    setTranscript((prev) => {
+      // Avoid duplicates
+      if (prev.some(s => s.id === segment.id)) return prev;
+      return [...prev, segment];
+    });
+  }, []);
+
+  const handlePusherAnalysis = useCallback((analysis: AnalysisSummary) => {
+    setAnalysis(analysis);
+    setIsAnalyzing(false);
+  }, []);
+
+  const handlePusherQuestions = useCallback((newQuestions: GeneratedQuestion[]) => {
+    setQuestions((prev) => {
+      const updated = { ...prev };
+      newQuestions.forEach((q) => {
+        // Avoid duplicates
+        const isDuplicate = 
+          updated.clarifying.some(eq => eq.id === q.id) ||
+          updated.criticalThinking.some(eq => eq.id === q.id) ||
+          updated.expansion.some(eq => eq.id === q.id);
+        
+        if (!isDuplicate) {
+          switch (q.category) {
+            case 'clarifying':
+              updated.clarifying = [...updated.clarifying, q];
+              break;
+            case 'critical-thinking':
+              updated.criticalThinking = [...updated.criticalThinking, q];
+              break;
+            case 'expansion':
+              updated.expansion = [...updated.expansion, q];
+              break;
+          }
+        }
+      });
+      return updated;
+    });
+    setIsGeneratingQuestions(false);
+  }, []);
+
+  const handlePusherRubric = useCallback((newRubric: RubricEvaluation) => {
+    setRubric(newRubric);
+  }, []);
+
+  // Connect to Pusher for real-time multi-user updates
+  const { connectionState: pusherState, isConnected: pusherConnected } = usePusher({
+    sessionId,
+    onTranscript: handlePusherTranscript,
+    onAnalysis: handlePusherAnalysis,
+    onQuestions: handlePusherQuestions,
+    onRubric: handlePusherRubric,
+  });
+
+  // Update connection status based on Pusher
+  useEffect(() => {
+    if (pusherConnected) {
+      setConnectionStatus('connected');
+    } else if (pusherState === 'connecting') {
+      setConnectionStatus('connecting');
+    }
+    // Don't set to disconnected if Pusher is unavailable - direct API still works
+  }, [pusherConnected, pusherState]);
+
+  // Generate shareable link
+  const getShareLink = useCallback(() => {
+    if (typeof window === 'undefined') return '';
+    const url = new URL(window.location.href);
+    url.searchParams.set('watch', 'true');
+    return url.toString();
+  }, []);
+
+  const copyShareLink = useCallback(async () => {
+    const link = getShareLink();
+    await navigator.clipboard.writeText(link);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+  }, [getShareLink]);
 
   // Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -91,7 +178,7 @@ function LiveDashboardContent() {
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        
+
         switch (data.type) {
           case 'transcript_update':
             setTranscript((prev) => [...prev, data.data.segment]);
@@ -170,34 +257,34 @@ function LiveDashboardContent() {
     if (!videoRef.current || !videoUrl) return;
 
     const video = videoRef.current;
-    
+
     try {
       // Create audio context
       audioContextRef.current = new AudioContext();
-      
+
       // Create media element source from video
       const source = audioContextRef.current.createMediaElementSource(video);
-      
+
       // Create analyser for visualization
       analyserRef.current = audioContextRef.current.createAnalyser();
       analyserRef.current.fftSize = 256;
-      
+
       // Create destination for recording
       const destination = audioContextRef.current.createMediaStreamDestination();
-      
+
       // Connect: source -> analyser -> destination (for recording)
       source.connect(analyserRef.current);
       analyserRef.current.connect(audioContextRef.current.destination); // So we can hear it
       source.connect(destination);
-      
+
       // Set up MediaRecorder to capture audio
       const mediaRecorder = new MediaRecorder(destination.stream, {
         mimeType: 'audio/webm;codecs=opus',
       });
       mediaRecorderRef.current = mediaRecorder;
-      
+
       startTimeRef.current = Date.now();
-      
+
       mediaRecorder.ondataavailable = async (event) => {
         if (event.data.size > 0) {
           // Send chunk to server for transcription
@@ -212,7 +299,7 @@ function LiveDashboardContent() {
               body: formData,
             });
             const data = await response.json();
-            
+
             // Update transcript directly from response (don't rely on SSE)
             if (data.segment && data.segment.text) {
               setTranscript((prev) => [...prev, data.segment]);
@@ -222,16 +309,16 @@ function LiveDashboardContent() {
           }
         }
       };
-      
+
       // Start recording chunks every 5 seconds
       mediaRecorder.start(5000);
-      
+
       // Play the video
       video.play();
       setIsPlaying(true);
       setStatus('recording');
       updateAudioLevel();
-      
+
       // Set up periodic analysis
       analysisIntervalRef.current = setInterval(() => {
         const now = Date.now();
@@ -240,24 +327,24 @@ function LiveDashboardContent() {
           lastAnalysisTimeRef.current = now;
         }
       }, 5000);
-      
+
       // Handle video end
       video.onended = async () => {
         mediaRecorder.stop();
         setIsPlaying(false);
         setStatus('processing');
-        
+
         if (analysisIntervalRef.current) {
           clearInterval(analysisIntervalRef.current);
         }
-        
+
         // Final analysis and rubric
         await triggerAnalysis();
         await generateRubric();
-        
+
         setStatus('completed');
       };
-      
+
     } catch (error) {
       console.error('Failed to process video:', error);
     }
@@ -266,7 +353,7 @@ function LiveDashboardContent() {
   // Pause/Resume video
   const togglePlayPause = () => {
     if (!videoRef.current) return;
-    
+
     if (isPlaying) {
       videoRef.current.pause();
       mediaRecorderRef.current?.pause();
@@ -313,7 +400,7 @@ function LiveDashboardContent() {
               body: formData,
             });
             const data = await response.json();
-            
+
             // Update transcript directly from response (don't rely on SSE)
             if (data.segment && data.segment.text) {
               setTranscript((prev) => [...prev, data.segment]);
@@ -350,7 +437,7 @@ function LiveDashboardContent() {
       mediaRecorderRef.current.stop();
       streamRef.current?.getTracks().forEach((track) => track.stop());
       audioContextRef.current?.close();
-      
+
       if (analysisIntervalRef.current) {
         clearInterval(analysisIntervalRef.current);
       }
@@ -371,7 +458,7 @@ function LiveDashboardContent() {
     if (transcript.length === 0) return;
 
     setIsAnalyzing(true);
-    
+
     try {
       const fullTranscript = transcript.map((s) => s.text).join(' ');
       const response = await fetch('/api/analyze', {
@@ -383,7 +470,7 @@ function LiveDashboardContent() {
         }),
       });
       const data = await response.json();
-      
+
       // Update analysis directly from response (don't rely on SSE)
       if (data.analysis) {
         setAnalysis(data.analysis);
@@ -416,7 +503,7 @@ function LiveDashboardContent() {
         }),
       });
       const data = await response.json();
-      
+
       // Update questions directly from response (don't rely on SSE)
       if (data.questions && Array.isArray(data.questions)) {
         setQuestions((prev) => {
@@ -459,7 +546,7 @@ function LiveDashboardContent() {
         }),
       });
       const data = await response.json();
-      
+
       // Update rubric directly from response (don't rely on SSE)
       if (data.rubric) {
         setRubric(data.rubric);
@@ -530,13 +617,12 @@ function LiveDashboardContent() {
                   </h1>
                   <div className="flex items-center gap-2 text-xs">
                     <span
-                      className={`flex items-center gap-1 ${
-                        connectionStatus === 'connected'
+                      className={`flex items-center gap-1 ${connectionStatus === 'connected'
                           ? 'text-emerald-600'
                           : connectionStatus === 'connecting'
-                          ? 'text-amber-600'
-                          : 'text-red-600'
-                      }`}
+                            ? 'text-amber-600'
+                            : 'text-red-600'
+                        }`}
                     >
                       {connectionStatus === 'connected' ? (
                         <CheckCircle className="w-3 h-3" />
@@ -590,7 +676,11 @@ function LiveDashboardContent() {
                 <button className="p-2 text-surface-500 hover:text-surface-700 hover:bg-surface-100 rounded-xl transition-colors">
                   <Download className="w-5 h-5" />
                 </button>
-                <button className="p-2 text-surface-500 hover:text-surface-700 hover:bg-surface-100 rounded-xl transition-colors">
+                <button 
+                  onClick={() => setShowShareModal(true)}
+                  className="p-2 text-surface-500 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-colors"
+                  title="Share session with professor"
+                >
                   <Share2 className="w-5 h-5" />
                 </button>
               </div>
@@ -610,11 +700,10 @@ function LiveDashboardContent() {
                 whileTap={{ scale: 0.95 }}
                 onClick={isRecording ? stopRecording : startRecording}
                 disabled={status === 'processing'}
-                className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${
-                  isRecording
+                className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${isRecording
                     ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
                     : 'bg-gradient-primary text-white shadow-glow'
-                } disabled:opacity-50`}
+                  } disabled:opacity-50`}
               >
                 {status === 'processing' ? (
                   <Loader2 className="w-6 h-6 animate-spin" />
@@ -643,11 +732,10 @@ function LiveDashboardContent() {
                   whileTap={{ scale: 0.95 }}
                   onClick={status === 'idle' ? processVideo : togglePlayPause}
                   disabled={status === 'processing'}
-                  className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${
-                    isPlaying
+                  className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${isPlaying
                       ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
                       : 'bg-gradient-primary text-white shadow-glow'
-                  } disabled:opacity-50`}
+                    } disabled:opacity-50`}
                 >
                   {status === 'processing' ? (
                     <Loader2 className="w-6 h-6 animate-spin" />
@@ -705,7 +793,7 @@ function LiveDashboardContent() {
                   Ready to Record
                 </h2>
                 <p className="text-surface-600 mb-6">
-                  Click the microphone button on the left to start recording. 
+                  Click the microphone button on the left to start recording.
                   The AI will transcribe and analyze the presentation in real-time.
                 </p>
                 <div className="flex flex-wrap justify-center gap-4 text-sm text-surface-500">
@@ -790,7 +878,7 @@ function LiveDashboardContent() {
                       </div>
                     )}
                   </div>
-                  
+
                   {/* Video Controls */}
                   <div className="flex items-center gap-4 px-2">
                     {/* Play/Pause Button */}
@@ -801,7 +889,7 @@ function LiveDashboardContent() {
                     >
                       {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
                     </button>
-                    
+
                     {/* Progress Bar */}
                     <div className="flex-1 relative">
                       <input
@@ -818,12 +906,12 @@ function LiveDashboardContent() {
                         className="w-full h-2 bg-surface-700 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary-500 [&::-webkit-slider-thumb]:cursor-pointer"
                       />
                     </div>
-                    
+
                     {/* Time Display */}
                     <span className="text-white text-sm font-mono min-w-[100px] text-right">
                       {formatTime(currentTime)} / {formatTime(videoDuration * 1000)}
                     </span>
-                    
+
                     {/* Change Video */}
                     <label className="p-2 rounded-lg bg-surface-800 text-white hover:bg-surface-700 cursor-pointer transition-colors">
                       <Upload className="w-5 h-5" />
@@ -847,11 +935,10 @@ function LiveDashboardContent() {
                 <button
                   key={panel.id}
                   onClick={() => setActivePanel(panel.id)}
-                  className={`relative px-4 py-3 text-sm font-medium transition-colors ${
-                    activePanel === panel.id
+                  className={`relative px-4 py-3 text-sm font-medium transition-colors ${activePanel === panel.id
                       ? 'text-primary-600'
                       : 'text-surface-500 hover:text-surface-700'
-                  }`}
+                    }`}
                 >
                   {panel.label}
                   {activePanel === panel.id && (
@@ -940,15 +1027,14 @@ function LiveDashboardContent() {
             <span className="text-surface-500">
               Status:{' '}
               <span
-                className={`font-medium ${
-                  status === 'recording'
+                className={`font-medium ${status === 'recording'
                     ? 'text-red-600'
                     : status === 'completed'
-                    ? 'text-emerald-600'
-                    : status === 'processing'
-                    ? 'text-amber-600'
-                    : 'text-surface-600'
-                }`}
+                      ? 'text-emerald-600'
+                      : status === 'processing'
+                        ? 'text-amber-600'
+                        : 'text-surface-600'
+                  }`}
               >
                 {status.charAt(0).toUpperCase() + status.slice(1)}
               </span>
@@ -972,6 +1058,85 @@ function LiveDashboardContent() {
           </div>
         </div>
       </footer>
+
+      {/* Share Modal */}
+      <AnimatePresence>
+        {showShareModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            onClick={() => setShowShareModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 max-w-md w-full mx-4 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-primary flex items-center justify-center">
+                  <Link className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-surface-900">Share Session</h3>
+                  <p className="text-sm text-surface-500">Let others watch this presentation live</p>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-surface-700 mb-2">
+                  Shareable Link
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={getShareLink()}
+                    className="flex-1 px-4 py-2 bg-surface-50 border border-surface-200 rounded-xl text-sm text-surface-700"
+                  />
+                  <button
+                    onClick={copyShareLink}
+                    className="px-4 py-2 bg-gradient-primary text-white rounded-xl hover:shadow-lg transition-shadow flex items-center gap-2"
+                  >
+                    {linkCopied ? (
+                      <>
+                        <Check className="w-4 h-4" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" />
+                        Copy
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-primary-50 rounded-xl p-4 mb-4">
+                <h4 className="text-sm font-medium text-primary-700 mb-1">Real-Time Sync</h4>
+                <p className="text-xs text-primary-600">
+                  {pusherConnected 
+                    ? '✅ Anyone with this link will see transcript, questions, and analysis update in real-time!'
+                    : '⚠️ Real-time sync requires Pusher configuration. Updates will still work but may require page refresh.'}
+                </p>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setShowShareModal(false)}
+                  className="px-4 py-2 text-surface-600 hover:text-surface-800 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

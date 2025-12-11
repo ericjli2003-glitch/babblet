@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getSession, getFullTranscript, addQuestion, broadcastToSession } from '@/lib/session-store';
 import { generateQuestionsFromTranscript, isOpenAIConfigured } from '@/lib/openai-questions';
+import { broadcastQuestions } from '@/lib/pusher';
 import type { GeneratedQuestion, QuestionCategory, QuestionDifficulty } from '@/lib/types';
 
 export async function POST(request: NextRequest) {
@@ -58,12 +59,16 @@ export async function POST(request: NextRequest) {
       addQuestion(sessionId, q);
     });
 
+    // Broadcast via SSE (legacy)
     broadcastToSession(sessionId, {
       type: 'question_generated',
       data: { questions, trigger: 'periodic' },
       timestamp: Date.now(),
       sessionId,
     });
+    
+    // Broadcast via Pusher for real-time multi-user support
+    await broadcastQuestions(sessionId, questions);
 
     return NextResponse.json({ success: true, questions });
   } catch (error) {

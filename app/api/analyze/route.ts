@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getSession, getFullTranscript, setAnalysis, broadcastToSession } from '@/lib/session-store';
 import { detectSemanticEvents, isGeminiConfigured } from '@/lib/gemini';
+import { broadcastAnalysis } from '@/lib/pusher';
 import type { AnalysisSummary, KeyClaim, LogicalGap, MissingEvidence } from '@/lib/types';
 
 export async function POST(request: NextRequest) {
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    
+
     console.log(`[Analyze] Processing transcript: ${transcript.slice(0, 100)}...`);
 
     // Use Gemini to detect semantic events and create analysis
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     if (isGeminiConfigured()) {
       const events = await detectSemanticEvents(transcript);
-      
+
       // Convert semantic events to claims, gaps, etc.
       const keyClaims: KeyClaim[] = events
         .filter(e => e.type === 'claim' || e.type === 'argument')
@@ -99,13 +100,16 @@ export async function POST(request: NextRequest) {
 
     setAnalysis(sessionId, analysis);
 
-    // Broadcast to connected clients
+    // Broadcast to connected clients via SSE (legacy)
     broadcastToSession(sessionId, {
       type: 'analysis_update',
       data: { summary: analysis },
       timestamp: Date.now(),
       sessionId,
     });
+    
+    // Broadcast via Pusher for real-time multi-user support
+    await broadcastAnalysis(sessionId, analysis);
 
     return NextResponse.json({ success: true, analysis });
   } catch (error) {
