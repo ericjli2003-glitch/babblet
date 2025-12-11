@@ -207,10 +207,16 @@ function LiveDashboardContent() {
           formData.append('timestamp', String(video.currentTime * 1000));
 
           try {
-            await fetch('/api/transcribe', {
+            const response = await fetch('/api/transcribe', {
               method: 'POST',
               body: formData,
             });
+            const data = await response.json();
+            
+            // Update transcript directly from response (don't rely on SSE)
+            if (data.segment && data.segment.text) {
+              setTranscript((prev) => [...prev, data.segment]);
+            }
           } catch (e) {
             console.error('Failed to send audio chunk:', e);
           }
@@ -302,10 +308,16 @@ function LiveDashboardContent() {
           formData.append('timestamp', String(Date.now() - startTimeRef.current));
 
           try {
-            await fetch('/api/transcribe', {
+            const response = await fetch('/api/transcribe', {
               method: 'POST',
               body: formData,
             });
+            const data = await response.json();
+            
+            // Update transcript directly from response (don't rely on SSE)
+            if (data.segment && data.segment.text) {
+              setTranscript((prev) => [...prev, data.segment]);
+            }
           } catch (e) {
             console.error('Failed to send audio chunk:', e);
           }
@@ -362,7 +374,7 @@ function LiveDashboardContent() {
     
     try {
       const fullTranscript = transcript.map((s) => s.text).join(' ');
-      await fetch('/api/analyze', {
+      const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -370,8 +382,15 @@ function LiveDashboardContent() {
           transcript: fullTranscript,
         }),
       });
+      const data = await response.json();
+      
+      // Update analysis directly from response (don't rely on SSE)
+      if (data.analysis) {
+        setAnalysis(data.analysis);
+      }
     } catch (e) {
       console.error('Analysis failed:', e);
+    } finally {
       setIsAnalyzing(false);
     }
   };
@@ -384,18 +403,43 @@ function LiveDashboardContent() {
 
     try {
       const fullTranscript = transcript.map((s) => s.text).join(' ');
-      await fetch('/api/generate-questions', {
+      const response = await fetch('/api/generate-questions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId,
-          transcript: fullTranscript,
-          claims: analysis.keyClaims,
-          gaps: analysis.logicalGaps,
+          context: {
+            transcript: fullTranscript,
+            claims: analysis.keyClaims,
+            gaps: analysis.logicalGaps,
+          },
         }),
       });
+      const data = await response.json();
+      
+      // Update questions directly from response (don't rely on SSE)
+      if (data.questions && Array.isArray(data.questions)) {
+        setQuestions((prev) => {
+          const newQuestions = { ...prev };
+          data.questions.forEach((q: GeneratedQuestion) => {
+            switch (q.category) {
+              case 'clarifying':
+                newQuestions.clarifying = [...newQuestions.clarifying, q];
+                break;
+              case 'critical-thinking':
+                newQuestions.criticalThinking = [...newQuestions.criticalThinking, q];
+                break;
+              case 'expansion':
+                newQuestions.expansion = [...newQuestions.expansion, q];
+                break;
+            }
+          });
+          return newQuestions;
+        });
+      }
     } catch (e) {
       console.error('Question generation failed:', e);
+    } finally {
       setIsGeneratingQuestions(false);
     }
   };
@@ -406,7 +450,7 @@ function LiveDashboardContent() {
 
     try {
       const fullTranscript = transcript.map((s) => s.text).join(' ');
-      await fetch('/api/evaluate', {
+      const response = await fetch('/api/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -414,6 +458,12 @@ function LiveDashboardContent() {
           transcript: fullTranscript,
         }),
       });
+      const data = await response.json();
+      
+      // Update rubric directly from response (don't rely on SSE)
+      if (data.rubric) {
+        setRubric(data.rubric);
+      }
     } catch (e) {
       console.error('Rubric generation failed:', e);
     }

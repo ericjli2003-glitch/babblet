@@ -41,18 +41,18 @@ export async function POST(request: NextRequest) {
         duration: 0,
         isFinal: true,
       };
-      
+
       addTranscriptSegment(sessionId, mockSegment);
-      
+
       broadcastToSession(sessionId, {
         type: 'transcript_update',
         data: { segment: mockSegment },
         timestamp: Date.now(),
         sessionId,
       });
-      
-      return NextResponse.json({ 
-        success: false, 
+
+      return NextResponse.json({
+        success: false,
         error: 'Gemini API not configured - add GEMINI_API_KEY to Vercel environment variables',
         segment: mockSegment,
       });
@@ -66,9 +66,9 @@ export async function POST(request: NextRequest) {
 
     // Check minimum size
     if (buffer.length < 1000) {
-      return NextResponse.json({ 
-        success: true, 
-        message: 'Audio chunk too small, skipping' 
+      return NextResponse.json({
+        success: true,
+        message: 'Audio chunk too small, skipping'
       });
     }
 
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Transcription error:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to transcribe audio',
         details: error instanceof Error ? error.message : 'Unknown error'
       },

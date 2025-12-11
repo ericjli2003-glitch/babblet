@@ -5,7 +5,7 @@ import type { RubricEvaluation } from '@/lib/types';
 
 export async function POST(request: NextRequest) {
   try {
-    const { sessionId } = await request.json();
+    const { sessionId, transcript: providedTranscript } = await request.json();
 
     if (!sessionId) {
       return NextResponse.json(
@@ -14,15 +14,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const session = getSession(sessionId);
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Session not found' },
-        { status: 404 }
-      );
+    // Use provided transcript or try to get from session (may not work on serverless)
+    let transcript = providedTranscript;
+    let analysis = null;
+    if (!transcript) {
+      const session = getSession(sessionId);
+      if (session) {
+        transcript = getFullTranscript(sessionId);
+        analysis = session.analysis;
+      }
     }
-
-    const transcript = getFullTranscript(sessionId);
 
     if (!transcript || transcript.trim().length === 0) {
       return NextResponse.json(
@@ -30,11 +31,13 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    
+    console.log(`[Evaluate] Processing transcript: ${transcript.slice(0, 100)}...`);
 
     let rubric: RubricEvaluation;
 
     if (isOpenAIConfigured()) {
-      rubric = await generateRubricEvaluation(transcript, session.analysis);
+      rubric = await generateRubricEvaluation(transcript, analysis);
     } else {
       // Mock rubric if OpenAI not configured
       rubric = {

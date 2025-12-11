@@ -5,8 +5,8 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { v4 as uuidv4 } from 'uuid';
-import type { 
-  SemanticEvent, 
+import type {
+  SemanticEvent,
   SemanticEventType,
   TranscriptSegment,
 } from './types';
@@ -48,14 +48,14 @@ export async function transcribeAudio(
 ): Promise<TranscriptSegment | null> {
   try {
     console.log(`[Gemini] Transcribing audio: ${audioBuffer.length} bytes, type: ${mimeType}`);
-    
+
     const client = getGeminiClient();
     const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    
+
     // Convert buffer to base64
     const base64Audio = audioBuffer.toString('base64');
     console.log(`[Gemini] Base64 encoded: ${base64Audio.length} chars`);
-    
+
     const result = await model.generateContent([
       {
         inlineData: {
@@ -67,17 +67,17 @@ export async function transcribeAudio(
         text: 'Transcribe this audio accurately. Return ONLY the transcribed text, nothing else. If there is no speech, return an empty string.',
       },
     ]);
-    
+
     const response = result.response;
     const text = response.text().trim();
-    
+
     console.log(`[Gemini] Transcription result: "${text.slice(0, 100)}${text.length > 100 ? '...' : ''}"`);
-    
+
     if (!text || text.length === 0) {
       console.log('[Gemini] No speech detected');
       return null;
     }
-    
+
     return {
       id: uuidv4(),
       text,
@@ -128,27 +128,27 @@ export async function detectSemanticEvents(
 ): Promise<SemanticEvent[]> {
   try {
     const client = getGeminiClient();
-    const model = client.getGenerativeModel({ 
+    const model = client.getGenerativeModel({
       model: 'gemini-1.5-flash',
       generationConfig: {
         responseMimeType: 'application/json',
       },
     });
-    
-    const prompt = context 
+
+    const prompt = context
       ? `${SEMANTIC_DETECTION_PROMPT}\n\nPrevious context: ${context}\n\nCurrent transcript: ${transcript}`
       : `${SEMANTIC_DETECTION_PROMPT}\n\nTranscript: ${transcript}`;
-    
+
     const result = await model.generateContent(prompt);
     const response = result.response;
     const text = response.text();
-    
+
     const parsed: GeminiSemanticResponse = JSON.parse(text);
-    
+
     if (!parsed.events || !Array.isArray(parsed.events)) {
       return [];
     }
-    
+
     return parsed.events
       .filter(e => e.confidence >= 0.6) // Only keep high-confidence events
       .map(event => ({
@@ -179,17 +179,17 @@ export async function processAudioChunk(
 }> {
   // First, transcribe the audio
   const transcript = await transcribeAudio(audioBuffer, mimeType);
-  
+
   if (!transcript || !transcript.text) {
     return { transcript: null, events: [] };
   }
-  
+
   // Then detect semantic events
   const events = await detectSemanticEvents(
     transcript.text,
     previousTranscript.slice(-500) // Last 500 chars for context
   );
-  
+
   return { transcript, events };
 }
 
