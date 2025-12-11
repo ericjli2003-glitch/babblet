@@ -1,24 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSession, getSession, updateSessionStatus, deleteSession } from '@/lib/session-store';
+import { 
+  createSession, 
+  getSession, 
+  updateSessionStatus, 
+  deleteSession 
+} from '@/lib/session-store';
 
 // POST - Create a new session
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
-    const body = await request.json();
-    const { type, title, presenterName } = body;
-
-    const session = createSession({
-      title: title || 'Untitled Presentation',
-      presenterName,
-    });
-
-    // Update status based on mode
-    updateSessionStatus(session.id, type === 'live' ? 'idle' : 'processing');
-
+    const session = createSession();
+    
     return NextResponse.json({
       sessionId: session.id,
-      status: 'ready',
-      message: `Session created successfully. Mode: ${type}`,
+      status: session.status,
+      message: 'Session created successfully',
     });
   } catch (error) {
     console.error('Session creation error:', error);
@@ -60,6 +56,37 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// PATCH - Update session status
+export async function PATCH(request: NextRequest) {
+  try {
+    const { sessionId, status } = await request.json();
+    
+    if (!sessionId || !status) {
+      return NextResponse.json(
+        { error: 'Session ID and status required' },
+        { status: 400 }
+      );
+    }
+
+    const session = updateSessionStatus(sessionId, status);
+    
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Session not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ success: true, status: session.status });
+  } catch (error) {
+    console.error('Session update error:', error);
+    return NextResponse.json(
+      { error: 'Failed to update session' },
+      { status: 500 }
+    );
+  }
+}
+
 // DELETE - Delete a session
 export async function DELETE(request: NextRequest) {
   try {
@@ -74,14 +101,7 @@ export async function DELETE(request: NextRequest) {
 
     const deleted = deleteSession(sessionId);
     
-    if (!deleted) {
-      return NextResponse.json(
-        { error: 'Session not found' },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: deleted });
   } catch (error) {
     console.error('Session deletion error:', error);
     return NextResponse.json(
@@ -90,4 +110,3 @@ export async function DELETE(request: NextRequest) {
     );
   }
 }
-

@@ -1,6 +1,6 @@
 {
   "name": "babblet",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -12,8 +12,8 @@
     "next": "14.2.18",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "@google/generative-ai": "^0.21.0",
     "openai": "^4.73.0",
-    "pdfjs-dist": "^4.8.69",
     "framer-motion": "^11.12.0",
     "lucide-react": "^0.460.0",
     "uuid": "^11.0.3",
@@ -32,4 +32,3 @@
     "typescript": "^5.7.2"
   }
 }
-

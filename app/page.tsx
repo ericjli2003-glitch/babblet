@@ -1,353 +1,260 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Mic,
-  Upload,
-  FileVideo,
-  Presentation,
-  Sparkles,
-  ArrowRight,
-  Brain,
+import { motion } from 'framer-motion';
+import Link from 'next/link';
+import { 
+  Mic, 
+  Sparkles, 
+  Brain, 
   MessageCircleQuestion,
-  ClipboardCheck,
   Zap,
-  CheckCircle2,
-  Loader2,
+  ArrowRight,
+  Volume2,
+  FileText,
+  Lightbulb
 } from 'lucide-react';
-import SlideUpload from '@/components/SlideUpload';
 
-type InputMode = 'upload' | 'live' | null;
-
-export default function HomePage() {
-  const router = useRouter();
-  const [selectedMode, setSelectedMode] = useState<InputMode>(null);
-  const [slidesFile, setSlidesFile] = useState<File | null>(null);
-  const [isStarting, setIsStarting] = useState(false);
-  const [presenterName, setPresenterName] = useState('');
-  const [presentationTitle, setPresentationTitle] = useState('');
-
-  const handleStartSession = async () => {
-    setIsStarting(true);
-
-    try {
-      // Create session via API
-      const response = await fetch('/api/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: selectedMode,
-          title: presentationTitle || 'Untitled Presentation',
-          presenterName: presenterName || undefined,
-        }),
-      });
-
-      const data = await response.json();
-      
-      if (data.sessionId) {
-        // Navigate to live dashboard
-        router.push(`/live?sessionId=${data.sessionId}&mode=${selectedMode}`);
-      }
-    } catch (error) {
-      console.error('Failed to start session:', error);
-      setIsStarting(false);
-    }
-  };
-
-  const features = [
-    {
-      icon: Brain,
-      title: 'Real-Time Analysis',
-      description: 'AI analyzes content as it happens, identifying key claims and logical gaps',
-    },
-    {
-      icon: MessageCircleQuestion,
-      title: 'Smart Questions',
-      description: 'Automatically generates clarifying, critical thinking, and expansion questions',
-    },
-    {
-      icon: ClipboardCheck,
-      title: 'Rubric Evaluation',
-      description: 'Comprehensive scoring on content quality, delivery, and evidence strength',
-    },
-    {
-      icon: Zap,
-      title: 'Instant Feedback',
-      description: 'Get actionable insights immediately after the presentation ends',
-    },
-  ];
-
+export default function Home() {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-purple-950 overflow-hidden">
+      {/* Animated background */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse delay-1000" />
+      </div>
+
       {/* Header */}
-      <header className="relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <nav className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-glow">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-xl font-semibold gradient-text">Babblet</span>
+      <header className="relative z-10 border-b border-white/10 bg-slate-900/30 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Sparkles className="w-8 h-8 text-purple-400" />
+              <Sparkles className="w-5 h-5 text-blue-400 absolute -right-1 bottom-0" />
             </div>
-          </nav>
+            <span className="font-bold text-2xl bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
+              Babblet
+            </span>
+          </div>
+          
+          <Link 
+            href="/live"
+            className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 border border-purple-500/40 text-purple-300 rounded-lg hover:bg-purple-500/30 transition-colors"
+          >
+            <Mic className="w-4 h-4" />
+            Open Dashboard
+          </Link>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-16"
-        >
-          <h1 className="text-5xl sm:text-6xl font-bold text-surface-900 mb-6 tracking-tight">
-            AI-Powered{' '}
-            <span className="gradient-text">Presentation Analysis</span>
-          </h1>
-          <p className="text-xl text-surface-600 max-w-2xl mx-auto leading-relaxed">
-            Transform how you evaluate student presentations. Get real-time insights,
-            intelligent questions, and comprehensive rubric evaluations.
-          </p>
-        </motion.div>
+      {/* Hero section */}
+      <main className="relative z-10 max-w-7xl mx-auto px-6 pt-20 pb-32">
+        <div className="text-center mb-16">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+          >
+            <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
+              Real-Time{' '}
+              <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
+                AI Questions
+              </span>
+              <br />
+              For Student Presentations
+            </h1>
+            
+            <p className="text-xl text-white/60 max-w-2xl mx-auto mb-10">
+              Listen to student presentations in real-time. Babblet uses Gemini for audio understanding 
+              and GPT-4 to generate insightful questions—from clarifying queries to critical thinking challenges.
+            </p>
+            
+            <Link href="/live">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="group inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-purple-500 to-blue-500 text-white font-semibold text-lg rounded-xl hover:shadow-2xl hover:shadow-purple-500/30 transition-all"
+              >
+                <Mic className="w-6 h-6" />
+                Start Listening
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </motion.button>
+            </Link>
+          </motion.div>
+        </div>
 
-        {/* Mode Selection */}
+        {/* Feature cards */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="max-w-4xl mx-auto"
+          className="grid md:grid-cols-3 gap-6 mb-20"
         >
-          <h2 className="text-lg font-medium text-surface-700 text-center mb-6">
-            Choose how to capture the presentation
-          </h2>
-
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
-            {/* Upload Option */}
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setSelectedMode('upload')}
-              className={`relative p-8 rounded-3xl text-left transition-all duration-300 ${
-                selectedMode === 'upload'
-                  ? 'bg-white shadow-soft-lg ring-2 ring-primary-500'
-                  : 'bg-white/60 shadow-soft hover:bg-white hover:shadow-soft-lg'
-              }`}
-            >
-              {selectedMode === 'upload' && (
-                <div className="absolute top-4 right-4">
-                  <CheckCircle2 className="w-6 h-6 text-primary-500" />
-                </div>
-              )}
-              <div className="w-14 h-14 rounded-2xl bg-gradient-subtle flex items-center justify-center mb-4">
-                <Upload className="w-7 h-7 text-primary-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-surface-900 mb-2">Upload Video</h3>
-              <p className="text-surface-600">
-                Upload a pre-recorded presentation video (MP4, MOV, Zoom, or Loom recordings)
-              </p>
-            </motion.button>
-
-            {/* Live Recording Option */}
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setSelectedMode('live')}
-              className={`relative p-8 rounded-3xl text-left transition-all duration-300 ${
-                selectedMode === 'live'
-                  ? 'bg-white shadow-soft-lg ring-2 ring-primary-500'
-                  : 'bg-white/60 shadow-soft hover:bg-white hover:shadow-soft-lg'
-              }`}
-            >
-              {selectedMode === 'live' && (
-                <div className="absolute top-4 right-4">
-                  <CheckCircle2 className="w-6 h-6 text-primary-500" />
-                </div>
-              )}
-              <div className="w-14 h-14 rounded-2xl bg-gradient-subtle flex items-center justify-center mb-4">
-                <Mic className="w-7 h-7 text-accent-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-surface-900 mb-2">Record Live</h3>
-              <p className="text-surface-600">
-                Capture audio in real-time using your browser microphone during the presentation
-              </p>
-            </motion.button>
-          </div>
-
-          {/* Configuration Form */}
-          <AnimatePresence mode="wait">
-            {selectedMode && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.3 }}
-                className="overflow-hidden"
-              >
-                <div className="bg-white rounded-3xl shadow-soft p-8 space-y-6">
-                  {/* Basic Info */}
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-surface-700 mb-2">
-                        Presentation Title (optional)
-                      </label>
-                      <input
-                        type="text"
-                        value={presentationTitle}
-                        onChange={(e) => setPresentationTitle(e.target.value)}
-                        placeholder="e.g., Climate Change Research"
-                        className="input-field"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-surface-700 mb-2">
-                        Presenter Name (optional)
-                      </label>
-                      <input
-                        type="text"
-                        value={presenterName}
-                        onChange={(e) => setPresenterName(e.target.value)}
-                        placeholder="e.g., John Smith"
-                        className="input-field"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Video Upload info (only for upload mode) */}
-                  {selectedMode === 'upload' && (
-                    <div className="p-6 rounded-2xl bg-gradient-subtle border border-primary-200">
-                      <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 rounded-xl bg-white shadow-soft flex items-center justify-center flex-shrink-0">
-                          <FileVideo className="w-6 h-6 text-primary-600" />
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-surface-900 mb-1">Video Selection</h4>
-                          <p className="text-sm text-surface-600">
-                            You&apos;ll select your video file on the next screen. The AI will extract audio 
-                            and transcribe as the video plays, with full playback controls.
-                          </p>
-                          <div className="flex flex-wrap gap-2 mt-3">
-                            <span className="px-2 py-1 bg-white rounded-lg text-xs text-surface-600">MP4</span>
-                            <span className="px-2 py-1 bg-white rounded-lg text-xs text-surface-600">MOV</span>
-                            <span className="px-2 py-1 bg-white rounded-lg text-xs text-surface-600">WebM</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Slides Upload (optional for both modes) */}
-                  <SlideUpload
-                    onFileSelect={(file) => setSlidesFile(file)}
-                    selectedFile={slidesFile}
-                  />
-
-                  {/* Start Button */}
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleStartSession}
-                    disabled={isStarting}
-                    className="w-full btn-primary py-4 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isStarting ? (
-                      <>
-                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        Starting Session...
-                      </>
-                    ) : (
-                      <>
-                        {selectedMode === 'upload' ? 'Continue to Upload' : 'Start Recording'}
-                        <ArrowRight className="w-5 h-5 ml-2" />
-                      </>
-                    )}
-                  </motion.button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <FeatureCard
+            icon={Volume2}
+            title="Real-Time Audio"
+            description="Streams audio in 500ms chunks for instant transcription and analysis."
+            gradient="from-purple-500 to-pink-500"
+          />
+          <FeatureCard
+            icon={Brain}
+            title="Semantic Detection"
+            description="Gemini identifies claims, definitions, examples, and topic shifts as they happen."
+            gradient="from-pink-500 to-orange-500"
+          />
+          <FeatureCard
+            icon={MessageCircleQuestion}
+            title="Smart Questions"
+            description="GPT-4 generates contextual questions: follow-ups, clarifying, critical thinking."
+            gradient="from-blue-500 to-cyan-500"
+          />
         </motion.div>
 
-        {/* Features Grid */}
+        {/* How it works */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.4 }}
-          className="mt-24"
+          className="bg-slate-900/50 backdrop-blur-sm rounded-3xl border border-white/10 p-8"
         >
-          <h2 className="text-2xl font-semibold text-surface-900 text-center mb-12">
-            Everything you need to evaluate presentations
-          </h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {features.map((feature, index) => (
-              <motion.div
-                key={feature.title}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.5 + index * 0.1 }}
-                className="card-neumorphic p-6 hover:shadow-soft-lg transition-all duration-300"
-              >
-                <div className="w-12 h-12 rounded-xl bg-gradient-subtle flex items-center justify-center mb-4">
-                  <feature.icon className="w-6 h-6 text-primary-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-surface-900 mb-2">{feature.title}</h3>
-                <p className="text-surface-600 text-sm">{feature.description}</p>
-              </motion.div>
-            ))}
+          <h2 className="text-3xl font-bold text-white mb-8 text-center">How It Works</h2>
+          
+          <div className="grid md:grid-cols-4 gap-4">
+            <WorkflowStep
+              step={1}
+              icon={Mic}
+              title="Record"
+              description="Click to start listening to a live presentation"
+            />
+            <WorkflowStep
+              step={2}
+              icon={FileText}
+              title="Transcribe"
+              description="Gemini transcribes and detects semantic events"
+            />
+            <WorkflowStep
+              step={3}
+              icon={Lightbulb}
+              title="Analyze"
+              description="GPT-4 generates insightful questions in real-time"
+            />
+            <WorkflowStep
+              step={4}
+              icon={Zap}
+              title="Engage"
+              description="Use questions to deepen student understanding"
+            />
           </div>
         </motion.div>
 
-        {/* How It Works */}
+        {/* Question types preview */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.6 }}
-          className="mt-24 mb-16"
+          className="mt-12 grid md:grid-cols-2 lg:grid-cols-4 gap-4"
         >
-          <h2 className="text-2xl font-semibold text-surface-900 text-center mb-12">
-            How it works
-          </h2>
-          <div className="flex flex-col md:flex-row items-center justify-center gap-8 md:gap-4">
-            {[
-              { step: 1, icon: Upload, label: 'Upload or Record' },
-              { step: 2, icon: Brain, label: 'AI Analyzes' },
-              { step: 3, icon: MessageCircleQuestion, label: 'Questions Generated' },
-              { step: 4, icon: ClipboardCheck, label: 'Get Evaluation' },
-            ].map((item, index) => (
-              <div key={item.step} className="flex items-center">
-                <div className="flex flex-col items-center">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-glow mb-3">
-                    <item.icon className="w-8 h-8 text-white" />
-                  </div>
-                  <span className="text-xs text-surface-500 font-medium">STEP {item.step}</span>
-                  <span className="text-sm font-medium text-surface-900">{item.label}</span>
-                </div>
-                {index < 3 && (
-                  <ArrowRight className="hidden md:block w-8 h-8 text-surface-300 mx-4" />
-                )}
-              </div>
-            ))}
-          </div>
+          <QuestionTypeCard
+            type="Follow-up"
+            example="Can you elaborate on how this relates to...?"
+            color="blue"
+          />
+          <QuestionTypeCard
+            type="Clarifying"
+            example="What do you mean by...?"
+            color="amber"
+          />
+          <QuestionTypeCard
+            type="Critical Thinking"
+            example="What would happen if...?"
+            color="purple"
+          />
+          <QuestionTypeCard
+            type="Misconception"
+            example="Are you sure that...?"
+            color="red"
+          />
         </motion.div>
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-surface-200 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-primary-500" />
-              <span className="text-sm text-surface-600">Babblet</span>
-            </div>
-            <p className="text-sm text-surface-500">
-              Powered by Babblet AI
-            </p>
-          </div>
-        </div>
+      <footer className="relative z-10 border-t border-white/10 py-6 text-center">
+        <p className="text-white/40 text-sm">
+          Powered by <span className="text-purple-400">Babblet AI</span> · Built with Gemini & GPT-4
+        </p>
       </footer>
     </div>
   );
 }
 
+function FeatureCard({ 
+  icon: Icon, 
+  title, 
+  description, 
+  gradient 
+}: { 
+  icon: React.ElementType;
+  title: string; 
+  description: string; 
+  gradient: string;
+}) {
+  return (
+    <div className="group relative bg-slate-900/50 backdrop-blur-sm rounded-2xl border border-white/10 p-6 hover:border-white/20 transition-all">
+      <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center mb-4`}>
+        <Icon className="w-6 h-6 text-white" />
+      </div>
+      <h3 className="text-xl font-semibold text-white mb-2">{title}</h3>
+      <p className="text-white/60">{description}</p>
+    </div>
+  );
+}
+
+function WorkflowStep({
+  step,
+  icon: Icon,
+  title,
+  description,
+}: {
+  step: number;
+  icon: React.ElementType;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="text-center">
+      <div className="relative inline-block mb-4">
+        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+          <Icon className="w-7 h-7 text-white" />
+        </div>
+        <span className="absolute -top-1 -right-1 w-6 h-6 bg-slate-800 rounded-full flex items-center justify-center text-xs font-bold text-purple-400 border-2 border-purple-500">
+          {step}
+        </span>
+      </div>
+      <h4 className="font-semibold text-white mb-1">{title}</h4>
+      <p className="text-sm text-white/50">{description}</p>
+    </div>
+  );
+}
+
+function QuestionTypeCard({
+  type,
+  example,
+  color,
+}: {
+  type: string;
+  example: string;
+  color: 'blue' | 'amber' | 'purple' | 'red';
+}) {
+  const colorClasses = {
+    blue: 'from-blue-500/20 to-blue-600/10 border-blue-500/30',
+    amber: 'from-amber-500/20 to-amber-600/10 border-amber-500/30',
+    purple: 'from-purple-500/20 to-purple-600/10 border-purple-500/30',
+    red: 'from-red-500/20 to-red-600/10 border-red-500/30',
+  };
+  
+  return (
+    <div className={`bg-gradient-to-br ${colorClasses[color]} border rounded-xl p-4`}>
+      <h4 className="font-semibold text-white mb-2">{type}</h4>
+      <p className="text-sm text-white/60 italic">&ldquo;{example}&rdquo;</p>
+    </div>
+  );
+}

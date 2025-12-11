@@ -1,6 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getSession } from '@/lib/session-store';
-import { addConnection, removeConnection } from '@/lib/stream-manager';
+import { getSession, addConnection, removeConnection } from '@/lib/session-store';
 
 // GET - Server-Sent Events stream for real-time updates
 export async function GET(request: NextRequest) {
@@ -15,34 +14,37 @@ export async function GET(request: NextRequest) {
     return new Response('Session not found', { status: 404 });
   }
 
-  // Create a readable stream for SSE
+  // Create SSE stream
   const stream = new ReadableStream({
     start(controller) {
-      // Register this connection
+      // Register connection
       addConnection(sessionId, controller);
 
-      // Send initial connection message
+      // Send initial state
       const initMessage = JSON.stringify({
-        type: 'session_start',
+        type: 'init',
         data: {
           sessionId,
           status: session.status,
           transcript: session.transcript,
-          analysis: session.analysis,
+          semanticEvents: session.semanticEvents,
           questions: session.questions,
-          rubric: session.rubric,
+          summary: session.summary,
         },
         timestamp: Date.now(),
         sessionId,
       });
       controller.enqueue(new TextEncoder().encode(`data: ${initMessage}\n\n`));
 
-      // Send heartbeat every 30 seconds to keep connection alive
+      // Heartbeat every 30 seconds
       const heartbeatInterval = setInterval(() => {
         try {
-          controller.enqueue(
-            new TextEncoder().encode(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: Date.now() })}\n\n`)
-          );
+          const heartbeat = JSON.stringify({
+            type: 'heartbeat',
+            timestamp: Date.now(),
+            sessionId,
+          });
+          controller.enqueue(new TextEncoder().encode(`data: ${heartbeat}\n\n`));
         } catch {
           clearInterval(heartbeatInterval);
         }
@@ -64,3 +66,4 @@ export async function GET(request: NextRequest) {
     },
   });
 }
+

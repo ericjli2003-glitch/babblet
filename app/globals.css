@@ -2,202 +2,92 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    --primary-gradient-start: #5B7CFF;
-    --primary-gradient-end: #A66BFF;
-    --background: #fafafa;
-    --foreground: #18181b;
-    --card: #ffffff;
-    --card-foreground: #27272a;
-    --muted: #f4f4f5;
-    --muted-foreground: #71717a;
-    --border: #e4e4e7;
-    --ring: #5B7CFF;
-  }
-
-  * {
-    border-color: var(--border);
-  }
-
-  html {
-    @apply antialiased;
-    font-feature-settings: 'cv11', 'ss01';
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-
-  body {
-    @apply bg-[var(--background)] text-[var(--foreground)];
-    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
-  }
+:root {
+  --background: 15 23 42;
+  --foreground: 248 250 252;
 }
 
-@layer components {
-  .card-neumorphic {
-    @apply bg-white rounded-3xl shadow-neumorphic transition-all duration-300;
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-50;
   }
-
-  .card-neumorphic:hover {
-    @apply shadow-soft-lg;
+  
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(139, 92, 246, 0.3) transparent;
   }
-
-  .card-glass {
-    @apply bg-white/80 backdrop-blur-xl rounded-3xl border border-white/20 shadow-soft;
+  
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
   }
-
-  .btn-primary {
-    @apply relative inline-flex items-center justify-center px-6 py-3 
-           font-medium text-white rounded-2xl 
-           bg-gradient-primary hover:bg-gradient-primary-hover
-           shadow-soft hover:shadow-glow
-           transition-all duration-300 ease-out
-           active:scale-[0.98];
+  
+  *::-webkit-scrollbar-track {
+    background: transparent;
   }
-
-  .btn-secondary {
-    @apply relative inline-flex items-center justify-center px-6 py-3
-           font-medium text-surface-700 rounded-2xl
-           bg-surface-100 hover:bg-surface-200
-           shadow-soft hover:shadow-soft-lg
-           transition-all duration-300 ease-out
-           active:scale-[0.98];
+  
+  *::-webkit-scrollbar-thumb {
+    background: rgba(139, 92, 246, 0.3);
+    border-radius: 3px;
   }
-
-  .input-field {
-    @apply w-full px-4 py-3 rounded-xl
-           bg-white border border-surface-200
-           text-surface-900 placeholder:text-surface-400
-           focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500
-           transition-all duration-200;
-  }
-
-  .gradient-text {
-    @apply bg-gradient-primary bg-clip-text text-transparent;
-  }
-
-  .shimmer-bg {
-    background: linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0) 0%,
-      rgba(255, 255, 255, 0.5) 50%,
-      rgba(255, 255, 255, 0) 100%
-    );
-    background-size: 200% 100%;
-    animation: shimmer 2s infinite linear;
-  }
-
-  .question-card {
-    @apply relative p-4 rounded-2xl bg-white
-           shadow-neumorphic hover:shadow-soft-lg
-           transition-all duration-300 ease-out
-           border border-surface-100;
-  }
-
-  .question-card::before {
-    content: '';
-    @apply absolute inset-0 rounded-2xl opacity-0 
-           bg-gradient-subtle transition-opacity duration-300;
-  }
-
-  .question-card:hover::before {
-    @apply opacity-100;
-  }
-
-  .transcript-line {
-    @apply py-2 px-3 rounded-lg transition-all duration-200
-           hover:bg-gradient-subtle;
-  }
-
-  .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
-  }
-
-  .badge-easy {
-    @apply bg-emerald-100 text-emerald-700;
-  }
-
-  .badge-medium {
-    @apply bg-amber-100 text-amber-700;
-  }
-
-  .badge-hard {
-    @apply bg-rose-100 text-rose-700;
-  }
-
-  .pulse-dot {
-    @apply relative flex h-3 w-3;
-  }
-
-  .pulse-dot::before {
-    @apply absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 animate-ping;
-    content: '';
-  }
-
-  .pulse-dot::after {
-    @apply relative inline-flex rounded-full h-3 w-3 bg-red-500;
-    content: '';
+  
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgba(139, 92, 246, 0.5);
   }
 }
 
 @layer utilities {
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
-
   .text-balance {
     text-wrap: balance;
   }
-
-  .animate-delay-100 {
-    animation-delay: 100ms;
+  
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
-
-  .animate-delay-200 {
-    animation-delay: 200ms;
-  }
-
-  .animate-delay-300 {
-    animation-delay: 300ms;
-  }
-
-  .animate-delay-400 {
-    animation-delay: 400ms;
-  }
-
-  .animate-delay-500 {
-    animation-delay: 500ms;
+  
+  .animate-gradient {
+    background-size: 200% 200%;
+    animation: gradient 8s ease infinite;
   }
 }
 
-/* Custom scrollbar for modern browsers */
-@supports (scrollbar-width: thin) {
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: #d4d4d8 transparent;
+@keyframes gradient {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
   }
 }
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* Custom focus styles */
+*:focus-visible {
+  @apply outline-none ring-2 ring-purple-500 ring-offset-2 ring-offset-slate-950;
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
+/* Selection styles */
+::selection {
+  @apply bg-purple-500/30;
 }
 
-::-webkit-scrollbar-thumb {
-  background-color: #d4d4d8;
-  border-radius: 3px;
+/* Glass effect */
+.glass {
+  @apply bg-white/5 backdrop-blur-xl border border-white/10;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background-color: #a1a1aa;
+/* Glow effects */
+.glow-purple {
+  box-shadow: 0 0 40px rgba(139, 92, 246, 0.3);
 }
 
+.glow-blue {
+  box-shadow: 0 0 40px rgba(59, 130, 246, 0.3);
+}
+
+/* Animation delays */
+.delay-100 { animation-delay: 100ms; }
+.delay-200 { animation-delay: 200ms; }
+.delay-300 { animation-delay: 300ms; }
+.delay-400 { animation-delay: 400ms; }
+.delay-500 { animation-delay: 500ms; }
+.delay-1000 { animation-delay: 1000ms; }
