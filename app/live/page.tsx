@@ -289,7 +289,7 @@ function LiveDashboardContent() {
 
       // Accumulate audio chunks (individual chunks aren't valid audio files)
       audioChunksRef.current = [];
-      
+
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
@@ -302,10 +302,10 @@ function LiveDashboardContent() {
           // Combine all chunks into a single valid WebM file
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
           const currentTimestamp = video.currentTime * 1000;
-          
+
           // Keep only the last chunk for continuity (it has header info)
           audioChunksRef.current = [];
-          
+
           if (audioBlob.size > 1000) {
             const formData = new FormData();
             formData.append('audio', audioBlob, 'audio.webm');
@@ -323,7 +323,7 @@ function LiveDashboardContent() {
               if (data.segment && data.segment.text) {
                 setTranscript((prev) => [...prev, data.segment]);
               }
-              
+
               if (data.error) {
                 console.log('[Audio] Transcription message:', data.error);
               }
@@ -361,16 +361,16 @@ function LiveDashboardContent() {
         if (analysisIntervalRef.current) {
           clearInterval(analysisIntervalRef.current);
         }
-        
+
         if (sendAudioIntervalRef.current) {
           clearInterval(sendAudioIntervalRef.current);
         }
-        
+
         // Send any remaining audio chunks
         if (audioChunksRef.current.length > 0) {
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
           audioChunksRef.current = [];
-          
+
           if (audioBlob.size > 1000) {
             const formData = new FormData();
             formData.append('audio', audioBlob, 'audio.webm');
@@ -439,7 +439,7 @@ function LiveDashboardContent() {
 
       // Accumulate audio chunks (individual chunks aren't valid audio files)
       audioChunksRef.current = [];
-      
+
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
@@ -452,10 +452,10 @@ function LiveDashboardContent() {
           // Combine all chunks into a single valid WebM file
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
           const currentTimestamp = Date.now() - startTimeRef.current;
-          
+
           // Clear chunks after combining
           audioChunksRef.current = [];
-          
+
           if (audioBlob.size > 1000) {
             const formData = new FormData();
             formData.append('audio', audioBlob, 'audio.webm');
@@ -473,7 +473,7 @@ function LiveDashboardContent() {
               if (data.segment && data.segment.text) {
                 setTranscript((prev) => [...prev, data.segment]);
               }
-              
+
               if (data.error) {
                 console.log('[Audio] Transcription message:', data.error);
               }
@@ -514,7 +514,7 @@ function LiveDashboardContent() {
       if (analysisIntervalRef.current) {
         clearInterval(analysisIntervalRef.current);
       }
-      
+
       if (sendAudioIntervalRef.current) {
         clearInterval(sendAudioIntervalRef.current);
       }
@@ -523,7 +523,7 @@ function LiveDashboardContent() {
       if (audioChunksRef.current.length > 0) {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
         audioChunksRef.current = [];
-        
+
         if (audioBlob.size > 1000) {
           const formData = new FormData();
           formData.append('audio', audioBlob, 'audio.webm');
