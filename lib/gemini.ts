@@ -50,7 +50,7 @@ export async function transcribeAudio(
     console.log(`[Gemini] Transcribing audio: ${audioBuffer.length} bytes, type: ${mimeType}`);
 
     const client = getGeminiClient();
-    const model = client.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
+    const model = client.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     // Convert buffer to base64
     const base64Audio = audioBuffer.toString('base64');
@@ -129,7 +129,7 @@ export async function detectSemanticEvents(
   try {
     const client = getGeminiClient();
     const model = client.getGenerativeModel({
-      model: 'gemini-1.5-flash-latest',
+      model: 'gemini-2.0-flash',
       generationConfig: {
         responseMimeType: 'application/json',
       },
