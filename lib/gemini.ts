@@ -47,11 +47,14 @@ export async function transcribeAudio(
   mimeType: string = 'audio/webm'
 ): Promise<TranscriptSegment | null> {
   try {
+    console.log(`[Gemini] Transcribing audio: ${audioBuffer.length} bytes, type: ${mimeType}`);
+    
     const client = getGeminiClient();
     const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
     
     // Convert buffer to base64
     const base64Audio = audioBuffer.toString('base64');
+    console.log(`[Gemini] Base64 encoded: ${base64Audio.length} chars`);
     
     const result = await model.generateContent([
       {
@@ -68,7 +71,10 @@ export async function transcribeAudio(
     const response = result.response;
     const text = response.text().trim();
     
+    console.log(`[Gemini] Transcription result: "${text.slice(0, 100)}${text.length > 100 ? '...' : ''}"`);
+    
     if (!text || text.length === 0) {
+      console.log('[Gemini] No speech detected');
       return null;
     }
     
@@ -80,7 +86,7 @@ export async function transcribeAudio(
       isFinal: true,
     };
   } catch (error) {
-    console.error('Gemini transcription error:', error);
+    console.error('[Gemini] Transcription error:', error);
     throw new Error(`Transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }

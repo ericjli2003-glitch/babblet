@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { getSession, addTranscriptSegment, broadcastToSession } from '@/lib/session-store';
+import { getSession, createSession, addTranscriptSegment, broadcastToSession } from '@/lib/session-store';
 import { transcribeAudio, isGeminiConfigured } from '@/lib/gemini';
 import type { TranscriptSegment } from '@/lib/types';
+
+// Track sessions that have been auto-created on this instance
+const autoCreatedSessions = new Set<string>();
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,20 +21,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const session = getSession(sessionId);
+    // On serverless, sessions may not persist across function invocations
+    // Auto-create session if it doesn't exist
+    let session = getSession(sessionId);
     if (!session) {
-      return NextResponse.json(
-        { error: 'Session not found' },
-        { status: 404 }
-      );
+      console.log(`[Transcribe] Session ${sessionId} not found, creating temporary session`);
+      session = createSession();
+      // Note: This is a workaround for serverless - ideally use a database
     }
 
     // Check if Gemini is configured
     if (!isGeminiConfigured()) {
+      console.log('[Transcribe] GEMINI_API_KEY not found in environment');
       // Return mock transcript if not configured
       const mockSegment: TranscriptSegment = {
         id: uuidv4(),
-        text: '[Gemini API not configured] Add GEMINI_API_KEY to environment variables.',
+        text: '[Gemini API not configured] Add GEMINI_API_KEY to Vercel environment variables and redeploy.',
         timestamp: parseInt(timestamp || '0', 10),
         duration: 0,
         isFinal: true,
@@ -48,10 +53,12 @@ export async function POST(request: NextRequest) {
       
       return NextResponse.json({ 
         success: false, 
-        error: 'Gemini API not configured',
+        error: 'Gemini API not configured - add GEMINI_API_KEY to Vercel environment variables',
         segment: mockSegment,
       });
     }
+
+    console.log(`[Transcribe] Processing audio chunk, size: ${audioBlob.size} bytes`);
 
     // Convert blob to buffer
     const arrayBuffer = await audioBlob.arrayBuffer();
