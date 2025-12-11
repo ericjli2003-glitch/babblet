@@ -1,14 +1,17 @@
 // ============================================
 // OpenAI Question Generation
-// Generate insightful questions from semantic events
+// Generate insightful questions from presentations
 // ============================================
 
 import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
 import type {
-  SemanticEvent,
   GeneratedQuestion,
-  QuestionType,
+  QuestionCategory,
+  QuestionDifficulty,
+  AnalysisSummary,
+  RubricEvaluation,
+  RubricScore,
 } from './types';
 
 // Initialize OpenAI client
@@ -30,96 +33,61 @@ export function isOpenAIConfigured(): boolean {
 }
 
 // ============================================
-// Question Generation System Prompt
+// Question Generation from Transcript
 // ============================================
 
-const QUESTION_GENERATION_PROMPT = `You are an expert professor skilled at Socratic questioning. 
-Your role is to generate insightful questions that help deepen understanding and identify gaps in student presentations.
+export async function generateQuestionsFromTranscript(
+  transcript: string,
+  analysis?: AnalysisSummary | null
+): Promise<GeneratedQuestion[]> {
+  try {
+    const client = getOpenAIClient();
+    
+    const analysisContext = analysis 
+      ? `\n\nKey Claims Identified:\n${analysis.keyClaims.map(c => `- ${c.claim}`).join('\n')}`
+      : '';
+    
+    const response = await client.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an expert professor skilled at Socratic questioning. Generate insightful questions to help deepen understanding of student presentations.
 
-Based on the semantic event provided, generate 1-3 relevant questions. Consider:
-
-1. **Follow-up Questions**: Probe deeper into the topic
-2. **Clarifying Questions**: Address ambiguities or unclear points
-3. **Critical Thinking Questions**: Challenge assumptions, explore implications
-4. **Misconception Checks**: Verify understanding of key concepts
-5. **Expansion Questions**: Connect to broader topics or applications
+Generate 3-6 questions across these categories:
+- clarifying: Questions that seek clarification on specific points
+- critical-thinking: Questions that challenge assumptions or explore implications
+- expansion: Questions that connect to broader topics or applications
 
 For each question, provide:
-- The question type
-- The question itself (clear, concise, thought-provoking)
-- Brief rationale (why this question matters)
-- Priority (low/medium/high based on pedagogical value)
+- category: One of the three categories above
+- difficulty: easy, medium, or hard
+- rationale: Brief explanation of why this question is valuable
 
 Respond in JSON format:
 {
   "questions": [
     {
-      "type": "follow_up" | "clarifying" | "critical_thinking" | "misconception_check" | "expansion",
+      "category": "clarifying" | "critical-thinking" | "expansion",
+      "difficulty": "easy" | "medium" | "hard",
       "question": "The question text",
-      "rationale": "Why this question is valuable",
-      "priority": "low" | "medium" | "high"
+      "rationale": "Why this question is valuable"
     }
   ]
-}`;
-
-// ============================================
-// Generate Questions from Semantic Event
-// ============================================
-
-export async function generateQuestionsFromEvent(
-  event: SemanticEvent,
-  context: {
-    recentTranscript: string;
-    previousEvents: SemanticEvent[];
-    previousQuestions: GeneratedQuestion[];
-  }
-): Promise<GeneratedQuestion[]> {
-  try {
-    const client = getOpenAIClient();
-    
-    // Build context summary
-    const previousEventsSummary = context.previousEvents
-      .slice(-5)
-      .map(e => `- [${e.type}] ${e.content}`)
-      .join('\n');
-    
-    const previousQuestionsSummary = context.previousQuestions
-      .slice(-5)
-      .map(q => `- ${q.question}`)
-      .join('\n');
-    
-    const userPrompt = `
-## Current Semantic Event
-Type: ${event.type}
-Content: ${event.content}
-Confidence: ${event.confidence}
-
-## Recent Transcript Context
-${context.recentTranscript.slice(-1000)}
-
-## Previous Events (for context)
-${previousEventsSummary || 'None yet'}
-
-## Questions Already Asked (avoid repetition)
-${previousQuestionsSummary || 'None yet'}
-
-Generate insightful questions for this event. Avoid repeating similar questions to those already asked.`;
-
-    const response = await client.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: QUESTION_GENERATION_PROMPT },
-        { role: 'user', content: userPrompt },
+}`,
+        },
+        {
+          role: 'user',
+          content: `Analyze this presentation transcript and generate insightful questions:\n\n${transcript.slice(0, 4000)}${analysisContext}`,
+        },
       ],
       response_format: { type: 'json_object' },
       temperature: 0.7,
-      max_tokens: 1000,
+      max_tokens: 1500,
     });
 
     const content = response.choices[0]?.message?.content;
-    if (!content) {
-      return [];
-    }
+    if (!content) return [];
 
     const parsed = JSON.parse(content);
     
@@ -128,17 +96,16 @@ Generate insightful questions for this event. Avoid repeating similar questions 
     }
 
     return parsed.questions.map((q: {
-      type: QuestionType;
+      category: QuestionCategory;
+      difficulty: QuestionDifficulty;
       question: string;
       rationale?: string;
-      priority: 'low' | 'medium' | 'high';
     }) => ({
       id: uuidv4(),
-      type: q.type,
       question: q.question,
+      category: q.category,
+      difficulty: q.difficulty,
       rationale: q.rationale,
-      relatedEvent: event.id,
-      priority: q.priority,
       timestamp: Date.now(),
     }));
   } catch (error) {
@@ -148,19 +115,107 @@ Generate insightful questions for this event. Avoid repeating similar questions 
 }
 
 // ============================================
+// Rubric Evaluation
+// ============================================
+
+export async function generateRubricEvaluation(
+  transcript: string,
+  analysis?: AnalysisSummary | null
+): Promise<RubricEvaluation> {
+  try {
+    const client = getOpenAIClient();
+    
+    const response = await client.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an expert at evaluating academic presentations. Evaluate the following presentation transcript and provide a rubric-based assessment.
+
+Score each category from 1-5:
+- contentQuality: How well-organized and informative is the content?
+- delivery: How clear and engaging is the presentation style?
+- evidenceStrength: How well-supported are the claims with evidence?
+
+For each category provide:
+- score: 1-5
+- feedback: A sentence of feedback
+- strengths: 2-3 specific strengths
+- improvements: 2-3 areas for improvement
+
+Also provide an overall score (average) and overall feedback.
+
+Respond in JSON format:
+{
+  "contentQuality": { "score": number, "feedback": string, "strengths": string[], "improvements": string[] },
+  "delivery": { "score": number, "feedback": string, "strengths": string[], "improvements": string[] },
+  "evidenceStrength": { "score": number, "feedback": string, "strengths": string[], "improvements": string[] },
+  "overallScore": number,
+  "overallFeedback": string
+}`,
+        },
+        {
+          role: 'user',
+          content: `Evaluate this presentation:\n\n${transcript.slice(0, 4000)}`,
+        },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.3,
+      max_tokens: 1000,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) throw new Error('No response from OpenAI');
+
+    const parsed = JSON.parse(content);
+    
+    return {
+      contentQuality: parsed.contentQuality as RubricScore,
+      delivery: parsed.delivery as RubricScore,
+      evidenceStrength: parsed.evidenceStrength as RubricScore,
+      overallScore: parsed.overallScore,
+      overallFeedback: parsed.overallFeedback,
+      timestamp: Date.now(),
+    };
+  } catch (error) {
+    console.error('Rubric evaluation error:', error);
+    
+    // Return default rubric on error
+    return {
+      contentQuality: {
+        score: 3,
+        feedback: 'Unable to fully evaluate content',
+        strengths: ['Content present'],
+        improvements: ['Could not complete evaluation'],
+      },
+      delivery: {
+        score: 3,
+        feedback: 'Unable to fully evaluate delivery',
+        strengths: ['Presentation detected'],
+        improvements: ['Could not complete evaluation'],
+      },
+      evidenceStrength: {
+        score: 3,
+        feedback: 'Unable to fully evaluate evidence',
+        strengths: ['Some points made'],
+        improvements: ['Could not complete evaluation'],
+      },
+      overallScore: 3,
+      overallFeedback: 'Evaluation could not be completed. Please try again.',
+      timestamp: Date.now(),
+    };
+  }
+}
+
+// ============================================
 // Generate Summary
 // ============================================
 
 export async function generateSummary(
-  transcript: string,
-  events: SemanticEvent[]
+  transcript: string
 ): Promise<string> {
   try {
     const client = getOpenAIClient();
-    
-    const eventsSummary = events
-      .map(e => `- [${e.type}] ${e.content}`)
-      .join('\n');
     
     const response = await client.chat.completions.create({
       model: 'gpt-4o',
@@ -171,7 +226,7 @@ export async function generateSummary(
         },
         {
           role: 'user',
-          content: `Summarize this presentation:\n\nTranscript:\n${transcript}\n\nKey Events Identified:\n${eventsSummary}`,
+          content: `Summarize this presentation:\n\n${transcript.slice(0, 4000)}`,
         },
       ],
       temperature: 0.3,
@@ -184,26 +239,3 @@ export async function generateSummary(
     return 'Failed to generate summary.';
   }
 }
-
-// ============================================
-// Batch Question Generation
-// ============================================
-
-export async function generateBatchQuestions(
-  events: SemanticEvent[],
-  transcript: string
-): Promise<GeneratedQuestion[]> {
-  const allQuestions: GeneratedQuestion[] = [];
-  
-  for (const event of events) {
-    const questions = await generateQuestionsFromEvent(event, {
-      recentTranscript: transcript,
-      previousEvents: events.filter(e => e.timestamp < event.timestamp),
-      previousQuestions: allQuestions,
-    });
-    allQuestions.push(...questions);
-  }
-  
-  return allQuestions;
-}
-

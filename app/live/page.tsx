@@ -1,395 +1,939 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { motion } from 'framer-motion';
-import { 
-  Mic, 
-  MicOff, 
-  Square, 
-  Clock,
-  FileText,
-  MessageCircleQuestion,
-  LayoutGrid,
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Mic,
+  Square,
+  Play,
+  Pause,
+  RotateCcw,
+  Sparkles,
   ArrowLeft,
-  Sparkles
+  Settings,
+  Download,
+  Share2,
+  Loader2,
+  CheckCircle,
+  AlertCircle,
+  Upload,
+  Video,
 } from 'lucide-react';
-import Link from 'next/link';
-import WaveformVisualizer from '@/components/WaveformVisualizer';
-import TranscriptPanel from '@/components/TranscriptPanel';
-import QuestionsPanel from '@/components/QuestionsPanel';
-import { useAudioStreamer } from '@/lib/hooks/useAudioStreamer';
-import type { 
-  SessionState, 
-  TranscriptSegment, 
-  SemanticEvent, 
+import TranscriptFeed from '@/components/TranscriptFeed';
+import QuestionBank from '@/components/QuestionBank';
+import SummaryCard from '@/components/SummaryCard';
+import RubricCard from '@/components/RubricCard';
+import type {
+  TranscriptSegment,
+  AnalysisSummary,
   GeneratedQuestion,
-  StreamEvent,
+  RubricEvaluation,
+  PresentationStatus,
 } from '@/lib/types';
 
-type ViewMode = 'split' | 'transcript' | 'questions';
+type ActivePanel = 'transcript' | 'analysis' | 'questions' | 'rubric';
 
-export default function LivePage() {
-  // Session state
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [status, setStatus] = useState<SessionState['status']>('idle');
-  const [duration, setDuration] = useState(0);
+function LiveDashboardContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   
-  // Data state
-  const [transcripts, setTranscripts] = useState<TranscriptSegment[]>([]);
-  const [semanticEvents, setSemanticEvents] = useState<SemanticEvent[]>([]);
-  const [questions, setQuestions] = useState<GeneratedQuestion[]>([]);
-  const [summary, setSummary] = useState<string>('');
-  
-  // UI state
+  const sessionId = searchParams.get('sessionId');
+  const mode = searchParams.get('mode') as 'live' | 'upload' | null;
+
+  // State
+  const [status, setStatus] = useState<PresentationStatus>('idle');
+  const [isRecording, setIsRecording] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
-  const [viewMode, setViewMode] = useState<ViewMode>('split');
-  const [error, setError] = useState<string | null>(null);
-  
+  const [currentTime, setCurrentTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
+  const [analysis, setAnalysis] = useState<AnalysisSummary | null>(null);
+  const [questions, setQuestions] = useState<{
+    clarifying: GeneratedQuestion[];
+    criticalThinking: GeneratedQuestion[];
+    expansion: GeneratedQuestion[];
+  }>({ clarifying: [], criticalThinking: [], expansion: [] });
+  const [rubric, setRubric] = useState<RubricEvaluation | null>(null);
+  const [activePanel, setActivePanel] = useState<ActivePanel>('transcript');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+
   // Refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
-  const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const analysisIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastAnalysisTimeRef = useRef<number>(0);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoChunkIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Audio streamer hook
-  const { 
-    isRecording, 
-    isInitializing, 
-    error: recorderError,
-    startRecording, 
-    stopRecording,
-  } = useAudioStreamer({
-    sessionId: sessionId || '',
-    chunkDuration: 500,
-    onAudioLevel: setAudioLevel,
-    onError: setError,
-  });
+  // Connect to SSE stream for real-time updates
+  useEffect(() => {
+    if (!sessionId) return;
 
-  // Create session
-  const createSession = useCallback(async () => {
-    try {
-      const response = await fetch('/api/session', { method: 'POST' });
-      const data = await response.json();
-      
-      if (!response.ok) throw new Error(data.error);
-      
-      setSessionId(data.sessionId);
-      return data.sessionId;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create session');
-      return null;
-    }
-  }, []);
+    setConnectionStatus('connecting');
 
-  // Connect to SSE stream
-  const connectToStream = useCallback((sid: string) => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-
-    const eventSource = new EventSource(`/api/stream?sessionId=${sid}`);
+    const eventSource = new EventSource(`/api/stream-presentation?sessionId=${sessionId}`);
     eventSourceRef.current = eventSource;
+
+    eventSource.onopen = () => {
+      setConnectionStatus('connected');
+    };
 
     eventSource.onmessage = (event) => {
       try {
-        const data: StreamEvent = JSON.parse(event.data);
+        const data = JSON.parse(event.data);
         
         switch (data.type) {
-          case 'init':
-            const initData = data.data as {
-              transcript: TranscriptSegment[];
-              semanticEvents: SemanticEvent[];
-              questions: GeneratedQuestion[];
-              summary?: string;
-            };
-            setTranscripts(initData.transcript || []);
-            setSemanticEvents(initData.semanticEvents || []);
-            setQuestions(initData.questions || []);
-            if (initData.summary) setSummary(initData.summary);
+          case 'transcript_update':
+            setTranscript((prev) => [...prev, data.data.segment]);
             break;
-            
-          case 'transcript':
-            setTranscripts(prev => [...prev, data.data as TranscriptSegment]);
+          case 'analysis_update':
+            setAnalysis(data.data.summary);
+            setIsAnalyzing(false);
             break;
-            
-          case 'semantic_event':
-            setSemanticEvents(prev => [...prev, data.data as SemanticEvent]);
+          case 'question_generated':
+            setQuestions((prev) => {
+              const newQuestions = { ...prev };
+              data.data.questions.forEach((q: GeneratedQuestion) => {
+                switch (q.category) {
+                  case 'clarifying':
+                    newQuestions.clarifying = [...newQuestions.clarifying, q];
+                    break;
+                  case 'critical-thinking':
+                    newQuestions.criticalThinking = [...newQuestions.criticalThinking, q];
+                    break;
+                  case 'expansion':
+                    newQuestions.expansion = [...newQuestions.expansion, q];
+                    break;
+                }
+              });
+              return newQuestions;
+            });
+            setIsGeneratingQuestions(false);
             break;
-            
-          case 'question':
-            setQuestions(prev => [...prev, data.data as GeneratedQuestion]);
+          case 'rubric_update':
+            setRubric(data.data.rubric);
             break;
-            
-          case 'summary':
-            setSummary((data.data as { summary: string }).summary);
+          case 'session_end':
+            setStatus('completed');
             break;
-            
-          case 'status':
-            setStatus((data.data as { status: SessionState['status'] }).status);
+          case 'error':
+            console.error('Stream error:', data.data);
             break;
         }
-      } catch (err) {
-        console.error('Failed to parse SSE message:', err);
+      } catch (e) {
+        console.error('Failed to parse SSE message:', e);
       }
     };
 
     eventSource.onerror = () => {
-      console.error('SSE connection error');
+      setConnectionStatus('disconnected');
     };
-  }, []);
 
-  // Start listening
-  const handleStartListening = async () => {
-    let sid = sessionId;
-    
-    if (!sid) {
-      sid = await createSession();
-      if (!sid) return;
-    }
-    
-    connectToStream(sid);
-    setStatus('listening');
-    startRecording();
-    
-    // Start duration timer
-    durationIntervalRef.current = setInterval(() => {
-      setDuration(d => d + 1);
-    }, 1000);
-  };
-
-  // Stop listening
-  const handleStopListening = async () => {
-    stopRecording();
-    setStatus('ended');
-    
-    if (durationIntervalRef.current) {
-      clearInterval(durationIntervalRef.current);
-    }
-    
-    // Generate summary
-    if (sessionId && transcripts.length > 0) {
-      try {
-        const response = await fetch('/api/summary', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId }),
-        });
-        const data = await response.json();
-        if (data.summary) setSummary(data.summary);
-      } catch (err) {
-        console.error('Failed to generate summary:', err);
-      }
-    }
-  };
-
-  // Format duration
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Cleanup on unmount
-  useEffect(() => {
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-      if (durationIntervalRef.current) {
-        clearInterval(durationIntervalRef.current);
-      }
+      eventSource.close();
     };
+  }, [sessionId]);
+
+  // Audio level visualization
+  const updateAudioLevel = useCallback(() => {
+    if (analyserRef.current && (isRecording || isPlaying)) {
+      const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+      analyserRef.current.getByteFrequencyData(dataArray);
+      const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+      setAudioLevel(average / 255);
+      requestAnimationFrame(updateAudioLevel);
+    }
+  }, [isRecording, isPlaying]);
+
+  // Handle video file selection
+  const handleVideoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setVideoFile(file);
+      const url = URL.createObjectURL(file);
+      setVideoUrl(url);
+    }
   }, []);
+
+  // Process video - extract audio and send for transcription
+  const processVideo = async () => {
+    if (!videoRef.current || !videoUrl) return;
+
+    const video = videoRef.current;
+    
+    try {
+      // Create audio context
+      audioContextRef.current = new AudioContext();
+      
+      // Create media element source from video
+      const source = audioContextRef.current.createMediaElementSource(video);
+      
+      // Create analyser for visualization
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      analyserRef.current.fftSize = 256;
+      
+      // Create destination for recording
+      const destination = audioContextRef.current.createMediaStreamDestination();
+      
+      // Connect: source -> analyser -> destination (for recording)
+      source.connect(analyserRef.current);
+      analyserRef.current.connect(audioContextRef.current.destination); // So we can hear it
+      source.connect(destination);
+      
+      // Set up MediaRecorder to capture audio
+      const mediaRecorder = new MediaRecorder(destination.stream, {
+        mimeType: 'audio/webm;codecs=opus',
+      });
+      mediaRecorderRef.current = mediaRecorder;
+      
+      startTimeRef.current = Date.now();
+      
+      mediaRecorder.ondataavailable = async (event) => {
+        if (event.data.size > 0) {
+          // Send chunk to server for transcription
+          const formData = new FormData();
+          formData.append('audio', event.data);
+          formData.append('sessionId', sessionId || '');
+          formData.append('timestamp', String(video.currentTime * 1000));
+
+          try {
+            await fetch('/api/transcribe', {
+              method: 'POST',
+              body: formData,
+            });
+          } catch (e) {
+            console.error('Failed to send audio chunk:', e);
+          }
+        }
+      };
+      
+      // Start recording chunks every 5 seconds
+      mediaRecorder.start(5000);
+      
+      // Play the video
+      video.play();
+      setIsPlaying(true);
+      setStatus('recording');
+      updateAudioLevel();
+      
+      // Set up periodic analysis
+      analysisIntervalRef.current = setInterval(() => {
+        const now = Date.now();
+        if (now - lastAnalysisTimeRef.current >= 15000 && transcript.length > 0) {
+          triggerAnalysis();
+          lastAnalysisTimeRef.current = now;
+        }
+      }, 5000);
+      
+      // Handle video end
+      video.onended = async () => {
+        mediaRecorder.stop();
+        setIsPlaying(false);
+        setStatus('processing');
+        
+        if (analysisIntervalRef.current) {
+          clearInterval(analysisIntervalRef.current);
+        }
+        
+        // Final analysis and rubric
+        await triggerAnalysis();
+        await generateRubric();
+        
+        setStatus('completed');
+      };
+      
+    } catch (error) {
+      console.error('Failed to process video:', error);
+    }
+  };
+
+  // Pause/Resume video
+  const togglePlayPause = () => {
+    if (!videoRef.current) return;
+    
+    if (isPlaying) {
+      videoRef.current.pause();
+      mediaRecorderRef.current?.pause();
+      setIsPlaying(false);
+    } else {
+      videoRef.current.play();
+      mediaRecorderRef.current?.resume();
+      setIsPlaying(true);
+    }
+  };
+
+  // Start live recording
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      // Set up audio context for visualization
+      audioContextRef.current = new AudioContext();
+      const source = audioContextRef.current.createMediaStreamSource(stream);
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      analyserRef.current.fftSize = 256;
+      source.connect(analyserRef.current);
+
+      // Set up MediaRecorder
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus',
+      });
+      mediaRecorderRef.current = mediaRecorder;
+
+      startTimeRef.current = Date.now();
+
+      mediaRecorder.ondataavailable = async (event) => {
+        if (event.data.size > 0) {
+          // Send chunk to server for transcription
+          const formData = new FormData();
+          formData.append('audio', event.data);
+          formData.append('sessionId', sessionId || '');
+          formData.append('timestamp', String(Date.now() - startTimeRef.current));
+
+          try {
+            await fetch('/api/transcribe', {
+              method: 'POST',
+              body: formData,
+            });
+          } catch (e) {
+            console.error('Failed to send audio chunk:', e);
+          }
+        }
+      };
+
+      // Collect audio every 5 seconds
+      mediaRecorder.start(5000);
+      setIsRecording(true);
+      setStatus('recording');
+      updateAudioLevel();
+
+      // Start periodic analysis
+      analysisIntervalRef.current = setInterval(() => {
+        const now = Date.now();
+        if (now - lastAnalysisTimeRef.current >= 15000 && transcript.length > 0) {
+          triggerAnalysis();
+          lastAnalysisTimeRef.current = now;
+        }
+      }, 5000);
+
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+    }
+  };
+
+  // Stop recording
+  const stopRecording = useCallback(async () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      audioContextRef.current?.close();
+      
+      if (analysisIntervalRef.current) {
+        clearInterval(analysisIntervalRef.current);
+      }
+
+      setIsRecording(false);
+      setStatus('processing');
+
+      // Trigger final analysis and rubric generation
+      await triggerAnalysis();
+      await generateRubric();
+
+      setStatus('completed');
+    }
+  }, [isRecording]);
+
+  // Trigger analysis
+  const triggerAnalysis = async () => {
+    if (transcript.length === 0) return;
+
+    setIsAnalyzing(true);
+    
+    try {
+      const fullTranscript = transcript.map((s) => s.text).join(' ');
+      await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          transcript: fullTranscript,
+        }),
+      });
+    } catch (e) {
+      console.error('Analysis failed:', e);
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Generate questions
+  const triggerQuestionGeneration = async () => {
+    if (!analysis) return;
+
+    setIsGeneratingQuestions(true);
+
+    try {
+      const fullTranscript = transcript.map((s) => s.text).join(' ');
+      await fetch('/api/generate-questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          transcript: fullTranscript,
+          claims: analysis.keyClaims,
+          gaps: analysis.logicalGaps,
+        }),
+      });
+    } catch (e) {
+      console.error('Question generation failed:', e);
+      setIsGeneratingQuestions(false);
+    }
+  };
+
+  // Generate rubric
+  const generateRubric = async () => {
+    if (transcript.length === 0) return;
+
+    try {
+      const fullTranscript = transcript.map((s) => s.text).join(' ');
+      await fetch('/api/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          transcript: fullTranscript,
+        }),
+      });
+    } catch (e) {
+      console.error('Rubric generation failed:', e);
+    }
+  };
+
+  // Timer for live recording
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isRecording) {
+      interval = setInterval(() => {
+        setCurrentTime(Date.now() - startTimeRef.current);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isRecording]);
+
+  // Update current time from video
+  useEffect(() => {
+    if (videoRef.current && isPlaying) {
+      const video = videoRef.current;
+      const updateTime = () => {
+        setCurrentTime(video.currentTime * 1000);
+      };
+      video.addEventListener('timeupdate', updateTime);
+      return () => video.removeEventListener('timeupdate', updateTime);
+    }
+  }, [isPlaying]);
+
+  // Format time
+  const formatTime = (ms: number) => {
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  const panels: { id: ActivePanel; label: string }[] = [
+    { id: 'transcript', label: 'Transcript' },
+    { id: 'analysis', label: 'Analysis' },
+    { id: 'questions', label: 'Questions' },
+    { id: 'rubric', label: 'Rubric' },
+  ];
 
   return (
-    <div className="min-h-screen bg-[var(--background)]">
+    <div className="min-h-screen flex flex-col">
       {/* Header */}
-      <header className="border-b border-surface-200 bg-white/80 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link 
-              href="/"
-              className="p-2 rounded-xl hover:bg-surface-100 transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5 text-surface-500" />
-            </Link>
-            
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-primary flex items-center justify-center shadow-soft">
-                <Sparkles className="w-5 h-5 text-white" />
+      <header className="bg-white/80 backdrop-blur-xl border-b border-surface-200 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => router.push('/')}
+                className="p-2 text-surface-500 hover:text-surface-700 hover:bg-surface-100 rounded-xl transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-glow">
+                  <Sparkles className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h1 className="font-semibold text-surface-900">
+                    {mode === 'live' ? 'Live Recording' : 'Video Analysis'}
+                  </h1>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span
+                      className={`flex items-center gap-1 ${
+                        connectionStatus === 'connected'
+                          ? 'text-emerald-600'
+                          : connectionStatus === 'connecting'
+                          ? 'text-amber-600'
+                          : 'text-red-600'
+                      }`}
+                    >
+                      {connectionStatus === 'connected' ? (
+                        <CheckCircle className="w-3 h-3" />
+                      ) : connectionStatus === 'connecting' ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <AlertCircle className="w-3 h-3" />
+                      )}
+                      {connectionStatus}
+                    </span>
+                    <span className="text-surface-300">•</span>
+                    <span className="text-surface-500">Session: {sessionId?.slice(0, 8)}...</span>
+                  </div>
+                </div>
               </div>
-              <span className="font-semibold text-lg gradient-text">Babblet</span>
             </div>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            {/* Duration */}
-            {status !== 'idle' && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-100 rounded-lg">
-                <Clock className="w-4 h-4 text-primary-500" />
-                <span className="font-mono text-surface-700">{formatDuration(duration)}</span>
+
+            <div className="flex items-center gap-3">
+              {/* Timer */}
+              <div className="px-4 py-2 bg-surface-100 rounded-xl font-mono text-lg font-medium text-surface-700">
+                {formatTime(currentTime)}
+                {mode === 'upload' && videoDuration > 0 && (
+                  <span className="text-surface-400"> / {formatTime(videoDuration * 1000)}</span>
+                )}
               </div>
-            )}
-            
-            {/* View mode toggle */}
-            <div className="flex bg-surface-100 rounded-xl p-1">
-              <button
-                onClick={() => setViewMode('split')}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'split' ? 'bg-white shadow-soft text-primary-500' : 'text-surface-500 hover:text-surface-700'}`}
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('transcript')}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'transcript' ? 'bg-white shadow-soft text-primary-500' : 'text-surface-500 hover:text-surface-700'}`}
-              >
-                <FileText className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('questions')}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'questions' ? 'bg-white shadow-soft text-primary-500' : 'text-surface-500 hover:text-surface-700'}`}
-              >
-                <MessageCircleQuestion className="w-4 h-4" />
-              </button>
+
+              {/* Audio level indicator */}
+              {(isRecording || isPlaying) && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-red-50 rounded-xl">
+                  <div className="pulse-dot" />
+                  <div className="flex items-end gap-0.5 h-6">
+                    {[...Array(5)].map((_, i) => (
+                      <motion.div
+                        key={i}
+                        className="w-1 bg-red-500 rounded-full"
+                        animate={{
+                          height: Math.max(4, audioLevel * (i + 1) * 8),
+                        }}
+                        transition={{ duration: 0.1 }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex items-center gap-2">
+                <button className="p-2 text-surface-500 hover:text-surface-700 hover:bg-surface-100 rounded-xl transition-colors">
+                  <Settings className="w-5 h-5" />
+                </button>
+                <button className="p-2 text-surface-500 hover:text-surface-700 hover:bg-surface-100 rounded-xl transition-colors">
+                  <Download className="w-5 h-5" />
+                </button>
+                <button className="p-2 text-surface-500 hover:text-surface-700 hover:bg-surface-100 rounded-xl transition-colors">
+                  <Share2 className="w-5 h-5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </header>
 
       {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* Error display */}
-        {(error || recorderError) && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-4 p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-600"
-          >
-            {error || recorderError}
-          </motion.div>
-        )}
+      <div className="flex-1 flex">
+        {/* Sidebar - Controls */}
+        <aside className="w-20 bg-white border-r border-surface-200 flex flex-col items-center py-6 gap-4">
+          {mode === 'live' ? (
+            <>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={isRecording ? stopRecording : startRecording}
+                disabled={status === 'processing'}
+                className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${
+                  isRecording
+                    ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+                    : 'bg-gradient-primary text-white shadow-glow'
+                } disabled:opacity-50`}
+              >
+                {status === 'processing' ? (
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                ) : isRecording ? (
+                  <Square className="w-6 h-6" />
+                ) : (
+                  <Mic className="w-6 h-6" />
+                )}
+              </motion.button>
+            </>
+          ) : (
+            <>
+              {!videoUrl ? (
+                <label className="w-14 h-14 rounded-2xl bg-gradient-primary text-white shadow-glow flex items-center justify-center cursor-pointer hover:scale-105 transition-transform">
+                  <Upload className="w-6 h-6" />
+                  <input
+                    type="file"
+                    accept="video/*"
+                    onChange={handleVideoUpload}
+                    className="hidden"
+                  />
+                </label>
+              ) : (
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={status === 'idle' ? processVideo : togglePlayPause}
+                  disabled={status === 'processing'}
+                  className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${
+                    isPlaying
+                      ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+                      : 'bg-gradient-primary text-white shadow-glow'
+                  } disabled:opacity-50`}
+                >
+                  {status === 'processing' ? (
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  ) : isPlaying ? (
+                    <Pause className="w-6 h-6" />
+                  ) : (
+                    <Play className="w-6 h-6" />
+                  )}
+                </motion.button>
+              )}
+            </>
+          )}
 
-        {/* Control bar */}
-        <div className="mb-6">
-          <div className="card-neumorphic p-6">
-            <div className="flex items-center justify-between">
-              {/* Waveform */}
-              <div className="flex-1 max-w-md">
-                <WaveformVisualizer 
-                  isActive={isRecording} 
-                  audioLevel={audioLevel}
-                />
-              </div>
-              
-              {/* Controls */}
-              <div className="flex items-center gap-4">
-                {status === 'idle' && (
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleStartListening}
-                    disabled={isInitializing}
-                    className="btn-primary gap-3"
-                  >
-                    {isInitializing ? (
-                      <>
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Initializing...
-                      </>
-                    ) : (
-                      <>
-                        <Mic className="w-5 h-5" />
-                        Start Listening
-                      </>
-                    )}
-                  </motion.button>
-                )}
-                
-                {status === 'listening' && (
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleStopListening}
-                    className="flex items-center gap-3 px-6 py-3 bg-rose-500 text-white font-medium rounded-2xl hover:bg-rose-600 shadow-soft transition-all"
-                  >
-                    <Square className="w-5 h-5" />
-                    Stop
-                  </motion.button>
-                )}
-                
-                {status === 'ended' && (
-                  <div className="flex items-center gap-3">
-                    <span className="text-surface-500">Session ended</span>
-                    <button
-                      onClick={() => {
-                        setSessionId(null);
-                        setStatus('idle');
-                        setTranscripts([]);
-                        setSemanticEvents([]);
-                        setQuestions([]);
-                        setSummary('');
-                        setDuration(0);
-                      }}
-                      className="btn-secondary"
-                    >
-                      New Session
-                    </button>
+          <div className="w-10 h-px bg-surface-200" />
+
+          <button
+            onClick={triggerAnalysis}
+            disabled={transcript.length === 0 || isAnalyzing}
+            className="w-12 h-12 rounded-xl bg-surface-100 text-surface-600 hover:bg-surface-200 flex items-center justify-center transition-colors disabled:opacity-50"
+          >
+            {isAnalyzing ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <RotateCcw className="w-5 h-5" />
+            )}
+          </button>
+
+          <button
+            onClick={triggerQuestionGeneration}
+            disabled={!analysis || isGeneratingQuestions}
+            className="w-12 h-12 rounded-xl bg-surface-100 text-surface-600 hover:bg-surface-200 flex items-center justify-center transition-colors disabled:opacity-50"
+          >
+            {isGeneratingQuestions ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Sparkles className="w-5 h-5" />
+            )}
+          </button>
+        </aside>
+
+        {/* Main panels */}
+        <main className="flex-1 flex flex-col">
+          {/* Welcome/Start prompt for live mode */}
+          {mode === 'live' && status === 'idle' && !isRecording && (
+            <div className="bg-gradient-to-br from-primary-500/5 to-accent-500/5 p-8">
+              <div className="max-w-2xl mx-auto text-center">
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="w-20 h-20 mx-auto mb-6 rounded-3xl bg-gradient-primary flex items-center justify-center shadow-glow"
+                >
+                  <Mic className="w-10 h-10 text-white" />
+                </motion.div>
+                <h2 className="text-2xl font-bold text-surface-900 mb-3">
+                  Ready to Record
+                </h2>
+                <p className="text-surface-600 mb-6">
+                  Click the microphone button on the left to start recording. 
+                  The AI will transcribe and analyze the presentation in real-time.
+                </p>
+                <div className="flex flex-wrap justify-center gap-4 text-sm text-surface-500">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span>Real-time transcription</span>
                   </div>
-                )}
-              </div>
-              
-              {/* Stats */}
-              <div className="flex items-center gap-6 text-sm">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-surface-900">{transcripts.length}</div>
-                  <div className="text-surface-400">Segments</div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-primary-500" />
+                    <span>AI analysis every 15s</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-accent-500" />
+                    <span>Smart question generation</span>
+                  </div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-primary-500">{semanticEvents.length}</div>
-                  <div className="text-surface-400">Events</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-accent-500">{questions.length}</div>
-                  <div className="text-surface-400">Questions</div>
-                </div>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={startRecording}
+                  className="mt-8 px-8 py-4 bg-gradient-primary text-white font-semibold rounded-2xl shadow-glow hover:shadow-lg transition-shadow"
+                >
+                  <Mic className="w-5 h-5 inline mr-2" />
+                  Start Recording
+                </motion.button>
               </div>
             </div>
+          )}
+
+          {/* Video player for upload mode */}
+          {mode === 'upload' && (
+            <div className="bg-surface-900 p-4">
+              {!videoUrl ? (
+                <div className="flex flex-col items-center justify-center py-12 text-surface-400">
+                  <Video className="w-16 h-16 mb-4 opacity-50" />
+                  <p className="text-lg mb-2">No video selected</p>
+                  <p className="text-sm mb-6">Select a video to analyze</p>
+                  <label className="px-6 py-3 bg-gradient-primary text-white font-medium rounded-xl cursor-pointer hover:shadow-glow transition-shadow">
+                    <Upload className="w-5 h-5 inline mr-2" />
+                    Select Video File
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={handleVideoUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="relative rounded-xl overflow-hidden bg-black">
+                    <video
+                      ref={videoRef}
+                      src={videoUrl}
+                      className="w-full max-h-72"
+                      onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
+                      onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime * 1000)}
+                      onEnded={async () => {
+                        if (mediaRecorderRef.current) {
+                          mediaRecorderRef.current.stop();
+                        }
+                        setIsPlaying(false);
+                        setStatus('processing');
+                        if (analysisIntervalRef.current) {
+                          clearInterval(analysisIntervalRef.current);
+                        }
+                        await triggerAnalysis();
+                        await generateRubric();
+                        setStatus('completed');
+                      }}
+                    />
+                    {status === 'idle' && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                        <motion.button
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={processVideo}
+                          className="w-20 h-20 bg-white/90 backdrop-blur rounded-full flex items-center justify-center shadow-xl"
+                        >
+                          <Play className="w-10 h-10 text-primary-600 ml-1" />
+                        </motion.button>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Video Controls */}
+                  <div className="flex items-center gap-4 px-2">
+                    {/* Play/Pause Button */}
+                    <button
+                      onClick={togglePlayPause}
+                      disabled={status === 'idle' || status === 'processing'}
+                      className="p-2 rounded-lg bg-surface-800 text-white hover:bg-surface-700 disabled:opacity-50 transition-colors"
+                    >
+                      {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                    </button>
+                    
+                    {/* Progress Bar */}
+                    <div className="flex-1 relative">
+                      <input
+                        type="range"
+                        min={0}
+                        max={videoDuration || 100}
+                        value={currentTime / 1000}
+                        onChange={(e) => {
+                          if (videoRef.current) {
+                            videoRef.current.currentTime = parseFloat(e.target.value);
+                            setCurrentTime(parseFloat(e.target.value) * 1000);
+                          }
+                        }}
+                        className="w-full h-2 bg-surface-700 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary-500 [&::-webkit-slider-thumb]:cursor-pointer"
+                      />
+                    </div>
+                    
+                    {/* Time Display */}
+                    <span className="text-white text-sm font-mono min-w-[100px] text-right">
+                      {formatTime(currentTime)} / {formatTime(videoDuration * 1000)}
+                    </span>
+                    
+                    {/* Change Video */}
+                    <label className="p-2 rounded-lg bg-surface-800 text-white hover:bg-surface-700 cursor-pointer transition-colors">
+                      <Upload className="w-5 h-5" />
+                      <input
+                        type="file"
+                        accept="video/*"
+                        onChange={handleVideoUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Panel tabs */}
+          <div className="bg-white border-b border-surface-200 px-6">
+            <div className="flex gap-1">
+              {panels.map((panel) => (
+                <button
+                  key={panel.id}
+                  onClick={() => setActivePanel(panel.id)}
+                  className={`relative px-4 py-3 text-sm font-medium transition-colors ${
+                    activePanel === panel.id
+                      ? 'text-primary-600'
+                      : 'text-surface-500 hover:text-surface-700'
+                  }`}
+                >
+                  {panel.label}
+                  {activePanel === panel.id && (
+                    <motion.div
+                      layoutId="activePanel"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-primary"
+                    />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Panel content */}
+          <div className="flex-1 overflow-hidden bg-surface-50">
+            <AnimatePresence mode="wait">
+              {activePanel === 'transcript' && (
+                <motion.div
+                  key="transcript"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  className="h-full"
+                >
+                  <div className="h-full bg-white m-4 rounded-3xl shadow-soft overflow-hidden">
+                    <TranscriptFeed
+                      segments={transcript}
+                      isLive={isRecording || isPlaying}
+                      currentTime={currentTime}
+                      highlightKeywords={analysis?.keyClaims.flatMap((c) => c.claim.split(' ').slice(0, 3)) || []}
+                    />
+                  </div>
+                </motion.div>
+              )}
+
+              {activePanel === 'analysis' && (
+                <motion.div
+                  key="analysis"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  className="h-full"
+                >
+                  <div className="h-full bg-white m-4 rounded-3xl shadow-soft overflow-hidden">
+                    <SummaryCard analysis={analysis} isLoading={isAnalyzing} />
+                  </div>
+                </motion.div>
+              )}
+
+              {activePanel === 'questions' && (
+                <motion.div
+                  key="questions"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  className="h-full"
+                >
+                  <div className="h-full bg-white m-4 rounded-3xl shadow-soft overflow-hidden">
+                    <QuestionBank questions={questions} isLoading={isGeneratingQuestions} />
+                  </div>
+                </motion.div>
+              )}
+
+              {activePanel === 'rubric' && (
+                <motion.div
+                  key="rubric"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  className="h-full"
+                >
+                  <div className="h-full bg-white m-4 rounded-3xl shadow-soft overflow-hidden">
+                    <RubricCard rubric={rubric} isLoading={status === 'processing'} />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </main>
+      </div>
+
+      {/* Status bar */}
+      <footer className="bg-white border-t border-surface-200 px-6 py-3">
+        <div className="max-w-7xl mx-auto flex items-center justify-between text-sm">
+          <div className="flex items-center gap-4">
+            <span className="text-surface-500">
+              Status:{' '}
+              <span
+                className={`font-medium ${
+                  status === 'recording'
+                    ? 'text-red-600'
+                    : status === 'completed'
+                    ? 'text-emerald-600'
+                    : status === 'processing'
+                    ? 'text-amber-600'
+                    : 'text-surface-600'
+                }`}
+              >
+                {status.charAt(0).toUpperCase() + status.slice(1)}
+              </span>
+            </span>
+            <span className="text-surface-300">•</span>
+            <span className="text-surface-500">
+              {transcript.length} segments •{' '}
+              {transcript.reduce((acc, s) => acc + s.text.split(' ').length, 0)} words
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-surface-500">
+              Claims: {analysis?.keyClaims.length || 0}
+            </span>
+            <span className="text-surface-500">
+              Questions:{' '}
+              {questions.clarifying.length +
+                questions.criticalThinking.length +
+                questions.expansion.length}
+            </span>
           </div>
         </div>
-
-        {/* Panels */}
-        <div className="grid gap-4" style={{ 
-          gridTemplateColumns: viewMode === 'split' ? '1fr 1fr' : '1fr',
-          minHeight: 'calc(100vh - 320px)',
-        }}>
-          {(viewMode === 'split' || viewMode === 'transcript') && (
-            <TranscriptPanel
-              segments={transcripts}
-              semanticEvents={semanticEvents}
-              isListening={isRecording}
-            />
-          )}
-          
-          {(viewMode === 'split' || viewMode === 'questions') && (
-            <QuestionsPanel questions={questions} />
-          )}
-        </div>
-
-        {/* Summary section */}
-        {summary && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-6 card-neumorphic p-6 bg-gradient-subtle"
-          >
-            <h3 className="text-lg font-semibold text-surface-900 mb-3 flex items-center gap-2">
-              <span className="w-6 h-6 rounded-lg bg-gradient-primary flex items-center justify-center">
-                <FileText className="w-3.5 h-3.5 text-white" />
-              </span>
-              AI Summary
-            </h3>
-            <p className="text-surface-600 leading-relaxed">{summary}</p>
-          </motion.div>
-        )}
-      </main>
+      </footer>
     </div>
+  );
+}
+
+export default function LiveDashboard() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+      </div>
+    }>
+      <LiveDashboardContent />
+    </Suspense>
   );
 }

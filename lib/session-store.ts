@@ -1,5 +1,5 @@
 // ============================================
-// Session Store for Babblet v2
+// Session Store for Babblet
 // In-memory session management
 // ============================================
 
@@ -7,8 +7,10 @@ import { v4 as uuidv4 } from 'uuid';
 import type {
   SessionState,
   TranscriptSegment,
-  SemanticEvent,
   GeneratedQuestion,
+  AnalysisSummary,
+  RubricEvaluation,
+  PresentationStatus,
 } from './types';
 
 // In-memory store
@@ -21,7 +23,7 @@ const connections = new Map<string, Set<ReadableStreamDefaultController>>();
 // Session Management
 // ============================================
 
-export function createSession(): SessionState {
+export function createSession(metadata?: { title?: string; presenterName?: string }): SessionState {
   const session: SessionState = {
     id: uuidv4(),
     status: 'idle',
@@ -29,6 +31,7 @@ export function createSession(): SessionState {
     transcript: [],
     semanticEvents: [],
     questions: [],
+    metadata,
   };
   sessions.set(session.id, session);
   return session;
@@ -40,12 +43,12 @@ export function getSession(sessionId: string): SessionState | undefined {
 
 export function updateSessionStatus(
   sessionId: string,
-  status: SessionState['status']
+  status: PresentationStatus
 ): SessionState | undefined {
   const session = sessions.get(sessionId);
   if (session) {
     session.status = status;
-    if (status === 'ended') {
+    if (status === 'completed') {
       session.endTime = Date.now();
     }
     broadcastToSession(sessionId, {
@@ -74,12 +77,6 @@ export function addTranscriptSegment(
   const session = sessions.get(sessionId);
   if (session) {
     session.transcript.push(segment);
-    broadcastToSession(sessionId, {
-      type: 'transcript',
-      data: segment,
-      timestamp: Date.now(),
-      sessionId,
-    });
   }
 }
 
@@ -90,27 +87,17 @@ export function getFullTranscript(sessionId: string): string {
 }
 
 // ============================================
-// Semantic Events Management
+// Analysis Management
 // ============================================
 
-export function addSemanticEvent(
+export function setAnalysis(
   sessionId: string,
-  event: SemanticEvent
+  analysis: AnalysisSummary
 ): void {
   const session = sessions.get(sessionId);
   if (session) {
-    session.semanticEvents.push(event);
-    broadcastToSession(sessionId, {
-      type: 'semantic_event',
-      data: event,
-      timestamp: Date.now(),
-      sessionId,
-    });
+    session.analysis = analysis;
   }
-}
-
-export function getSemanticEvents(sessionId: string): SemanticEvent[] {
-  return sessions.get(sessionId)?.semanticEvents || [];
 }
 
 // ============================================
@@ -124,24 +111,25 @@ export function addQuestion(
   const session = sessions.get(sessionId);
   if (session) {
     session.questions.push(question);
-    broadcastToSession(sessionId, {
-      type: 'question',
-      data: question,
-      timestamp: Date.now(),
-      sessionId,
-    });
   }
-}
-
-export function addQuestions(
-  sessionId: string,
-  questions: GeneratedQuestion[]
-): void {
-  questions.forEach(q => addQuestion(sessionId, q));
 }
 
 export function getQuestions(sessionId: string): GeneratedQuestion[] {
   return sessions.get(sessionId)?.questions || [];
+}
+
+// ============================================
+// Rubric Management
+// ============================================
+
+export function setRubric(
+  sessionId: string,
+  rubric: RubricEvaluation
+): void {
+  const session = sessions.get(sessionId);
+  if (session) {
+    session.rubric = rubric;
+  }
 }
 
 // ============================================
@@ -152,12 +140,6 @@ export function setSummary(sessionId: string, summary: string): void {
   const session = sessions.get(sessionId);
   if (session) {
     session.summary = summary;
-    broadcastToSession(sessionId, {
-      type: 'summary',
-      data: { summary },
-      timestamp: Date.now(),
-      sessionId,
-    });
   }
 }
 
@@ -226,8 +208,8 @@ export function getSessionStats(sessionId: string) {
       : Date.now() - session.startTime,
     transcriptLength: session.transcript.length,
     wordCount: fullTranscript.split(/\s+/).filter(w => w.length > 0).length,
-    eventCount: session.semanticEvents.length,
     questionCount: session.questions.length,
-    hasSummary: !!session.summary,
+    hasAnalysis: !!session.analysis,
+    hasRubric: !!session.rubric,
   };
 }

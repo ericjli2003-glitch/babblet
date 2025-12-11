@@ -9,8 +9,16 @@ import type {
   SemanticEvent, 
   SemanticEventType,
   TranscriptSegment,
-  GeminiSemanticResponse 
 } from './types';
+
+// Local type for Gemini response
+interface GeminiSemanticResponse {
+  events: Array<{
+    type: SemanticEventType;
+    content: string;
+    confidence: number;
+  }>;
+}
 
 // Initialize Gemini client
 let genAI: GoogleGenerativeAI | null = null;
