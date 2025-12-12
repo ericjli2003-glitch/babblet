@@ -163,6 +163,28 @@ function LiveDashboardContent() {
   const videoChunkIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const sendAudioIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioMimeTypeRef = useRef<string>('audio/webm');
+
+  // Get the best supported audio mimeType
+  const getSupportedMimeType = useCallback(() => {
+    const mimeTypes = [
+      'audio/webm',
+      'audio/webm;codecs=opus',
+      'audio/mp4',
+      'audio/ogg',
+      'audio/wav',
+    ];
+    
+    for (const mimeType of mimeTypes) {
+      if (MediaRecorder.isTypeSupported(mimeType)) {
+        console.log(`[Audio] Using mimeType: ${mimeType}`);
+        return mimeType;
+      }
+    }
+    
+    console.warn('[Audio] No preferred mimeType supported, using default');
+    return '';
+  }, []);
 
   // Connect to SSE stream for real-time updates
   useEffect(() => {
@@ -279,11 +301,15 @@ function LiveDashboardContent() {
       analyserRef.current.connect(audioContextRef.current.destination); // So we can hear it
       source.connect(destination);
 
-      // Set up MediaRecorder to capture audio
-      const mediaRecorder = new MediaRecorder(destination.stream, {
-        mimeType: 'audio/webm;codecs=opus',
-      });
+      // Set up MediaRecorder to capture audio with best supported format
+      const mimeType = getSupportedMimeType();
+      audioMimeTypeRef.current = mimeType || 'audio/webm';
+      
+      const recorderOptions: MediaRecorderOptions = mimeType ? { mimeType } : {};
+      const mediaRecorder = new MediaRecorder(destination.stream, recorderOptions);
       mediaRecorderRef.current = mediaRecorder;
+      
+      console.log(`[Video] MediaRecorder initialized with mimeType: ${mediaRecorder.mimeType}`);
 
       startTimeRef.current = Date.now();
 
@@ -293,14 +319,17 @@ function LiveDashboardContent() {
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
+          console.log(`[Video] Audio chunk received: ${event.data.size} bytes, type: ${event.data.type}`);
         }
       };
 
       // Send accumulated chunks every 8 seconds as a valid audio file
       sendAudioIntervalRef.current = setInterval(async () => {
         if (audioChunksRef.current.length > 0 && video) {
-          // Combine all chunks into a single valid WebM file
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
+          // Combine all chunks into a single valid audio file
+          const actualMimeType = audioChunksRef.current[0]?.type || audioMimeTypeRef.current;
+          const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
+          console.log(`[Video] Sending audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
           const currentTimestamp = video.currentTime * 1000;
 
           // Keep only the last chunk for continuity (it has header info)
@@ -368,7 +397,8 @@ function LiveDashboardContent() {
 
         // Send any remaining audio chunks
         if (audioChunksRef.current.length > 0) {
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
+          const actualMimeType = audioChunksRef.current[0]?.type || audioMimeTypeRef.current;
+          const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
           audioChunksRef.current = [];
 
           if (audioBlob.size > 1000) {
@@ -429,11 +459,15 @@ function LiveDashboardContent() {
       analyserRef.current.fftSize = 256;
       source.connect(analyserRef.current);
 
-      // Set up MediaRecorder
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus',
-      });
+      // Set up MediaRecorder with best supported format
+      const mimeType = getSupportedMimeType();
+      audioMimeTypeRef.current = mimeType || 'audio/webm';
+      
+      const recorderOptions: MediaRecorderOptions = mimeType ? { mimeType } : {};
+      const mediaRecorder = new MediaRecorder(stream, recorderOptions);
       mediaRecorderRef.current = mediaRecorder;
+      
+      console.log(`[Live] MediaRecorder initialized with mimeType: ${mediaRecorder.mimeType}`);
 
       startTimeRef.current = Date.now();
 
@@ -443,14 +477,17 @@ function LiveDashboardContent() {
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
+          console.log(`[Live] Audio chunk received: ${event.data.size} bytes, type: ${event.data.type}`);
         }
       };
 
       // Send accumulated chunks every 8 seconds as a valid audio file
       sendAudioIntervalRef.current = setInterval(async () => {
         if (audioChunksRef.current.length > 0) {
-          // Combine all chunks into a single valid WebM file
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
+          // Combine all chunks into a single valid audio file
+          const actualMimeType = audioChunksRef.current[0]?.type || audioMimeTypeRef.current;
+          const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
+          console.log(`[Live] Sending audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
           const currentTimestamp = Date.now() - startTimeRef.current;
 
           // Clear chunks after combining
@@ -521,7 +558,8 @@ function LiveDashboardContent() {
 
       // Send any remaining audio chunks
       if (audioChunksRef.current.length > 0) {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
+        const actualMimeType = audioChunksRef.current[0]?.type || audioMimeTypeRef.current;
+        const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
         audioChunksRef.current = [];
 
         if (audioBlob.size > 1000) {
