@@ -71,63 +71,7 @@ function LiveDashboardContent() {
   const lastWordCountRef = useRef<number>(0);
   const pendingQuestionGenRef = useRef<boolean>(false);
 
-  // Centralized transcript handler - deduplicates and triggers question generation
-  const addTranscriptSegment = useCallback((segment: TranscriptSegment) => {
-    setTranscript((prev) => {
-      // Avoid duplicates by ID
-      if (prev.some(s => s.id === segment.id)) {
-        console.log('[Transcript] Skipping duplicate segment:', segment.id);
-        return prev;
-      }
-      
-      // Avoid duplicates by text content (in case IDs differ but text is same)
-      const segmentText = segment.text.trim().toLowerCase();
-      if (prev.some(s => s.text.trim().toLowerCase() === segmentText)) {
-        console.log('[Transcript] Skipping duplicate text:', segment.text.slice(0, 30));
-        return prev;
-      }
-      
-      let newTranscript = [...prev, segment];
-      
-      // Memory safeguard: Consolidate old segments if we have too many
-      // Keep last 100 segments to prevent memory issues
-      if (newTranscript.length > 100) {
-        // Merge older segments into fewer chunks
-        const olderSegments = newTranscript.slice(0, -50);
-        const recentSegments = newTranscript.slice(-50);
-        const consolidatedText = olderSegments.map(s => s.text).join(' ');
-        const consolidatedSegment: TranscriptSegment = {
-          id: 'consolidated-' + Date.now(),
-          text: consolidatedText,
-          timestamp: olderSegments[0]?.timestamp || 0,
-          duration: 0,
-          isFinal: true,
-        };
-        newTranscript = [consolidatedSegment, ...recentSegments];
-        console.log('[Transcript] Consolidated old segments to prevent memory issues');
-      }
-      
-      // Calculate total word count
-      const totalWords = newTranscript.reduce((acc, s) => acc + s.text.split(/\s+/).length, 0);
-      const wordsSinceLastAnalysis = totalWords - lastWordCountRef.current;
-      
-      console.log(`[Transcript] Added segment. Total words: ${totalWords}, since last analysis: ${wordsSinceLastAnalysis}`);
-      
-      // Trigger question generation every 8 new words (non-blocking)
-      if (wordsSinceLastAnalysis >= 8 && !pendingQuestionGenRef.current) {
-        lastWordCountRef.current = totalWords;
-        pendingQuestionGenRef.current = true;
-        
-        // Async question generation - don't block transcript updates
-        const fullText = newTranscript.map(s => s.text).join(' ');
-        triggerAsyncQuestionGeneration(fullText);
-      }
-      
-      return newTranscript;
-    });
-  }, [triggerAsyncQuestionGeneration]);
-
-  // Async question generation - non-blocking
+  // Async question generation - non-blocking (defined first to avoid hoisting issues)
   const triggerAsyncQuestionGeneration = useCallback(async (transcriptText: string) => {
     if (!sessionId) return;
 
@@ -194,6 +138,62 @@ function LiveDashboardContent() {
       pendingQuestionGenRef.current = false;
     }
   }, [sessionId]);
+
+  // Centralized transcript handler - deduplicates and triggers question generation
+  const addTranscriptSegment = useCallback((segment: TranscriptSegment) => {
+    setTranscript((prev) => {
+      // Avoid duplicates by ID
+      if (prev.some(s => s.id === segment.id)) {
+        console.log('[Transcript] Skipping duplicate segment:', segment.id);
+        return prev;
+      }
+
+      // Avoid duplicates by text content (in case IDs differ but text is same)
+      const segmentText = segment.text.trim().toLowerCase();
+      if (prev.some(s => s.text.trim().toLowerCase() === segmentText)) {
+        console.log('[Transcript] Skipping duplicate text:', segment.text.slice(0, 30));
+        return prev;
+      }
+
+      let newTranscript = [...prev, segment];
+
+      // Memory safeguard: Consolidate old segments if we have too many
+      // Keep last 100 segments to prevent memory issues
+      if (newTranscript.length > 100) {
+        // Merge older segments into fewer chunks
+        const olderSegments = newTranscript.slice(0, -50);
+        const recentSegments = newTranscript.slice(-50);
+        const consolidatedText = olderSegments.map(s => s.text).join(' ');
+        const consolidatedSegment: TranscriptSegment = {
+          id: 'consolidated-' + Date.now(),
+          text: consolidatedText,
+          timestamp: olderSegments[0]?.timestamp || 0,
+          duration: 0,
+          isFinal: true,
+        };
+        newTranscript = [consolidatedSegment, ...recentSegments];
+        console.log('[Transcript] Consolidated old segments to prevent memory issues');
+      }
+
+      // Calculate total word count
+      const totalWords = newTranscript.reduce((acc, s) => acc + s.text.split(/\s+/).length, 0);
+      const wordsSinceLastAnalysis = totalWords - lastWordCountRef.current;
+
+      console.log(`[Transcript] Added segment. Total words: ${totalWords}, since last analysis: ${wordsSinceLastAnalysis}`);
+
+      // Trigger question generation every 8 new words (non-blocking)
+      if (wordsSinceLastAnalysis >= 8 && !pendingQuestionGenRef.current) {
+        lastWordCountRef.current = totalWords;
+        pendingQuestionGenRef.current = true;
+
+        // Async question generation - don't block transcript updates
+        const fullText = newTranscript.map(s => s.text).join(' ');
+        triggerAsyncQuestionGeneration(fullText);
+      }
+
+      return newTranscript;
+    });
+  }, [triggerAsyncQuestionGeneration]);
 
   // Pusher callbacks for real-time updates from other users
   const handlePusherTranscript = useCallback((segment: TranscriptSegment) => {
@@ -316,12 +316,12 @@ function LiveDashboardContent() {
 
     // Set connected status - we're using direct API responses which always work
     setConnectionStatus('connected');
-    
+
     // SSE disabled due to Vercel serverless timeout limitations
     // Real-time updates come from:
     // 1. Direct API responses (primary)
     // 2. Pusher (for multi-user sync)
-    
+
     console.log('[Session] Connected via direct API + Pusher (SSE disabled for stability)');
   }, [sessionId]);
 
