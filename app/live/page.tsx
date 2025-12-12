@@ -174,14 +174,14 @@ function LiveDashboardContent() {
       'audio/ogg',
       'audio/wav',
     ];
-    
+
     for (const mimeType of mimeTypes) {
       if (MediaRecorder.isTypeSupported(mimeType)) {
         console.log(`[Audio] Using mimeType: ${mimeType}`);
         return mimeType;
       }
     }
-    
+
     console.warn('[Audio] No preferred mimeType supported, using default');
     return '';
   }, []);
@@ -304,11 +304,11 @@ function LiveDashboardContent() {
       // Set up MediaRecorder to capture audio with best supported format
       const mimeType = getSupportedMimeType();
       audioMimeTypeRef.current = mimeType || 'audio/webm';
-      
+
       const recorderOptions: MediaRecorderOptions = mimeType ? { mimeType } : {};
       const mediaRecorder = new MediaRecorder(destination.stream, recorderOptions);
       mediaRecorderRef.current = mediaRecorder;
-      
+
       console.log(`[Video] MediaRecorder initialized with mimeType: ${mediaRecorder.mimeType}`);
 
       startTimeRef.current = Date.now();
@@ -462,11 +462,11 @@ function LiveDashboardContent() {
       // Set up MediaRecorder with best supported format
       const mimeType = getSupportedMimeType();
       audioMimeTypeRef.current = mimeType || 'audio/webm';
-      
+
       const recorderOptions: MediaRecorderOptions = mimeType ? { mimeType } : {};
       const mediaRecorder = new MediaRecorder(stream, recorderOptions);
       mediaRecorderRef.current = mediaRecorder;
-      
+
       console.log(`[Live] MediaRecorder initialized with mimeType: ${mediaRecorder.mimeType}`);
 
       startTimeRef.current = Date.now();
