@@ -313,9 +313,7 @@ function LiveDashboardContent() {
 
       startTimeRef.current = Date.now();
 
-      // Accumulate audio chunks (individual chunks aren't valid audio files)
-      audioChunksRef.current = [];
-
+      // Use onstop to send complete audio segments
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
@@ -323,19 +321,17 @@ function LiveDashboardContent() {
         }
       };
 
-      // Send accumulated chunks every 8 seconds as a valid audio file
-      sendAudioIntervalRef.current = setInterval(async () => {
-        if (audioChunksRef.current.length > 0 && video) {
-          // Combine all chunks into a single valid audio file
+      mediaRecorder.onstop = async () => {
+        if (audioChunksRef.current.length > 0 && video && !video.paused) {
           const actualMimeType = audioChunksRef.current[0]?.type || audioMimeTypeRef.current;
           const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
-          console.log(`[Video] Sending audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
+          console.log(`[Video] Sending complete audio: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
           const currentTimestamp = video.currentTime * 1000;
 
-          // Keep only the last chunk for continuity (it has header info)
+          // Clear chunks for next segment
           audioChunksRef.current = [];
 
-          if (audioBlob.size > 1000) {
+          if (audioBlob.size > 5000) {
             const formData = new FormData();
             formData.append('audio', audioBlob, 'audio.webm');
             formData.append('sessionId', sessionId || '');
@@ -348,23 +344,40 @@ function LiveDashboardContent() {
               });
               const data = await response.json();
 
-              // Update transcript directly from response
               if (data.segment && data.segment.text) {
                 setTranscript((prev) => [...prev, data.segment]);
               }
 
               if (data.error) {
-                console.log('[Audio] Transcription message:', data.error);
+                console.log('[Video] Transcription message:', data.error);
               }
             } catch (e) {
-              console.error('Failed to send audio chunk:', e);
+              console.error('Failed to send audio:', e);
+            }
+          }
+
+          // Restart recording if video is still playing
+          if (!video.paused && !video.ended && mediaRecorderRef.current?.state === 'inactive') {
+            try {
+              mediaRecorderRef.current?.start();
+              console.log('[Video] MediaRecorder restarted');
+            } catch (e) {
+              console.log('[Video] Could not restart recorder:', e);
             }
           }
         }
-      }, 8000);
+      };
 
-      // Collect small chunks frequently for better audio quality
-      mediaRecorder.start(1000);
+      // Stop and restart recorder every 10 seconds to create complete segments
+      sendAudioIntervalRef.current = setInterval(() => {
+        if (mediaRecorderRef.current?.state === 'recording') {
+          console.log('[Video] Stopping recorder for segment...');
+          mediaRecorderRef.current.stop();
+        }
+      }, 10000);
+
+      // Start recording (onstop handler will send and restart)
+      mediaRecorder.start();
 
       // Play the video
       video.play();
@@ -471,7 +484,7 @@ function LiveDashboardContent() {
 
       startTimeRef.current = Date.now();
 
-      // Accumulate audio chunks (individual chunks aren't valid audio files)
+      // Accumulate audio chunks
       audioChunksRef.current = [];
 
       mediaRecorder.ondataavailable = (event) => {
@@ -481,19 +494,18 @@ function LiveDashboardContent() {
         }
       };
 
-      // Send accumulated chunks every 8 seconds as a valid audio file
-      sendAudioIntervalRef.current = setInterval(async () => {
-        if (audioChunksRef.current.length > 0) {
-          // Combine all chunks into a single valid audio file
+      // Send complete audio segment when recorder stops
+      mediaRecorder.onstop = async () => {
+        if (audioChunksRef.current.length > 0 && isRecording) {
           const actualMimeType = audioChunksRef.current[0]?.type || audioMimeTypeRef.current;
           const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
-          console.log(`[Live] Sending audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
+          console.log(`[Live] Sending complete audio: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
           const currentTimestamp = Date.now() - startTimeRef.current;
 
-          // Clear chunks after combining
+          // Clear chunks for next segment
           audioChunksRef.current = [];
 
-          if (audioBlob.size > 1000) {
+          if (audioBlob.size > 5000) {
             const formData = new FormData();
             formData.append('audio', audioBlob, 'audio.webm');
             formData.append('sessionId', sessionId || '');
@@ -506,23 +518,40 @@ function LiveDashboardContent() {
               });
               const data = await response.json();
 
-              // Update transcript directly from response
               if (data.segment && data.segment.text) {
                 setTranscript((prev) => [...prev, data.segment]);
               }
 
               if (data.error) {
-                console.log('[Audio] Transcription message:', data.error);
+                console.log('[Live] Transcription message:', data.error);
               }
             } catch (e) {
-              console.error('Failed to send audio chunk:', e);
+              console.error('Failed to send audio:', e);
+            }
+          }
+
+          // Restart recording if still in recording mode
+          if (isRecording && mediaRecorderRef.current?.state === 'inactive' && streamRef.current?.active) {
+            try {
+              mediaRecorderRef.current?.start();
+              console.log('[Live] MediaRecorder restarted');
+            } catch (e) {
+              console.log('[Live] Could not restart recorder:', e);
             }
           }
         }
-      }, 8000);
+      };
 
-      // Collect small chunks frequently for better audio quality
-      mediaRecorder.start(1000);
+      // Stop and restart recorder every 10 seconds to create complete segments
+      sendAudioIntervalRef.current = setInterval(() => {
+        if (mediaRecorderRef.current?.state === 'recording') {
+          console.log('[Live] Stopping recorder for segment...');
+          mediaRecorderRef.current.stop();
+        }
+      }, 10000);
+
+      // Start recording
+      mediaRecorder.start();
       setIsRecording(true);
       setStatus('recording');
       updateAudioLevel();
@@ -1290,3 +1319,6 @@ export default function LiveDashboard() {
     </Suspense>
   );
 }
+
+
+

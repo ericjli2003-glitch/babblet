@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
 
     // Send to Deepgram - it handles any audio format!
     const deepgram = getDeepgram();
-    
+
     const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
       buffer,
       {
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
     // Extract transcript text
     const transcript = result?.results?.channels?.[0]?.alternatives?.[0]?.transcript || '';
     const text = transcript.trim();
-    
+
     console.log(`[Transcribe] Deepgram result: "${text.slice(0, 100)}${text.length > 100 ? '...' : ''}"`);
 
     if (!text || text.length === 0) {
