@@ -4,74 +4,10 @@ import { getSession, createSession, addTranscriptSegment, broadcastToSession } f
 import { isOpenAIConfigured } from '@/lib/openai-questions';
 import { broadcastTranscript } from '@/lib/pusher';
 import type { TranscriptSegment } from '@/lib/types';
-import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import OpenAI from 'openai';
-
-// Get ffmpeg path - works on Vercel with ffmpeg-static
-let ffmpegPath: string;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  ffmpegPath = require('ffmpeg-static');
-} catch {
-  ffmpegPath = 'ffmpeg'; // Fallback to system ffmpeg
-}
-
-// Get extension from mimetype
-function getExtensionFromMime(mimeType: string): string {
-  if (mimeType.includes('webm')) return '.webm';
-  if (mimeType.includes('mp4')) return '.mp4';
-  if (mimeType.includes('mp3') || mimeType.includes('mpeg')) return '.mp3';
-  if (mimeType.includes('ogg')) return '.ogg';
-  if (mimeType.includes('wav')) return '.wav';
-  if (mimeType.includes('m4a')) return '.m4a';
-  if (mimeType.includes('flac')) return '.flac';
-  return '.webm'; // Default
-}
-
-// Convert audio to WAV using ffmpeg
-async function convertToWav(inputPath: string, outputPath: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    console.log(`[FFmpeg] Converting ${inputPath} -> ${outputPath}`);
-    console.log(`[FFmpeg] Using ffmpeg at: ${ffmpegPath}`);
-    
-    const args = [
-      '-i', inputPath,
-      '-vn',                    // No video
-      '-acodec', 'pcm_s16le',   // PCM 16-bit little-endian
-      '-ar', '16000',           // 16kHz sample rate (optimal for speech)
-      '-ac', '1',               // Mono
-      '-y',                     // Overwrite output
-      outputPath
-    ];
-    
-    const ffmpeg = spawn(ffmpegPath, args);
-    
-    let stderr = '';
-    
-    ffmpeg.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
-    
-    ffmpeg.on('error', (err) => {
-      console.error(`[FFmpeg] Spawn error:`, err);
-      reject(new Error(`FFmpeg spawn error: ${err.message}`));
-    });
-    
-    ffmpeg.on('close', (code) => {
-      if (code === 0) {
-        console.log(`[FFmpeg] Conversion successful`);
-        resolve();
-      } else {
-        console.error(`[FFmpeg] Conversion failed with code ${code}`);
-        console.error(`[FFmpeg] stderr: ${stderr}`);
-        reject(new Error(`FFmpeg exited with code ${code}: ${stderr.slice(-500)}`));
-      }
-    });
-  });
-}
 
 // Initialize OpenAI client lazily
 let openai: OpenAI | null = null;
@@ -82,9 +18,21 @@ function getOpenAI(): OpenAI {
   return openai;
 }
 
+// Get extension from mimetype - use formats Whisper definitely supports
+function getExtensionFromMime(mimeType: string): string {
+  if (mimeType.includes('mp3') || mimeType.includes('mpeg')) return 'mp3';
+  if (mimeType.includes('mp4')) return 'mp4';
+  if (mimeType.includes('m4a')) return 'm4a';
+  if (mimeType.includes('wav')) return 'wav';
+  if (mimeType.includes('ogg')) return 'ogg';
+  if (mimeType.includes('flac')) return 'flac';
+  // WebM - use as-is, Whisper claims to support it
+  if (mimeType.includes('webm')) return 'webm';
+  return 'webm'; // Default
+}
+
 export async function POST(request: NextRequest) {
-  let inputPath: string | null = null;
-  let outputPath: string | null = null;
+  let tempFilePath: string | null = null;
   
   try {
     const formData = await request.formData();
@@ -149,46 +97,31 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await audioBlob.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Create temp file paths in /tmp (Vercel-safe)
+    // Create temp file in /tmp (Vercel-safe)
     const tempDir = os.tmpdir();
     const fileId = `audio_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const inputExt = getExtensionFromMime(originalMimeType);
-    inputPath = path.join(tempDir, `${fileId}_input${inputExt}`);
-    outputPath = path.join(tempDir, `${fileId}_output.wav`);
+    const extension = getExtensionFromMime(originalMimeType);
+    tempFilePath = path.join(tempDir, `${fileId}.${extension}`);
 
-    console.log(`[Transcribe] Input path: ${inputPath}`);
-    console.log(`[Transcribe] Output path: ${outputPath}`);
+    console.log(`[Transcribe] Writing to temp file: ${tempFilePath}`);
 
-    // Write input audio to temp file
-    fs.writeFileSync(inputPath, buffer);
-    console.log(`[Transcribe] Wrote ${buffer.length} bytes to input file`);
-
-    // Convert to WAV using ffmpeg
-    await convertToWav(inputPath, outputPath);
-
-    // Verify output exists and has content
-    if (!fs.existsSync(outputPath)) {
-      throw new Error('FFmpeg conversion failed - output file not created');
-    }
+    // Write buffer to temp file
+    fs.writeFileSync(tempFilePath, buffer);
     
-    const outputStats = fs.statSync(outputPath);
-    console.log(`[Transcribe] Converted WAV size: ${outputStats.size} bytes`);
+    const stats = fs.statSync(tempFilePath);
+    console.log(`[Transcribe] Temp file size: ${stats.size} bytes`);
 
-    if (outputStats.size < 1000) {
-      console.log('[Transcribe] Converted file too small, likely no audio content');
-      return NextResponse.json({
-        success: true,
-        message: 'No audio content detected'
-      });
-    }
-
-    // Send to OpenAI Whisper
-    console.log(`[Transcribe] Sending WAV to Whisper API...`);
+    // Send to OpenAI Whisper using file stream
+    console.log(`[Transcribe] Sending to Whisper API...`);
     
     const client = getOpenAI();
+    
+    // Use createReadStream which Whisper API accepts
+    const fileStream = fs.createReadStream(tempFilePath);
+    
     const transcription = await client.audio.transcriptions.create({
       model: 'whisper-1',
-      file: fs.createReadStream(outputPath),
+      file: fileStream,
       language: 'en',
       response_format: 'text',
     });
@@ -242,16 +175,13 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   } finally {
-    // Clean up temp files
-    const filesToClean = [inputPath, outputPath];
-    for (const filePath of filesToClean) {
-      if (filePath && fs.existsSync(filePath)) {
-        try {
-          fs.unlinkSync(filePath);
-          console.log(`[Transcribe] Cleaned up: ${filePath}`);
-        } catch (e) {
-          console.warn(`[Transcribe] Failed to clean up ${filePath}:`, e);
-        }
+    // Clean up temp file
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
+      try {
+        fs.unlinkSync(tempFilePath);
+        console.log(`[Transcribe] Cleaned up: ${tempFilePath}`);
+      } catch (e) {
+        console.warn(`[Transcribe] Failed to clean up ${tempFilePath}:`, e);
       }
     }
   }
