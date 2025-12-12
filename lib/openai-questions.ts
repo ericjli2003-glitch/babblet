@@ -60,14 +60,14 @@ export async function transcribeWithWhisper(
       extension = 'mp4';
     }
     
-    // Create a File object from the buffer
-    const file = new File(
-      [new Uint8Array(audioBuffer)],
-      `audio.${extension}`,
-      { type: mimeType }
-    );
+    console.log(`[Whisper] Preparing file: audio.${extension}, size: ${audioBuffer.length} bytes`);
     
-    console.log(`[Whisper] Sending file: audio.${extension}, size: ${file.size} bytes`);
+    // Use OpenAI's toFile helper for proper file handling
+    const file = await OpenAI.toFile(audioBuffer, `audio.${extension}`, {
+      type: mimeType,
+    });
+    
+    console.log(`[Whisper] Sending to Whisper API...`);
     
     const transcription = await client.audio.transcriptions.create({
       file: file,
@@ -75,7 +75,7 @@ export async function transcribeWithWhisper(
       response_format: 'text',
     });
     
-    const text = transcription.trim();
+    const text = typeof transcription === 'string' ? transcription.trim() : '';
     
     console.log(`[Whisper] Transcription result: "${text.slice(0, 100)}${text.length > 100 ? '...' : ''}"`);
     
@@ -107,11 +107,11 @@ export async function generateQuestionsFromTranscript(
 ): Promise<GeneratedQuestion[]> {
   try {
     const client = getOpenAIClient();
-    
-    const analysisContext = analysis 
+
+    const analysisContext = analysis
       ? `\n\nKey Claims Identified:\n${analysis.keyClaims.map(c => `- ${c.claim}`).join('\n')}`
       : '';
-    
+
     const response = await client.chat.completions.create({
       model: 'gpt-4o',
       messages: [
@@ -155,7 +155,7 @@ Respond in JSON format:
     if (!content) return [];
 
     const parsed = JSON.parse(content);
-    
+
     if (!parsed.questions || !Array.isArray(parsed.questions)) {
       return [];
     }
@@ -189,7 +189,7 @@ export async function generateRubricEvaluation(
 ): Promise<RubricEvaluation> {
   try {
     const client = getOpenAIClient();
-    
+
     const response = await client.chat.completions.create({
       model: 'gpt-4o',
       messages: [
@@ -233,7 +233,7 @@ Respond in JSON format:
     if (!content) throw new Error('No response from OpenAI');
 
     const parsed = JSON.parse(content);
-    
+
     return {
       contentQuality: parsed.contentQuality as RubricScore,
       delivery: parsed.delivery as RubricScore,
@@ -244,7 +244,7 @@ Respond in JSON format:
     };
   } catch (error) {
     console.error('Rubric evaluation error:', error);
-    
+
     // Return default rubric on error
     return {
       contentQuality: {
@@ -281,7 +281,7 @@ export async function generateSummary(
 ): Promise<string> {
   try {
     const client = getOpenAIClient();
-    
+
     const response = await client.chat.completions.create({
       model: 'gpt-4o',
       messages: [
