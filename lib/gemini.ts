@@ -50,21 +50,27 @@ export async function transcribeAudio(
     console.log(`[Gemini] Transcribing audio: ${audioBuffer.length} bytes, type: ${mimeType}`);
 
     const client = getGeminiClient();
-    const model = client.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    // Use gemini-1.5-pro for stable audio support
+    const model = client.getGenerativeModel({ model: 'gemini-1.5-pro' });
 
     // Convert buffer to base64
     const base64Audio = audioBuffer.toString('base64');
     console.log(`[Gemini] Base64 encoded: ${base64Audio.length} chars`);
 
+    // Try with audio/webm first, fallback to audio/mp4 if needed
+    // WebM with opus codec from MediaRecorder
+    const audioMimeType = mimeType.includes('webm') ? 'audio/webm;codecs=opus' : mimeType;
+    console.log(`[Gemini] Using MIME type: ${audioMimeType}`);
+
     const result = await model.generateContent([
       {
         inlineData: {
-          mimeType,
+          mimeType: audioMimeType,
           data: base64Audio,
         },
       },
       {
-        text: 'Transcribe this audio accurately. Return ONLY the transcribed text, nothing else. If there is no speech, return an empty string.',
+        text: 'Transcribe this audio accurately. Return ONLY the transcribed text, nothing else. If there is no speech or the audio is unclear, return an empty string.',
       },
     ]);
 
@@ -128,8 +134,9 @@ export async function detectSemanticEvents(
 ): Promise<SemanticEvent[]> {
   try {
     const client = getGeminiClient();
+    // Use gemini-1.5-flash for fast semantic analysis
     const model = client.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-1.5-flash',
       generationConfig: {
         responseMimeType: 'application/json',
       },
