@@ -540,11 +540,11 @@ function LiveDashboardContent() {
       if (audioSource === 'both') {
         // Capture BOTH microphone AND system audio
         console.log('[Live] Requesting both microphone and system audio...');
-        
+
         // Get microphone stream
         const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         console.log('[Live] Microphone stream obtained');
-        
+
         // Get system audio stream
         const displayStream = await navigator.mediaDevices.getDisplayMedia({
           video: true,
@@ -554,45 +554,45 @@ function LiveDashboardContent() {
             autoGainControl: false,
           },
         });
-        
+
         // Stop video track
         displayStream.getVideoTracks().forEach(track => track.stop());
-        
+
         if (displayStream.getAudioTracks().length === 0) {
           micStream.getTracks().forEach(track => track.stop());
           alert('No system audio detected. Make sure to check "Share audio" when selecting what to share.');
           return;
         }
         console.log('[Live] System audio stream obtained');
-        
+
         // Mix both audio streams using AudioContext
         const audioContext = new AudioContext();
         const micSource = audioContext.createMediaStreamSource(micStream);
         const systemSource = audioContext.createMediaStreamSource(displayStream);
-        
+
         // Create a destination to mix both streams
         const destination = audioContext.createMediaStreamDestination();
-        
+
         // Connect both sources to the destination
         micSource.connect(destination);
         systemSource.connect(destination);
-        
+
         // Use the mixed stream
         stream = destination.stream;
-        
+
         // Store original streams for cleanup
         streamRef.current = stream;
         // Store extra streams in a custom property for cleanup
         (streamRef as any).micStream = micStream;
         (streamRef as any).displayStream = displayStream;
-        
+
         console.log('[Live] Mixed audio stream created');
-        
+
       } else if (audioSource === 'system') {
         // Capture system audio via screen sharing
         // User will be prompted to share a screen/window/tab and must check "Share audio"
         console.log('[Live] Requesting system audio via getDisplayMedia...');
-        stream = await navigator.mediaDevices.getDisplayMedia({
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({
           video: true, // Required, but we only use audio
           audio: {
             echoCancellation: false,
@@ -601,16 +601,35 @@ function LiveDashboardContent() {
           },
         });
 
-        // Stop the video track since we only need audio
-        stream.getVideoTracks().forEach(track => track.stop());
+        console.log('[Live] Display stream obtained, video tracks:', displayStream.getVideoTracks().length, 'audio tracks:', displayStream.getAudioTracks().length);
 
-        // Check if audio track was shared
-        if (stream.getAudioTracks().length === 0) {
+        // Check if audio track was shared BEFORE stopping video
+        if (displayStream.getAudioTracks().length === 0) {
+          displayStream.getVideoTracks().forEach(track => track.stop());
           alert('No audio track detected. Make sure to check "Share audio" or "Share system audio" when selecting what to share.');
           return;
         }
 
-        console.log('[Live] System audio stream obtained');
+        // For system audio, we need to use AudioContext to extract the audio
+        // because some browsers have issues with the raw display media audio track
+        const tempAudioContext = new AudioContext();
+        const systemSource = tempAudioContext.createMediaStreamSource(displayStream);
+        const destination = tempAudioContext.createMediaStreamDestination();
+        systemSource.connect(destination);
+        
+        // Use the destination stream which has proper audio
+        stream = destination.stream;
+        
+        // Store the original display stream for cleanup
+        (streamRef as any).displayStream = displayStream;
+        
+        // Stop video track after we've set up audio routing
+        displayStream.getVideoTracks().forEach(track => track.stop());
+
+        const audioTrack = stream.getAudioTracks()[0];
+        console.log('[Live] System audio stream created via AudioContext');
+        console.log('[Live] Audio track settings:', audioTrack?.getSettings());
+        console.log('[Live] Audio track enabled:', audioTrack?.enabled, 'readyState:', audioTrack?.readyState);
       } else {
         // Standard microphone capture
         console.log('[Live] Requesting microphone audio...');
@@ -642,9 +661,10 @@ function LiveDashboardContent() {
       audioChunksRef.current = [];
 
       mediaRecorder.ondataavailable = (event) => {
+        console.log(`[Live] ondataavailable fired, size: ${event.data.size} bytes`);
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
-          console.log(`[Live] Audio chunk received: ${event.data.size} bytes, type: ${event.data.type}`);
+          console.log(`[Live] Audio chunk added: ${event.data.size} bytes, type: ${event.data.type}, total chunks: ${audioChunksRef.current.length}`);
         }
       };
 
@@ -708,6 +728,11 @@ function LiveDashboardContent() {
       mediaRecorder.start();
       setIsRecording(true);
       setStatus('recording');
+      
+      console.log('[Live] Recording started!');
+      console.log('[Live] MediaRecorder state:', mediaRecorder.state);
+      console.log('[Live] Stream active:', stream.active);
+      console.log('[Live] Audio tracks:', stream.getAudioTracks().map(t => ({ enabled: t.enabled, readyState: t.readyState, label: t.label })));
       updateAudioLevel();
 
       // Start periodic analysis
@@ -729,7 +754,7 @@ function LiveDashboardContent() {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       streamRef.current?.getTracks().forEach((track) => track.stop());
-      
+
       // Clean up extra streams from 'both' mode
       const streamRefAny = streamRef as any;
       if (streamRefAny.micStream) {
@@ -740,7 +765,7 @@ function LiveDashboardContent() {
         streamRefAny.displayStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
         streamRefAny.displayStream = null;
       }
-      
+
       audioContextRef.current?.close();
 
       if (analysisIntervalRef.current) {
@@ -1151,8 +1176,8 @@ function LiveDashboardContent() {
                     <button
                       onClick={() => setAudioSource('microphone')}
                       className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all ${audioSource === 'microphone'
-                          ? 'border-primary-500 bg-primary-500/10 text-primary-600'
-                          : 'border-surface-200 text-surface-600 hover:border-surface-300'
+                        ? 'border-primary-500 bg-primary-500/10 text-primary-600'
+                        : 'border-surface-200 text-surface-600 hover:border-surface-300'
                         }`}
                     >
                       <Mic className="w-5 h-5" />
@@ -1164,8 +1189,8 @@ function LiveDashboardContent() {
                     <button
                       onClick={() => setAudioSource('system')}
                       className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all ${audioSource === 'system'
-                          ? 'border-primary-500 bg-primary-500/10 text-primary-600'
-                          : 'border-surface-200 text-surface-600 hover:border-surface-300'
+                        ? 'border-primary-500 bg-primary-500/10 text-primary-600'
+                        : 'border-surface-200 text-surface-600 hover:border-surface-300'
                         }`}
                     >
                       <Monitor className="w-5 h-5" />
@@ -1177,8 +1202,8 @@ function LiveDashboardContent() {
                     <button
                       onClick={() => setAudioSource('both')}
                       className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all ${audioSource === 'both'
-                          ? 'border-accent-500 bg-accent-500/10 text-accent-600'
-                          : 'border-surface-200 text-surface-600 hover:border-surface-300'
+                        ? 'border-accent-500 bg-accent-500/10 text-accent-600'
+                        : 'border-surface-200 text-surface-600 hover:border-surface-300'
                         }`}
                     >
                       <Headphones className="w-5 h-5" />
