@@ -22,6 +22,8 @@ import {
   Link,
   Copy,
   Check,
+  Monitor,
+  Headphones,
 } from 'lucide-react';
 import TranscriptFeed from '@/components/TranscriptFeed';
 import QuestionBank from '@/components/QuestionBank';
@@ -68,6 +70,7 @@ function LiveDashboardContent() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [audioSource, setAudioSource] = useState<'microphone' | 'system'>('microphone');
   const lastWordCountRef = useRef<number>(0);
   const pendingQuestionGenRef = useRef<boolean>(false);
 
@@ -532,7 +535,37 @@ function LiveDashboardContent() {
   // Start live recording
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      let stream: MediaStream;
+      
+      if (audioSource === 'system') {
+        // Capture system audio via screen sharing
+        // User will be prompted to share a screen/window/tab and must check "Share audio"
+        console.log('[Live] Requesting system audio via getDisplayMedia...');
+        stream = await navigator.mediaDevices.getDisplayMedia({
+          video: true, // Required, but we only use audio
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          },
+        });
+        
+        // Stop the video track since we only need audio
+        stream.getVideoTracks().forEach(track => track.stop());
+        
+        // Check if audio track was shared
+        if (stream.getAudioTracks().length === 0) {
+          alert('No audio track detected. Make sure to check "Share audio" or "Share system audio" when selecting what to share.');
+          return;
+        }
+        
+        console.log('[Live] System audio stream obtained');
+      } else {
+        // Standard microphone capture
+        console.log('[Live] Requesting microphone audio...');
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
+      
       streamRef.current = stream;
 
       // Set up audio context for visualization
@@ -1047,14 +1080,64 @@ function LiveDashboardContent() {
                     <span>Smart question generation</span>
                   </div>
                 </div>
+                
+                {/* Audio Source Selector */}
+                <div className="mt-8 mb-4">
+                  <p className="text-sm text-surface-500 mb-3">Select audio source:</p>
+                  <div className="flex justify-center gap-3">
+                    <button
+                      onClick={() => setAudioSource('microphone')}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all ${
+                        audioSource === 'microphone'
+                          ? 'border-primary-500 bg-primary-500/10 text-primary-600'
+                          : 'border-surface-200 text-surface-600 hover:border-surface-300'
+                      }`}
+                    >
+                      <Mic className="w-5 h-5" />
+                      <div className="text-left">
+                        <div className="font-medium">Microphone</div>
+                        <div className="text-xs opacity-70">Your voice only</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setAudioSource('system')}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all ${
+                        audioSource === 'system'
+                          ? 'border-primary-500 bg-primary-500/10 text-primary-600'
+                          : 'border-surface-200 text-surface-600 hover:border-surface-300'
+                      }`}
+                    >
+                      <Monitor className="w-5 h-5" />
+                      <div className="text-left">
+                        <div className="font-medium">System Audio</div>
+                        <div className="text-xs opacity-70">Zoom, Teams, etc.</div>
+                      </div>
+                    </button>
+                  </div>
+                  {audioSource === 'system' && (
+                    <p className="mt-3 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
+                      💡 When prompted, select your Zoom/Teams window and check &quot;Share audio&quot; or &quot;Share system audio&quot;
+                    </p>
+                  )}
+                </div>
+                
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={startRecording}
-                  className="mt-8 px-8 py-4 bg-gradient-primary text-white font-semibold rounded-2xl shadow-glow hover:shadow-lg transition-shadow"
+                  className="px-8 py-4 bg-gradient-primary text-white font-semibold rounded-2xl shadow-glow hover:shadow-lg transition-shadow"
                 >
-                  <Mic className="w-5 h-5 inline mr-2" />
-                  Start Recording
+                  {audioSource === 'system' ? (
+                    <>
+                      <Monitor className="w-5 h-5 inline mr-2" />
+                      Capture System Audio
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="w-5 h-5 inline mr-2" />
+                      Start Recording
+                    </>
+                  )}
                 </motion.button>
               </div>
             </div>

@@ -40,12 +40,12 @@ export async function POST(request: NextRequest) {
     const session = getSession(sessionId);
     let transcript = context?.transcript;
     let analysisContext: AnalysisSummary | undefined = undefined;
-    
+
     if (!transcript && session) {
       transcript = getFullTranscript(sessionId);
       analysisContext = session.analysis;
     }
-    
+
     // Build analysis context from provided claims/gaps if available
     if (context?.claims || context?.gaps) {
       analysisContext = {
