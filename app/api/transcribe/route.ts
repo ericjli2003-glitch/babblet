@@ -1,39 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getSession, createSession, addTranscriptSegment, broadcastToSession } from '@/lib/session-store';
-import { isOpenAIConfigured } from '@/lib/openai-questions';
 import { broadcastTranscript } from '@/lib/pusher';
 import type { TranscriptSegment } from '@/lib/types';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import OpenAI from 'openai';
+import { createClient } from '@deepgram/sdk';
 
-// Initialize OpenAI client lazily
-let openai: OpenAI | null = null;
-function getOpenAI(): OpenAI {
-  if (!openai) {
-    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Initialize Deepgram client lazily
+let deepgramClient: ReturnType<typeof createClient> | null = null;
+
+function getDeepgram() {
+  if (!deepgramClient) {
+    const apiKey = process.env.DEEPGRAM_API_KEY;
+    if (!apiKey) {
+      throw new Error('DEEPGRAM_API_KEY environment variable is not set');
+    }
+    deepgramClient = createClient(apiKey);
   }
-  return openai;
+  return deepgramClient;
 }
 
-// Get extension from mimetype - use formats Whisper definitely supports
-function getExtensionFromMime(mimeType: string): string {
-  if (mimeType.includes('mp3') || mimeType.includes('mpeg')) return 'mp3';
-  if (mimeType.includes('mp4')) return 'mp4';
-  if (mimeType.includes('m4a')) return 'm4a';
-  if (mimeType.includes('wav')) return 'wav';
-  if (mimeType.includes('ogg')) return 'ogg';
-  if (mimeType.includes('flac')) return 'flac';
-  // WebM - use as-is, Whisper claims to support it
-  if (mimeType.includes('webm')) return 'webm';
-  return 'webm'; // Default
+function isDeepgramConfigured(): boolean {
+  return !!process.env.DEEPGRAM_API_KEY;
 }
 
 export async function POST(request: NextRequest) {
-  let tempFilePath: string | null = null;
-  
   try {
     const formData = await request.formData();
     const audioBlob = formData.get('audio') as Blob | null;
@@ -54,12 +44,12 @@ export async function POST(request: NextRequest) {
       session = createSession();
     }
 
-    // Check if OpenAI is configured
-    if (!isOpenAIConfigured()) {
-      console.log('[Transcribe] OPENAI_API_KEY not found in environment');
+    // Check if Deepgram is configured
+    if (!isDeepgramConfigured()) {
+      console.log('[Transcribe] DEEPGRAM_API_KEY not found in environment');
       const mockSegment: TranscriptSegment = {
         id: uuidv4(),
-        text: '[OpenAI API not configured] Add OPENAI_API_KEY to Vercel environment variables and redeploy.',
+        text: '[Deepgram API not configured] Add DEEPGRAM_API_KEY to Vercel environment variables and redeploy.',
         timestamp: parseInt(timestamp || '0', 10),
         duration: 0,
         isFinal: true,
@@ -75,7 +65,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: false,
-        error: 'OpenAI API not configured',
+        error: 'Deepgram API not configured',
         segment: mockSegment,
       });
     }
@@ -97,38 +87,31 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await audioBlob.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Create temp file in /tmp (Vercel-safe)
-    const tempDir = os.tmpdir();
-    const fileId = `audio_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const extension = getExtensionFromMime(originalMimeType);
-    tempFilePath = path.join(tempDir, `${fileId}.${extension}`);
+    console.log(`[Transcribe] Sending ${buffer.length} bytes to Deepgram...`);
 
-    console.log(`[Transcribe] Writing to temp file: ${tempFilePath}`);
+    // Send to Deepgram - it handles any audio format!
+    const deepgram = getDeepgram();
+    
+    const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
+      buffer,
+      {
+        model: 'nova-2',
+        language: 'en',
+        smart_format: true,
+        punctuate: true,
+      }
+    );
 
-    // Write buffer to temp file
-    fs.writeFileSync(tempFilePath, buffer);
-    
-    const stats = fs.statSync(tempFilePath);
-    console.log(`[Transcribe] Temp file size: ${stats.size} bytes`);
+    if (error) {
+      console.error('[Transcribe] Deepgram error:', error);
+      throw new Error(`Deepgram error: ${error.message}`);
+    }
 
-    // Send to OpenAI Whisper using file stream
-    console.log(`[Transcribe] Sending to Whisper API...`);
+    // Extract transcript text
+    const transcript = result?.results?.channels?.[0]?.alternatives?.[0]?.transcript || '';
+    const text = transcript.trim();
     
-    const client = getOpenAI();
-    
-    // Use createReadStream which Whisper API accepts
-    const fileStream = fs.createReadStream(tempFilePath);
-    
-    const transcription = await client.audio.transcriptions.create({
-      model: 'whisper-1',
-      file: fileStream,
-      language: 'en',
-      response_format: 'text',
-    });
-
-    const text = typeof transcription === 'string' ? transcription.trim() : '';
-    
-    console.log(`[Transcribe] Whisper result: "${text.slice(0, 100)}${text.length > 100 ? '...' : ''}"`);
+    console.log(`[Transcribe] Deepgram result: "${text.slice(0, 100)}${text.length > 100 ? '...' : ''}"`);
 
     if (!text || text.length === 0) {
       console.log('[Transcribe] No speech detected');
@@ -174,15 +157,5 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 }
     );
-  } finally {
-    // Clean up temp file
-    if (tempFilePath && fs.existsSync(tempFilePath)) {
-      try {
-        fs.unlinkSync(tempFilePath);
-        console.log(`[Transcribe] Cleaned up: ${tempFilePath}`);
-      } catch (e) {
-        console.warn(`[Transcribe] Failed to clean up ${tempFilePath}:`, e);
-      }
-    }
   }
 }
