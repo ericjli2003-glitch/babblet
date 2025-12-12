@@ -44,25 +44,39 @@ export async function transcribeWithWhisper(
   try {
     console.log(`[Whisper] Transcribing audio: ${audioBuffer.length} bytes, type: ${mimeType}`);
     
-    const client = getOpenAIClient();
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error('OPENAI_API_KEY environment variable is not set');
+    }
     
-    // Use OpenAI's toFile helper - it handles the file creation properly
-    // Key: use .ogg extension as it's well-supported and compatible with WebM/Opus data
-    const file = await OpenAI.toFile(
-      audioBuffer,
-      'audio.ogg',
-      { type: 'audio/ogg' }
-    );
+    // Create a Blob from the buffer with proper mime type
+    // WebM with Opus is what MediaRecorder produces
+    const blob = new Blob([audioBuffer], { type: 'audio/webm' });
     
-    console.log(`[Whisper] Sending to Whisper API as OGG...`);
+    // Create FormData and append the file
+    const formData = new FormData();
+    formData.append('file', blob, 'audio.webm');
+    formData.append('model', 'whisper-1');
+    formData.append('response_format', 'text');
+    formData.append('language', 'en'); // Force English to avoid wrong language detection
     
-    const transcription = await client.audio.transcriptions.create({
-      file: file,
-      model: 'whisper-1',
-      response_format: 'text',
+    console.log(`[Whisper] Sending to Whisper API via fetch...`);
+    
+    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: formData,
     });
     
-    const text = typeof transcription === 'string' ? transcription.trim() : '';
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Whisper] API error: ${response.status} ${errorText}`);
+      throw new Error(`Whisper API error: ${response.status} ${errorText}`);
+    }
+    
+    const text = (await response.text()).trim();
     
     console.log(`[Whisper] Transcription result: "${text.slice(0, 100)}${text.length > 100 ? '...' : ''}"`);
     
