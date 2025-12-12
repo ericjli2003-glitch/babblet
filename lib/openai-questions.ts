@@ -8,6 +8,8 @@ import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import ffmpeg from 'fluent-ffmpeg';
+import ffmpegStatic from 'ffmpeg-static';
 import type {
   GeneratedQuestion,
   QuestionCategory,
@@ -17,6 +19,11 @@ import type {
   RubricScore,
   TranscriptSegment,
 } from './types';
+
+// Set ffmpeg path
+if (ffmpegStatic) {
+  ffmpeg.setFfmpegPath(ffmpegStatic);
+}
 
 // Initialize OpenAI client
 let openai: OpenAI | null = null;
@@ -37,6 +44,32 @@ export function isOpenAIConfigured(): boolean {
 }
 
 // ============================================
+// Audio Conversion Helper
+// ============================================
+
+async function convertToMp3(inputPath: string, outputPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .toFormat('mp3')
+      .audioCodec('libmp3lame')
+      .audioChannels(1)
+      .audioFrequency(16000)
+      .on('start', (cmd) => {
+        console.log(`[FFmpeg] Starting conversion: ${cmd}`);
+      })
+      .on('error', (err) => {
+        console.error(`[FFmpeg] Conversion error:`, err);
+        reject(err);
+      })
+      .on('end', () => {
+        console.log(`[FFmpeg] Conversion complete`);
+        resolve();
+      })
+      .save(outputPath);
+  });
+}
+
+// ============================================
 // Whisper Audio Transcription
 // ============================================
 
@@ -44,38 +77,59 @@ export async function transcribeWithWhisper(
   audioBuffer: Buffer,
   mimeType: string = 'audio/webm'
 ): Promise<TranscriptSegment | null> {
-  let tempFilePath: string | null = null;
+  let inputFilePath: string | null = null;
+  let outputFilePath: string | null = null;
   
   try {
     console.log(`[Whisper] Transcribing audio: ${audioBuffer.length} bytes, type: ${mimeType}`);
     
     const client = getOpenAIClient();
     
-    // Determine file extension from mime type
-    let extension = 'webm';
+    // Determine input file extension from mime type
+    let inputExtension = 'webm';
     if (mimeType.includes('mp3') || mimeType.includes('mpeg')) {
-      extension = 'mp3';
+      inputExtension = 'mp3';
     } else if (mimeType.includes('wav')) {
-      extension = 'wav';
+      inputExtension = 'wav';
     } else if (mimeType.includes('m4a')) {
-      extension = 'm4a';
+      inputExtension = 'm4a';
     } else if (mimeType.includes('ogg')) {
-      extension = 'ogg';
+      inputExtension = 'ogg';
     } else if (mimeType.includes('mp4')) {
-      extension = 'mp4';
+      inputExtension = 'mp4';
     }
     
-    // Write to temp file to ensure proper file structure
+    // Create temp file paths
     const tempDir = os.tmpdir();
-    tempFilePath = path.join(tempDir, `whisper_${Date.now()}.${extension}`);
+    const timestamp = Date.now();
+    inputFilePath = path.join(tempDir, `whisper_input_${timestamp}.${inputExtension}`);
+    outputFilePath = path.join(tempDir, `whisper_output_${timestamp}.mp3`);
     
-    console.log(`[Whisper] Writing to temp file: ${tempFilePath}`);
-    fs.writeFileSync(tempFilePath, audioBuffer);
+    // Write input audio to temp file
+    console.log(`[Whisper] Writing input file: ${inputFilePath}`);
+    fs.writeFileSync(inputFilePath, audioBuffer);
     
-    // Create a read stream from the file
-    const fileStream = fs.createReadStream(tempFilePath);
+    // Convert to MP3 using FFmpeg
+    console.log(`[Whisper] Converting to MP3...`);
+    await convertToMp3(inputFilePath, outputFilePath);
     
-    console.log(`[Whisper] Sending to Whisper API...`);
+    // Verify output file exists and has content
+    if (!fs.existsSync(outputFilePath)) {
+      throw new Error('FFmpeg conversion failed - output file not created');
+    }
+    
+    const outputStats = fs.statSync(outputFilePath);
+    console.log(`[Whisper] Converted MP3 size: ${outputStats.size} bytes`);
+    
+    if (outputStats.size < 1000) {
+      console.log('[Whisper] Converted file too small, likely no audio content');
+      return null;
+    }
+    
+    // Create a read stream from the converted MP3 file
+    const fileStream = fs.createReadStream(outputFilePath);
+    
+    console.log(`[Whisper] Sending MP3 to Whisper API...`);
     
     const transcription = await client.audio.transcriptions.create({
       file: fileStream,
@@ -103,15 +157,18 @@ export async function transcribeWithWhisper(
     console.error('[Whisper] Transcription error:', error);
     throw new Error(`Whisper transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   } finally {
-    // Clean up temp file
-    if (tempFilePath && fs.existsSync(tempFilePath)) {
-      try {
-        fs.unlinkSync(tempFilePath);
-        console.log(`[Whisper] Cleaned up temp file`);
-      } catch (e) {
-        console.warn(`[Whisper] Failed to clean up temp file: ${e}`);
+    // Clean up temp files
+    const filesToClean = [inputFilePath, outputFilePath];
+    for (const filePath of filesToClean) {
+      if (filePath && fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch (e) {
+          console.warn(`[Whisper] Failed to clean up file ${filePath}: ${e}`);
+        }
       }
     }
+    console.log(`[Whisper] Cleaned up temp files`);
   }
 }
 
