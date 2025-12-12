@@ -43,25 +43,27 @@ export async function transcribeWithWhisper(
 ): Promise<TranscriptSegment | null> {
   try {
     console.log(`[Whisper] Transcribing audio: ${audioBuffer.length} bytes, type: ${mimeType}`);
-    
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       throw new Error('OPENAI_API_KEY environment variable is not set');
     }
-    
+
     // Create a Blob from the buffer with proper mime type
     // WebM with Opus is what MediaRecorder produces
-    const blob = new Blob([audioBuffer], { type: 'audio/webm' });
-    
+    // Convert Buffer to Uint8Array for TypeScript compatibility
+    const uint8Array = new Uint8Array(audioBuffer);
+    const blob = new Blob([uint8Array], { type: 'audio/webm' });
+
     // Create FormData and append the file
     const formData = new FormData();
     formData.append('file', blob, 'audio.webm');
     formData.append('model', 'whisper-1');
     formData.append('response_format', 'text');
     formData.append('language', 'en'); // Force English to avoid wrong language detection
-    
+
     console.log(`[Whisper] Sending to Whisper API via fetch...`);
-    
+
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
@@ -69,22 +71,22 @@ export async function transcribeWithWhisper(
       },
       body: formData,
     });
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`[Whisper] API error: ${response.status} ${errorText}`);
       throw new Error(`Whisper API error: ${response.status} ${errorText}`);
     }
-    
+
     const text = (await response.text()).trim();
-    
+
     console.log(`[Whisper] Transcription result: "${text.slice(0, 100)}${text.length > 100 ? '...' : ''}"`);
-    
+
     if (!text || text.length === 0) {
       console.log('[Whisper] No speech detected');
       return null;
     }
-    
+
     return {
       id: uuidv4(),
       text,
