@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { getSession, getFullTranscript, addQuestion, broadcastToSession } from '@/lib/session-store';
 import { generateQuestionsFromTranscript, isOpenAIConfigured } from '@/lib/openai-questions';
 import { broadcastQuestions } from '@/lib/pusher';
-import type { GeneratedQuestion, QuestionCategory, QuestionDifficulty } from '@/lib/types';
+import type { GeneratedQuestion, QuestionCategory, QuestionDifficulty, AnalysisSummary } from '@/lib/types';
 
 // Force dynamic rendering (required for POST handlers on Vercel)
 export const dynamic = 'force-dynamic';
@@ -12,8 +12,8 @@ export const runtime = 'nodejs';
 // GET handler for testing endpoint existence
 export async function GET() {
   console.log('[generate-questions] GET request received - endpoint is alive');
-  return NextResponse.json({ 
-    status: 'ok', 
+  return NextResponse.json({
+    status: 'ok',
     endpoint: '/api/generate-questions',
     method: 'POST required for question generation'
   });
@@ -21,11 +21,11 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   console.log('[generate-questions] POST request received');
-  
+
   try {
     const body = await request.json();
     const { sessionId, context } = body;
-    
+
     console.log('[generate-questions] Session:', sessionId, 'Has context:', !!context);
 
     if (!sessionId) {
@@ -35,27 +35,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // On Vercel serverless, sessions don't persist across function invocations
+    // Use provided context transcript first, fall back to session if available
     const session = getSession(sessionId);
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Session not found' },
-        { status: 404 }
-      );
+    let transcript = context?.transcript;
+    let analysisContext: AnalysisSummary | undefined = undefined;
+    
+    if (!transcript && session) {
+      transcript = getFullTranscript(sessionId);
+      analysisContext = session.analysis;
+    }
+    
+    // Build analysis context from provided claims/gaps if available
+    if (context?.claims || context?.gaps) {
+      analysisContext = {
+        keyClaims: context.claims || [],
+        logicalGaps: context.gaps || [],
+        missingEvidence: [],
+        overallStrength: 3,
+        suggestions: [],
+        timestamp: Date.now(),
+      };
     }
 
-    const transcript = context?.transcript || getFullTranscript(sessionId);
-
     if (!transcript || transcript.trim().length === 0) {
+      console.log('[generate-questions] No transcript available');
       return NextResponse.json(
         { error: 'No transcript available for question generation' },
         { status: 400 }
       );
     }
 
+    console.log('[generate-questions] Transcript length:', transcript.length, 'chars');
+
     let questions: GeneratedQuestion[];
 
     if (isOpenAIConfigured()) {
-      questions = await generateQuestionsFromTranscript(transcript, session.analysis);
+      console.log('[generate-questions] Calling OpenAI for question generation...');
+      questions = await generateQuestionsFromTranscript(transcript, analysisContext);
+      console.log('[generate-questions] OpenAI returned', questions.length, 'questions');
     } else {
       // Mock questions if OpenAI not configured
       const categories: QuestionCategory[] = ['clarifying', 'critical-thinking', 'expansion'];
@@ -94,7 +112,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[generate-questions] Error:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to generate questions',
         details: error instanceof Error ? error.message : 'Unknown error'
       },
