@@ -5,6 +5,9 @@
 
 import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import type {
   GeneratedQuestion,
   QuestionCategory,
@@ -41,6 +44,8 @@ export async function transcribeWithWhisper(
   audioBuffer: Buffer,
   mimeType: string = 'audio/webm'
 ): Promise<TranscriptSegment | null> {
+  let tempFilePath: string | null = null;
+  
   try {
     console.log(`[Whisper] Transcribing audio: ${audioBuffer.length} bytes, type: ${mimeType}`);
     
@@ -60,17 +65,20 @@ export async function transcribeWithWhisper(
       extension = 'mp4';
     }
     
-    console.log(`[Whisper] Preparing file: audio.${extension}, size: ${audioBuffer.length} bytes`);
+    // Write to temp file to ensure proper file structure
+    const tempDir = os.tmpdir();
+    tempFilePath = path.join(tempDir, `whisper_${Date.now()}.${extension}`);
     
-    // Use OpenAI's toFile helper for proper file handling
-    const file = await OpenAI.toFile(audioBuffer, `audio.${extension}`, {
-      type: mimeType,
-    });
+    console.log(`[Whisper] Writing to temp file: ${tempFilePath}`);
+    fs.writeFileSync(tempFilePath, audioBuffer);
+    
+    // Create a read stream from the file
+    const fileStream = fs.createReadStream(tempFilePath);
     
     console.log(`[Whisper] Sending to Whisper API...`);
     
     const transcription = await client.audio.transcriptions.create({
-      file: file,
+      file: fileStream,
       model: 'whisper-1',
       response_format: 'text',
     });
@@ -94,6 +102,16 @@ export async function transcribeWithWhisper(
   } catch (error) {
     console.error('[Whisper] Transcription error:', error);
     throw new Error(`Whisper transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  } finally {
+    // Clean up temp file
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
+      try {
+        fs.unlinkSync(tempFilePath);
+        console.log(`[Whisper] Cleaned up temp file`);
+      } catch (e) {
+        console.warn(`[Whisper] Failed to clean up temp file: ${e}`);
+      }
+    }
   }
 }
 
