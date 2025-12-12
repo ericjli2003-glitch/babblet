@@ -57,22 +57,40 @@ export async function transcribeAudio(
     const base64Audio = audioBuffer.toString('base64');
     console.log(`[Gemini] Base64 encoded: ${base64Audio.length} chars`);
 
-    // Try with audio/webm first, fallback to audio/mp4 if needed
-    // WebM with opus codec from MediaRecorder
-    const audioMimeType = mimeType.includes('webm') ? 'audio/webm;codecs=opus' : mimeType;
+    // Normalize MIME type - Gemini accepts these audio formats:
+    // audio/wav, audio/mp3, audio/aiff, audio/aac, audio/ogg, audio/flac, audio/webm
+    // Remove codec specifications and use clean MIME type
+    let audioMimeType = 'audio/webm';
+    if (mimeType.includes('mp3') || mimeType.includes('mpeg')) {
+      audioMimeType = 'audio/mp3';
+    } else if (mimeType.includes('wav')) {
+      audioMimeType = 'audio/wav';
+    } else if (mimeType.includes('ogg')) {
+      audioMimeType = 'audio/ogg';
+    } else if (mimeType.includes('mp4') || mimeType.includes('m4a')) {
+      audioMimeType = 'audio/mp4';
+    }
     console.log(`[Gemini] Using MIME type: ${audioMimeType}`);
 
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          mimeType: audioMimeType,
-          data: base64Audio,
+    // Use the correct Gemini API structure with contents/parts format
+    const result = await model.generateContent({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                mimeType: audioMimeType,
+                data: base64Audio,
+              },
+            },
+            {
+              text: 'Transcribe this audio accurately. Return ONLY the transcribed text, nothing else. If there is no speech or the audio is unclear, return an empty string.',
+            },
+          ],
         },
-      },
-      {
-        text: 'Transcribe this audio accurately. Return ONLY the transcribed text, nothing else. If there is no speech or the audio is unclear, return an empty string.',
-      },
-    ]);
+      ],
+    });
 
     const response = result.response;
     const text = response.text().trim();
