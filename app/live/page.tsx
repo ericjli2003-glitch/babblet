@@ -70,7 +70,7 @@ function LiveDashboardContent() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
-  const [audioSource, setAudioSource] = useState<'microphone' | 'system'>('microphone');
+  const [audioSource, setAudioSource] = useState<'microphone' | 'system' | 'both'>('microphone');
   const lastWordCountRef = useRef<number>(0);
   const pendingQuestionGenRef = useRef<boolean>(false);
 
@@ -536,8 +536,59 @@ function LiveDashboardContent() {
   const startRecording = async () => {
     try {
       let stream: MediaStream;
-      
-      if (audioSource === 'system') {
+
+      if (audioSource === 'both') {
+        // Capture BOTH microphone AND system audio
+        console.log('[Live] Requesting both microphone and system audio...');
+        
+        // Get microphone stream
+        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('[Live] Microphone stream obtained');
+        
+        // Get system audio stream
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          },
+        });
+        
+        // Stop video track
+        displayStream.getVideoTracks().forEach(track => track.stop());
+        
+        if (displayStream.getAudioTracks().length === 0) {
+          micStream.getTracks().forEach(track => track.stop());
+          alert('No system audio detected. Make sure to check "Share audio" when selecting what to share.');
+          return;
+        }
+        console.log('[Live] System audio stream obtained');
+        
+        // Mix both audio streams using AudioContext
+        const audioContext = new AudioContext();
+        const micSource = audioContext.createMediaStreamSource(micStream);
+        const systemSource = audioContext.createMediaStreamSource(displayStream);
+        
+        // Create a destination to mix both streams
+        const destination = audioContext.createMediaStreamDestination();
+        
+        // Connect both sources to the destination
+        micSource.connect(destination);
+        systemSource.connect(destination);
+        
+        // Use the mixed stream
+        stream = destination.stream;
+        
+        // Store original streams for cleanup
+        streamRef.current = stream;
+        // Store extra streams in a custom property for cleanup
+        (streamRef as any).micStream = micStream;
+        (streamRef as any).displayStream = displayStream;
+        
+        console.log('[Live] Mixed audio stream created');
+        
+      } else if (audioSource === 'system') {
         // Capture system audio via screen sharing
         // User will be prompted to share a screen/window/tab and must check "Share audio"
         console.log('[Live] Requesting system audio via getDisplayMedia...');
@@ -549,23 +600,23 @@ function LiveDashboardContent() {
             autoGainControl: false,
           },
         });
-        
+
         // Stop the video track since we only need audio
         stream.getVideoTracks().forEach(track => track.stop());
-        
+
         // Check if audio track was shared
         if (stream.getAudioTracks().length === 0) {
           alert('No audio track detected. Make sure to check "Share audio" or "Share system audio" when selecting what to share.');
           return;
         }
-        
+
         console.log('[Live] System audio stream obtained');
       } else {
         // Standard microphone capture
         console.log('[Live] Requesting microphone audio...');
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       }
-      
+
       streamRef.current = stream;
 
       // Set up audio context for visualization
@@ -678,6 +729,18 @@ function LiveDashboardContent() {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       streamRef.current?.getTracks().forEach((track) => track.stop());
+      
+      // Clean up extra streams from 'both' mode
+      const streamRefAny = streamRef as any;
+      if (streamRefAny.micStream) {
+        streamRefAny.micStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+        streamRefAny.micStream = null;
+      }
+      if (streamRefAny.displayStream) {
+        streamRefAny.displayStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+        streamRefAny.displayStream = null;
+      }
+      
       audioContextRef.current?.close();
 
       if (analysisIntervalRef.current) {
@@ -1080,18 +1143,17 @@ function LiveDashboardContent() {
                     <span>Smart question generation</span>
                   </div>
                 </div>
-                
+
                 {/* Audio Source Selector */}
                 <div className="mt-8 mb-4">
                   <p className="text-sm text-surface-500 mb-3">Select audio source:</p>
-                  <div className="flex justify-center gap-3">
+                  <div className="flex flex-wrap justify-center gap-3">
                     <button
                       onClick={() => setAudioSource('microphone')}
-                      className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all ${
-                        audioSource === 'microphone'
+                      className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all ${audioSource === 'microphone'
                           ? 'border-primary-500 bg-primary-500/10 text-primary-600'
                           : 'border-surface-200 text-surface-600 hover:border-surface-300'
-                      }`}
+                        }`}
                     >
                       <Mic className="w-5 h-5" />
                       <div className="text-left">
@@ -1101,11 +1163,10 @@ function LiveDashboardContent() {
                     </button>
                     <button
                       onClick={() => setAudioSource('system')}
-                      className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all ${
-                        audioSource === 'system'
+                      className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all ${audioSource === 'system'
                           ? 'border-primary-500 bg-primary-500/10 text-primary-600'
                           : 'border-surface-200 text-surface-600 hover:border-surface-300'
-                      }`}
+                        }`}
                     >
                       <Monitor className="w-5 h-5" />
                       <div className="text-left">
@@ -1113,21 +1174,40 @@ function LiveDashboardContent() {
                         <div className="text-xs opacity-70">Zoom, Teams, etc.</div>
                       </div>
                     </button>
+                    <button
+                      onClick={() => setAudioSource('both')}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all ${audioSource === 'both'
+                          ? 'border-accent-500 bg-accent-500/10 text-accent-600'
+                          : 'border-surface-200 text-surface-600 hover:border-surface-300'
+                        }`}
+                    >
+                      <Headphones className="w-5 h-5" />
+                      <div className="text-left">
+                        <div className="font-medium">Both</div>
+                        <div className="text-xs opacity-70">Mic + System</div>
+                      </div>
+                    </button>
                   </div>
-                  {audioSource === 'system' && (
-                    <p className="mt-3 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
-                      💡 When prompted, select your Zoom/Teams window and check &quot;Share audio&quot; or &quot;Share system audio&quot;
+                  {(audioSource === 'system' || audioSource === 'both') && (
+                    <p className="mt-3 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg max-w-md mx-auto">
+                      💡 When prompted, select your Zoom/Teams/ChatGPT window and check &quot;Share audio&quot;
+                      {audioSource === 'both' && ' — Your mic will also be recorded!'}
                     </p>
                   )}
                 </div>
-                
+
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={startRecording}
                   className="px-8 py-4 bg-gradient-primary text-white font-semibold rounded-2xl shadow-glow hover:shadow-lg transition-shadow"
                 >
-                  {audioSource === 'system' ? (
+                  {audioSource === 'both' ? (
+                    <>
+                      <Headphones className="w-5 h-5 inline mr-2" />
+                      Record Full Conversation
+                    </>
+                  ) : audioSource === 'system' ? (
                     <>
                       <Monitor className="w-5 h-5 inline mr-2" />
                       Capture System Audio
