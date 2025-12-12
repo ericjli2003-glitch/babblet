@@ -80,7 +80,32 @@ function LiveDashboardContent() {
         return prev;
       }
       
-      const newTranscript = [...prev, segment];
+      // Avoid duplicates by text content (in case IDs differ but text is same)
+      const segmentText = segment.text.trim().toLowerCase();
+      if (prev.some(s => s.text.trim().toLowerCase() === segmentText)) {
+        console.log('[Transcript] Skipping duplicate text:', segment.text.slice(0, 30));
+        return prev;
+      }
+      
+      let newTranscript = [...prev, segment];
+      
+      // Memory safeguard: Consolidate old segments if we have too many
+      // Keep last 100 segments to prevent memory issues
+      if (newTranscript.length > 100) {
+        // Merge older segments into fewer chunks
+        const olderSegments = newTranscript.slice(0, -50);
+        const recentSegments = newTranscript.slice(-50);
+        const consolidatedText = olderSegments.map(s => s.text).join(' ');
+        const consolidatedSegment: TranscriptSegment = {
+          id: 'consolidated-' + Date.now(),
+          text: consolidatedText,
+          timestamp: olderSegments[0]?.timestamp || 0,
+          duration: 0,
+          isFinal: true,
+        };
+        newTranscript = [consolidatedSegment, ...recentSegments];
+        console.log('[Transcript] Consolidated old segments to prevent memory issues');
+      }
       
       // Calculate total word count
       const totalWords = newTranscript.reduce((acc, s) => acc + s.text.split(/\s+/).length, 0);
@@ -100,14 +125,14 @@ function LiveDashboardContent() {
       
       return newTranscript;
     });
-  }, []);
+  }, [triggerAsyncQuestionGeneration]);
 
   // Async question generation - non-blocking
   const triggerAsyncQuestionGeneration = useCallback(async (transcriptText: string) => {
     if (!sessionId) return;
-    
+
     console.log('[Questions] Triggering async generation...');
-    
+
     try {
       // First trigger analysis
       const analysisResponse = await fetch('/api/analyze', {
@@ -116,10 +141,10 @@ function LiveDashboardContent() {
         body: JSON.stringify({ sessionId, transcript: transcriptText }),
       });
       const analysisData = await analysisResponse.json();
-      
+
       if (analysisData.analysis) {
         setAnalysis(analysisData.analysis);
-        
+
         // Then trigger question generation
         const questionsResponse = await fetch('/api/generate-questions', {
           method: 'POST',
@@ -134,7 +159,7 @@ function LiveDashboardContent() {
           }),
         });
         const questionsData = await questionsResponse.json();
-        
+
         if (questionsData.questions && Array.isArray(questionsData.questions)) {
           setQuestions((prev) => {
             const updated = { ...prev };
@@ -144,7 +169,7 @@ function LiveDashboardContent() {
                 updated.clarifying.some(eq => eq.question === q.question) ||
                 updated.criticalThinking.some(eq => eq.question === q.question) ||
                 updated.expansion.some(eq => eq.question === q.question);
-              
+
               if (!isDuplicate) {
                 switch (q.category) {
                   case 'clarifying':
@@ -283,73 +308,21 @@ function LiveDashboardContent() {
     return '';
   }, []);
 
-  // Connect to SSE stream for real-time updates
+  // SSE is disabled - Vercel serverless times out after ~60s
+  // We use Pusher for real-time multi-user updates + direct API responses
+  // This avoids the blank screen issue after 3 minutes
   useEffect(() => {
     if (!sessionId) return;
 
-    setConnectionStatus('connecting');
-
-    const eventSource = new EventSource(`/api/stream-presentation?sessionId=${sessionId}`);
-    eventSourceRef.current = eventSource;
-
-    eventSource.onopen = () => {
-      setConnectionStatus('connected');
-    };
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-
-        switch (data.type) {
-          case 'transcript_update':
-            addTranscriptSegment(data.data.segment);
-            break;
-          case 'analysis_update':
-            setAnalysis(data.data.summary);
-            setIsAnalyzing(false);
-            break;
-          case 'question_generated':
-            setQuestions((prev) => {
-              const newQuestions = { ...prev };
-              data.data.questions.forEach((q: GeneratedQuestion) => {
-                switch (q.category) {
-                  case 'clarifying':
-                    newQuestions.clarifying = [...newQuestions.clarifying, q];
-                    break;
-                  case 'critical-thinking':
-                    newQuestions.criticalThinking = [...newQuestions.criticalThinking, q];
-                    break;
-                  case 'expansion':
-                    newQuestions.expansion = [...newQuestions.expansion, q];
-                    break;
-                }
-              });
-              return newQuestions;
-            });
-            setIsGeneratingQuestions(false);
-            break;
-          case 'rubric_update':
-            setRubric(data.data.rubric);
-            break;
-          case 'session_end':
-            setStatus('completed');
-            break;
-          case 'error':
-            console.error('Stream error:', data.data);
-            break;
-        }
-      } catch (e) {
-        console.error('Failed to parse SSE message:', e);
-      }
-    };
-
-    eventSource.onerror = () => {
-      setConnectionStatus('disconnected');
-    };
-
-    return () => {
-      eventSource.close();
-    };
+    // Set connected status - we're using direct API responses which always work
+    setConnectionStatus('connected');
+    
+    // SSE disabled due to Vercel serverless timeout limitations
+    // Real-time updates come from:
+    // 1. Direct API responses (primary)
+    // 2. Pusher (for multi-user sync)
+    
+    console.log('[Session] Connected via direct API + Pusher (SSE disabled for stability)');
   }, [sessionId]);
 
   // Audio level visualization
