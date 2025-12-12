@@ -50,8 +50,8 @@ export async function transcribeAudio(
     console.log(`[Gemini] Transcribing audio: ${audioBuffer.length} bytes, input type: ${mimeType}`);
 
     const client = getGeminiClient();
-    // Use gemini-1.5-pro-latest for stable audio transcription support
-    const model = client.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
+    // Use gemini-2.5-flash for fast audio transcription
+    const model = client.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     // Convert buffer to base64 - ensure no data: prefix
     let base64Audio = audioBuffer.toString('base64');
@@ -93,7 +93,7 @@ export async function transcribeAudio(
         text: 'Transcribe this audio. Return only the spoken words, nothing else. If silent or unclear, return empty string.',
       },
     ];
-    
+
     console.log(`[Gemini] Request payload structure: inlineData.mimeType=${audioMimeType}, inlineData.data.length=${base64Audio.length}, text prompt included`);
 
     // Use the simpler array format that the SDK handles well
@@ -169,9 +169,9 @@ export async function detectSemanticEvents(
 ): Promise<SemanticEvent[]> {
   try {
     const client = getGeminiClient();
-    // Use gemini-1.5-flash-latest for fast semantic analysis
+    // Use gemini-2.5-flash for fast semantic analysis
     const model = client.getGenerativeModel({
-      model: 'gemini-1.5-flash-latest',
+      model: 'gemini-2.5-flash',
       generationConfig: {
         responseMimeType: 'application/json',
       },
