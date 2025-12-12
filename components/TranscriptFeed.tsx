@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Clock, User, Mic } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Clock, Mic } from 'lucide-react';
 import type { TranscriptSegment } from '@/lib/types';
 
 interface TranscriptFeedProps {
@@ -52,12 +52,16 @@ export default function TranscriptFeed({
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom when new segments are added
+  // Combine all segments into a single paragraph
+  const fullTranscript = segments.map(s => s.text).join(' ').trim();
+  const wordCount = fullTranscript ? fullTranscript.split(/\s+/).length : 0;
+
+  // Auto-scroll to bottom when transcript updates
   useEffect(() => {
     if (isLive && bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [segments.length, isLive]);
+  }, [fullTranscript, isLive]);
 
   return (
     <div className="h-full flex flex-col">
@@ -78,12 +82,12 @@ export default function TranscriptFeed({
         </div>
       </div>
 
-      {/* Transcript Content */}
+      {/* Transcript Content - Single Paragraph */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-1 scrollbar-hide"
+        className="flex-1 overflow-y-auto p-4 scrollbar-hide"
       >
-        {segments.length === 0 ? (
+        {!fullTranscript ? (
           <div className="h-full flex flex-col items-center justify-center text-surface-400">
             <Mic className="w-12 h-12 mb-3 opacity-50" />
             <p className="text-sm">
@@ -96,66 +100,24 @@ export default function TranscriptFeed({
             )}
           </div>
         ) : (
-          <AnimatePresence mode="popLayout">
-            {segments.map((segment, index) => (
-              <motion.div
-                key={segment.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="transcript-line group"
-              >
-                <div className="flex items-start gap-3">
-                  {/* Timestamp */}
-                  <span className="flex-shrink-0 text-xs text-surface-400 font-mono mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {formatTimestamp(segment.timestamp)}
-                  </span>
-
-                  {/* Speaker indicator (if available) */}
-                  {segment.speaker && (
-                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gradient-subtle flex items-center justify-center">
-                      <User className="w-3 h-3 text-primary-600" />
-                    </div>
-                  )}
-
-                  {/* Text content */}
-                  <p className="flex-1 text-surface-700 text-sm leading-relaxed">
-                    {highlightText(segment.text, highlightKeywords)}
-                  </p>
-                </div>
-
-                {/* Confidence indicator (subtle) */}
-                {segment.confidence && segment.confidence < 0.8 && (
-                  <div className="ml-8 mt-1">
-                    <span className="text-xs text-surface-400 italic">
-                      (low confidence)
-                    </span>
-                  </div>
-                )}
-              </motion.div>
-            ))}
-          </AnimatePresence>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="prose prose-sm max-w-none"
+          >
+            <p className="text-surface-700 text-base leading-relaxed whitespace-pre-wrap">
+              {highlightText(fullTranscript, highlightKeywords)}
+              {isLive && (
+                <span className="inline-flex items-center ml-1">
+                  <span className="w-0.5 h-4 bg-primary-500 animate-pulse" />
+                </span>
+              )}
+            </p>
+          </motion.div>
         )}
 
         {/* Scroll anchor */}
         <div ref={bottomRef} />
-
-        {/* Typing indicator for live mode */}
-        {isLive && segments.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex items-center gap-2 px-3 py-2 text-surface-400"
-          >
-            <div className="flex gap-1">
-              <span className="w-1.5 h-1.5 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-1.5 h-1.5 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-1.5 h-1.5 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-            </div>
-            <span className="text-xs">Listening...</span>
-          </motion.div>
-        )}
       </div>
 
       {/* Footer with word count */}
@@ -165,11 +127,10 @@ export default function TranscriptFeed({
             {segments.length} segment{segments.length !== 1 ? 's' : ''}
           </span>
           <span>
-            {segments.reduce((acc, seg) => acc + seg.text.split(/\s+/).length, 0)} words
+            {wordCount} word{wordCount !== 1 ? 's' : ''}
           </span>
         </div>
       </div>
     </div>
   );
 }
-

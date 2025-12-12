@@ -68,15 +68,112 @@ function LiveDashboardContent() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const lastWordCountRef = useRef<number>(0);
+  const pendingQuestionGenRef = useRef<boolean>(false);
+
+  // Centralized transcript handler - deduplicates and triggers question generation
+  const addTranscriptSegment = useCallback((segment: TranscriptSegment) => {
+    setTranscript((prev) => {
+      // Avoid duplicates by ID
+      if (prev.some(s => s.id === segment.id)) {
+        console.log('[Transcript] Skipping duplicate segment:', segment.id);
+        return prev;
+      }
+      
+      const newTranscript = [...prev, segment];
+      
+      // Calculate total word count
+      const totalWords = newTranscript.reduce((acc, s) => acc + s.text.split(/\s+/).length, 0);
+      const wordsSinceLastAnalysis = totalWords - lastWordCountRef.current;
+      
+      console.log(`[Transcript] Added segment. Total words: ${totalWords}, since last analysis: ${wordsSinceLastAnalysis}`);
+      
+      // Trigger question generation every 8 new words (non-blocking)
+      if (wordsSinceLastAnalysis >= 8 && !pendingQuestionGenRef.current) {
+        lastWordCountRef.current = totalWords;
+        pendingQuestionGenRef.current = true;
+        
+        // Async question generation - don't block transcript updates
+        const fullText = newTranscript.map(s => s.text).join(' ');
+        triggerAsyncQuestionGeneration(fullText);
+      }
+      
+      return newTranscript;
+    });
+  }, []);
+
+  // Async question generation - non-blocking
+  const triggerAsyncQuestionGeneration = useCallback(async (transcriptText: string) => {
+    if (!sessionId) return;
+    
+    console.log('[Questions] Triggering async generation...');
+    
+    try {
+      // First trigger analysis
+      const analysisResponse = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, transcript: transcriptText }),
+      });
+      const analysisData = await analysisResponse.json();
+      
+      if (analysisData.analysis) {
+        setAnalysis(analysisData.analysis);
+        
+        // Then trigger question generation
+        const questionsResponse = await fetch('/api/generate-questions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId,
+            context: {
+              transcript: transcriptText,
+              claims: analysisData.analysis.keyClaims,
+              gaps: analysisData.analysis.logicalGaps,
+            },
+          }),
+        });
+        const questionsData = await questionsResponse.json();
+        
+        if (questionsData.questions && Array.isArray(questionsData.questions)) {
+          setQuestions((prev) => {
+            const updated = { ...prev };
+            questionsData.questions.forEach((q: GeneratedQuestion) => {
+              // Avoid duplicate questions
+              const isDuplicate =
+                updated.clarifying.some(eq => eq.question === q.question) ||
+                updated.criticalThinking.some(eq => eq.question === q.question) ||
+                updated.expansion.some(eq => eq.question === q.question);
+              
+              if (!isDuplicate) {
+                switch (q.category) {
+                  case 'clarifying':
+                    updated.clarifying = [...updated.clarifying, q];
+                    break;
+                  case 'critical-thinking':
+                    updated.criticalThinking = [...updated.criticalThinking, q];
+                    break;
+                  case 'expansion':
+                    updated.expansion = [...updated.expansion, q];
+                    break;
+                }
+              }
+            });
+            return updated;
+          });
+        }
+      }
+    } catch (e) {
+      console.error('[Questions] Generation failed:', e);
+    } finally {
+      pendingQuestionGenRef.current = false;
+    }
+  }, [sessionId]);
 
   // Pusher callbacks for real-time updates from other users
   const handlePusherTranscript = useCallback((segment: TranscriptSegment) => {
-    setTranscript((prev) => {
-      // Avoid duplicates
-      if (prev.some(s => s.id === segment.id)) return prev;
-      return [...prev, segment];
-    });
-  }, []);
+    addTranscriptSegment(segment);
+  }, [addTranscriptSegment]);
 
   const handlePusherAnalysis = useCallback((analysis: AnalysisSummary) => {
     setAnalysis(analysis);
@@ -205,7 +302,7 @@ function LiveDashboardContent() {
 
         switch (data.type) {
           case 'transcript_update':
-            setTranscript((prev) => [...prev, data.data.segment]);
+            addTranscriptSegment(data.data.segment);
             break;
           case 'analysis_update':
             setAnalysis(data.data.summary);
@@ -345,7 +442,7 @@ function LiveDashboardContent() {
               const data = await response.json();
 
               if (data.segment && data.segment.text) {
-                setTranscript((prev) => [...prev, data.segment]);
+                addTranscriptSegment(data.segment);
               }
 
               if (data.error) {
@@ -424,7 +521,7 @@ function LiveDashboardContent() {
               const response = await fetch('/api/transcribe', { method: 'POST', body: formData });
               const data = await response.json();
               if (data.segment && data.segment.text) {
-                setTranscript((prev) => [...prev, data.segment]);
+                addTranscriptSegment(data.segment);
               }
             } catch (e) {
               console.error('Failed to send final audio chunk:', e);
@@ -519,7 +616,7 @@ function LiveDashboardContent() {
               const data = await response.json();
 
               if (data.segment && data.segment.text) {
-                setTranscript((prev) => [...prev, data.segment]);
+                addTranscriptSegment(data.segment);
               }
 
               if (data.error) {
@@ -601,7 +698,7 @@ function LiveDashboardContent() {
             const response = await fetch('/api/transcribe', { method: 'POST', body: formData });
             const data = await response.json();
             if (data.segment && data.segment.text) {
-              setTranscript((prev) => [...prev, data.segment]);
+              addTranscriptSegment(data.segment);
             }
           } catch (e) {
             console.error('Failed to send final audio chunk:', e);
