@@ -47,50 +47,57 @@ export async function transcribeAudio(
   mimeType: string = 'audio/webm'
 ): Promise<TranscriptSegment | null> {
   try {
-    console.log(`[Gemini] Transcribing audio: ${audioBuffer.length} bytes, type: ${mimeType}`);
+    console.log(`[Gemini] Transcribing audio: ${audioBuffer.length} bytes, input type: ${mimeType}`);
 
     const client = getGeminiClient();
-    // Use gemini-2.0-flash-exp for audio transcription
-    const model = client.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    // Use gemini-1.5-pro-latest for stable audio transcription support
+    const model = client.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
 
-    // Convert buffer to base64
-    const base64Audio = audioBuffer.toString('base64');
-    console.log(`[Gemini] Base64 encoded: ${base64Audio.length} chars`);
+    // Convert buffer to base64 - ensure no data: prefix
+    let base64Audio = audioBuffer.toString('base64');
+    // Strip any data URL prefix if present
+    if (base64Audio.includes(',')) {
+      base64Audio = base64Audio.split(',')[1];
+    }
+    console.log(`[Gemini] Base64 encoded: ${base64Audio.length} chars, first 50: ${base64Audio.slice(0, 50)}`);
 
     // Normalize MIME type - Gemini accepts these audio formats:
-    // audio/wav, audio/mp3, audio/aiff, audio/aac, audio/ogg, audio/flac, audio/webm
-    // Remove codec specifications and use clean MIME type
-    let audioMimeType = 'audio/webm';
+    // audio/wav, audio/mp3, audio/aiff, audio/aac, audio/ogg, audio/flac
+    // Note: audio/webm may not be fully supported, try audio/ogg as fallback
+    let audioMimeType = 'audio/ogg'; // Default to ogg which is well-supported
     if (mimeType.includes('mp3') || mimeType.includes('mpeg')) {
       audioMimeType = 'audio/mp3';
     } else if (mimeType.includes('wav')) {
       audioMimeType = 'audio/wav';
     } else if (mimeType.includes('ogg')) {
       audioMimeType = 'audio/ogg';
-    } else if (mimeType.includes('mp4') || mimeType.includes('m4a')) {
-      audioMimeType = 'audio/mp4';
+    } else if (mimeType.includes('flac')) {
+      audioMimeType = 'audio/flac';
+    } else if (mimeType.includes('aac')) {
+      audioMimeType = 'audio/aac';
+    } else if (mimeType.includes('webm')) {
+      // WebM containers usually have opus codec, try as ogg
+      audioMimeType = 'audio/webm';
     }
     console.log(`[Gemini] Using MIME type: ${audioMimeType}`);
 
-    // Use the correct Gemini API structure with contents/parts format
-    const result = await model.generateContent({
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            {
-              inlineData: {
-                mimeType: audioMimeType,
-                data: base64Audio,
-              },
-            },
-            {
-              text: 'Transcribe this audio accurately. Return ONLY the transcribed text, nothing else. If there is no speech or the audio is unclear, return an empty string.',
-            },
-          ],
+    // Build the request payload for debugging
+    const requestPayload = [
+      {
+        inlineData: {
+          mimeType: audioMimeType,
+          data: base64Audio,
         },
-      ],
-    });
+      },
+      {
+        text: 'Transcribe this audio. Return only the spoken words, nothing else. If silent or unclear, return empty string.',
+      },
+    ];
+    
+    console.log(`[Gemini] Request payload structure: inlineData.mimeType=${audioMimeType}, inlineData.data.length=${base64Audio.length}, text prompt included`);
+
+    // Use the simpler array format that the SDK handles well
+    const result = await model.generateContent(requestPayload);
 
     const response = result.response;
     const text = response.text().trim();
@@ -109,8 +116,18 @@ export async function transcribeAudio(
       duration: 0,
       isFinal: true,
     };
-  } catch (error) {
+  } catch (error: unknown) {
+    // Enhanced error logging
     console.error('[Gemini] Transcription error:', error);
+    if (error && typeof error === 'object') {
+      const err = error as { status?: number; statusText?: string; message?: string; errorDetails?: unknown };
+      console.error('[Gemini] Error details:', {
+        status: err.status,
+        statusText: err.statusText,
+        message: err.message,
+        errorDetails: err.errorDetails,
+      });
+    }
     throw new Error(`Transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -152,9 +169,9 @@ export async function detectSemanticEvents(
 ): Promise<SemanticEvent[]> {
   try {
     const client = getGeminiClient();
-    // Use gemini-1.5-flash for fast semantic analysis
+    // Use gemini-1.5-flash-latest for fast semantic analysis
     const model = client.getGenerativeModel({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-1.5-flash-latest',
       generationConfig: {
         responseMimeType: 'application/json',
       },
