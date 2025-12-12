@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getSession, createSession, addTranscriptSegment, broadcastToSession } from '@/lib/session-store';
-import { transcribeAudio, isGeminiConfigured } from '@/lib/gemini';
+import { transcribeWithWhisper, isOpenAIConfigured } from '@/lib/openai-questions';
 import { broadcastTranscript } from '@/lib/pusher';
 import type { TranscriptSegment } from '@/lib/types';
 
@@ -28,13 +28,13 @@ export async function POST(request: NextRequest) {
       // Note: This is a workaround for serverless - ideally use a database
     }
 
-    // Check if Gemini is configured
-    if (!isGeminiConfigured()) {
-      console.log('[Transcribe] GEMINI_API_KEY not found in environment');
+    // Check if OpenAI is configured (for Whisper)
+    if (!isOpenAIConfigured()) {
+      console.log('[Transcribe] OPENAI_API_KEY not found in environment');
       // Return mock transcript if not configured
       const mockSegment: TranscriptSegment = {
         id: uuidv4(),
-        text: '[Gemini API not configured] Add GEMINI_API_KEY to Vercel environment variables and redeploy.',
+        text: '[OpenAI API not configured] Add OPENAI_API_KEY to Vercel environment variables and redeploy.',
         timestamp: parseInt(timestamp || '0', 10),
         duration: 0,
         isFinal: true,
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: false,
-        error: 'Gemini API not configured - add GEMINI_API_KEY to Vercel environment variables',
+        error: 'OpenAI API not configured - add OPENAI_API_KEY to Vercel environment variables',
         segment: mockSegment,
       });
     }
@@ -62,16 +62,17 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await audioBlob.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Check minimum size
-    if (buffer.length < 1000) {
+    // Check minimum size (Whisper needs at least a few KB of audio)
+    if (buffer.length < 5000) {
+      console.log(`[Transcribe] Audio too small (${buffer.length} bytes), skipping`);
       return NextResponse.json({
         success: true,
         message: 'Audio chunk too small, skipping'
       });
     }
 
-    // Transcribe with Gemini
-    const transcriptResult = await transcribeAudio(buffer, 'audio/webm');
+    // Transcribe with OpenAI Whisper
+    const transcriptResult = await transcribeWithWhisper(buffer, 'audio/webm');
 
     if (transcriptResult && transcriptResult.text) {
       const segment: TranscriptSegment = {

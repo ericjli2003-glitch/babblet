@@ -1,6 +1,6 @@
 // ============================================
-// OpenAI Question Generation
-// Generate insightful questions from presentations
+// OpenAI Integration
+// Whisper transcription + Question generation
 // ============================================
 
 import OpenAI from 'openai';
@@ -12,6 +12,7 @@ import type {
   AnalysisSummary,
   RubricEvaluation,
   RubricScore,
+  TranscriptSegment,
 } from './types';
 
 // Initialize OpenAI client
@@ -30,6 +31,70 @@ function getOpenAIClient(): OpenAI {
 
 export function isOpenAIConfigured(): boolean {
   return !!process.env.OPENAI_API_KEY;
+}
+
+// ============================================
+// Whisper Audio Transcription
+// ============================================
+
+export async function transcribeWithWhisper(
+  audioBuffer: Buffer,
+  mimeType: string = 'audio/webm'
+): Promise<TranscriptSegment | null> {
+  try {
+    console.log(`[Whisper] Transcribing audio: ${audioBuffer.length} bytes, type: ${mimeType}`);
+    
+    const client = getOpenAIClient();
+    
+    // Determine file extension from mime type
+    let extension = 'webm';
+    if (mimeType.includes('mp3') || mimeType.includes('mpeg')) {
+      extension = 'mp3';
+    } else if (mimeType.includes('wav')) {
+      extension = 'wav';
+    } else if (mimeType.includes('m4a')) {
+      extension = 'm4a';
+    } else if (mimeType.includes('ogg')) {
+      extension = 'ogg';
+    } else if (mimeType.includes('mp4')) {
+      extension = 'mp4';
+    }
+    
+    // Create a File object from the buffer
+    const file = new File(
+      [new Uint8Array(audioBuffer)],
+      `audio.${extension}`,
+      { type: mimeType }
+    );
+    
+    console.log(`[Whisper] Sending file: audio.${extension}, size: ${file.size} bytes`);
+    
+    const transcription = await client.audio.transcriptions.create({
+      file: file,
+      model: 'whisper-1',
+      response_format: 'text',
+    });
+    
+    const text = transcription.trim();
+    
+    console.log(`[Whisper] Transcription result: "${text.slice(0, 100)}${text.length > 100 ? '...' : ''}"`);
+    
+    if (!text || text.length === 0) {
+      console.log('[Whisper] No speech detected');
+      return null;
+    }
+    
+    return {
+      id: uuidv4(),
+      text,
+      timestamp: Date.now(),
+      duration: 0,
+      isFinal: true,
+    };
+  } catch (error) {
+    console.error('[Whisper] Transcription error:', error);
+    throw new Error(`Whisper transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
 // ============================================
