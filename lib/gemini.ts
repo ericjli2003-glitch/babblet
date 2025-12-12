@@ -50,8 +50,8 @@ export async function transcribeAudio(
     console.log(`[Gemini] Transcribing audio: ${audioBuffer.length} bytes, type: ${mimeType}`);
 
     const client = getGeminiClient();
-    // Use gemini-1.5-pro for stable audio support
-    const model = client.getGenerativeModel({ model: 'gemini-1.5-pro' });
+    // Use gemini-2.0-flash-exp for audio transcription
+    const model = client.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
     // Convert buffer to base64
     const base64Audio = audioBuffer.toString('base64');
