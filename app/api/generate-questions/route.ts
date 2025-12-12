@@ -5,9 +5,28 @@ import { generateQuestionsFromTranscript, isOpenAIConfigured } from '@/lib/opena
 import { broadcastQuestions } from '@/lib/pusher';
 import type { GeneratedQuestion, QuestionCategory, QuestionDifficulty } from '@/lib/types';
 
+// Force dynamic rendering (required for POST handlers on Vercel)
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
+// GET handler for testing endpoint existence
+export async function GET() {
+  console.log('[generate-questions] GET request received - endpoint is alive');
+  return NextResponse.json({ 
+    status: 'ok', 
+    endpoint: '/api/generate-questions',
+    method: 'POST required for question generation'
+  });
+}
+
 export async function POST(request: NextRequest) {
+  console.log('[generate-questions] POST request received');
+  
   try {
-    const { sessionId, context } = await request.json();
+    const body = await request.json();
+    const { sessionId, context } = body;
+    
+    console.log('[generate-questions] Session:', sessionId, 'Has context:', !!context);
 
     if (!sessionId) {
       return NextResponse.json(
@@ -70,11 +89,15 @@ export async function POST(request: NextRequest) {
     // Broadcast via Pusher for real-time multi-user support
     await broadcastQuestions(sessionId, questions);
 
+    console.log('[generate-questions] Success, generated', questions.length, 'questions');
     return NextResponse.json({ success: true, questions });
   } catch (error) {
-    console.error('Question generation error:', error);
+    console.error('[generate-questions] Error:', error);
     return NextResponse.json(
-      { error: 'Failed to generate questions' },
+      { 
+        error: 'Failed to generate questions',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
