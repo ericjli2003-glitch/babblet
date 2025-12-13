@@ -441,13 +441,13 @@ function LiveDashboardContent() {
         }
       };
 
-      // Stop and restart recorder every 10 seconds to create complete segments
+      // Stop and restart recorder every 4 seconds for near real-time transcription
       sendAudioIntervalRef.current = setInterval(() => {
         if (mediaRecorderRef.current?.state === 'recording') {
           console.log('[Video] Stopping recorder for segment...');
           mediaRecorderRef.current.stop();
         }
-      }, 10000);
+      }, 4000);
 
       // Start recording (onstop handler will send and restart)
       mediaRecorder.start();
@@ -616,13 +616,13 @@ function LiveDashboardContent() {
         const systemSource = tempAudioContext.createMediaStreamSource(displayStream);
         const destination = tempAudioContext.createMediaStreamDestination();
         systemSource.connect(destination);
-        
+
         // Use the destination stream which has proper audio
         stream = destination.stream;
-        
+
         // Store the original display stream for cleanup
         (streamRef as any).displayStream = displayStream;
-        
+
         // Stop video track after we've set up audio routing
         displayStream.getVideoTracks().forEach(track => track.stop());
 
@@ -716,19 +716,19 @@ function LiveDashboardContent() {
         }
       };
 
-      // Stop and restart recorder every 10 seconds to create complete segments
+      // Stop and restart recorder every 4 seconds for near real-time transcription
       sendAudioIntervalRef.current = setInterval(() => {
         if (mediaRecorderRef.current?.state === 'recording') {
           console.log('[Live] Stopping recorder for segment...');
           mediaRecorderRef.current.stop();
         }
-      }, 10000);
+      }, 4000);
 
       // Start recording
       mediaRecorder.start();
       setIsRecording(true);
       setStatus('recording');
-      
+
       console.log('[Live] Recording started!');
       console.log('[Live] MediaRecorder state:', mediaRecorder.state);
       console.log('[Live] Stream active:', stream.active);
