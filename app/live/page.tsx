@@ -130,11 +130,11 @@ function LiveDashboardContent() {
 
       if (analysisData.analysis) {
         setAnalysis(analysisData.analysis);
-        
+
         // Add timeline markers for issues/gaps detected
         const issueMarkers: TimelineMarker[] = [];
         const capturedTime = currentTime;
-        
+
         // Add markers for logical gaps
         analysisData.analysis.logicalGaps?.forEach((gap: { id: string; description: string; severity?: string }) => {
           issueMarkers.push({
@@ -145,7 +145,7 @@ function LiveDashboardContent() {
             description: `Severity: ${gap.severity || 'moderate'}`,
           });
         });
-        
+
         // Add markers for key claims (as insights)
         analysisData.analysis.keyClaims?.slice(0, 2).forEach((claim: { id: string; claim: string }) => {
           issueMarkers.push({
@@ -156,7 +156,7 @@ function LiveDashboardContent() {
             description: 'Key claim identified',
           });
         });
-        
+
         if (issueMarkers.length > 0) {
           setTimelineMarkers(prev => [...prev, ...issueMarkers]);
         }
@@ -184,10 +184,10 @@ function LiveDashboardContent() {
         if (questionsData.questions && Array.isArray(questionsData.questions)) {
           const currentVideoTime = currentTime; // Capture current time for markers
           
+          // First, update questions state
           setQuestions((prev) => {
             const updated = { ...prev };
-            const newMarkers: TimelineMarker[] = [];
-            
+
             questionsData.questions.forEach((q: GeneratedQuestion) => {
               // Avoid duplicate questions
               const isDuplicate =
@@ -196,16 +196,6 @@ function LiveDashboardContent() {
                 updated.expansion.some(eq => eq.question === q.question);
 
               if (!isDuplicate) {
-                // Add timeline marker for this question
-                newMarkers.push({
-                  id: `q-${q.id}`,
-                  timestamp: currentVideoTime,
-                  type: 'question',
-                  title: q.question.slice(0, 60) + (q.question.length > 60 ? '...' : ''),
-                  description: q.rationale,
-                  category: q.category,
-                });
-                
                 switch (q.category) {
                   case 'clarifying':
                     updated.clarifying = [...updated.clarifying, q];
@@ -219,14 +209,28 @@ function LiveDashboardContent() {
                 }
               }
             });
-            
-            // Add new markers
-            if (newMarkers.length > 0) {
-              setTimelineMarkers(prev => [...prev, ...newMarkers]);
-            }
-            
+
             return updated;
           });
+          
+          // Then, separately add timeline markers for new questions
+          const questionMarkers: TimelineMarker[] = questionsData.questions.map((q: GeneratedQuestion) => ({
+            id: `q-${q.id}`,
+            timestamp: currentVideoTime,
+            type: 'question' as const,
+            title: q.question.slice(0, 60) + (q.question.length > 60 ? '...' : ''),
+            description: q.rationale,
+            category: q.category,
+          }));
+          
+          if (questionMarkers.length > 0) {
+            setTimelineMarkers(prev => {
+              // Avoid duplicate markers
+              const existingIds = new Set(prev.map(m => m.id));
+              const newMarkers = questionMarkers.filter(m => !existingIds.has(m.id));
+              return [...prev, ...newMarkers];
+            });
+          }
         }
       }
     } catch (e) {
@@ -1392,10 +1396,10 @@ function LiveDashboardContent() {
           <button
             onClick={() => setShowSlidesPanel(!showSlidesPanel)}
             className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${slideFile
-                ? 'bg-emerald-100 text-emerald-600'
-                : showSlidesPanel
-                  ? 'bg-primary-100 text-primary-600'
-                  : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
+              ? 'bg-emerald-100 text-emerald-600'
+              : showSlidesPanel
+                ? 'bg-primary-100 text-primary-600'
+                : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
               }`}
             title={slideFile ? 'Slides uploaded' : 'Upload slides'}
           >
@@ -1713,8 +1717,8 @@ function LiveDashboardContent() {
                     <button
                       onClick={() => setHighlightKeywords(!highlightKeywords)}
                       className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${highlightKeywords
-                          ? 'bg-primary-100 text-primary-700'
-                          : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
+                        ? 'bg-primary-100 text-primary-700'
+                        : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
                         }`}
                     >
                       <Highlighter className="w-4 h-4" />
