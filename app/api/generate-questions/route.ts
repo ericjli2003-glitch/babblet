@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[generate-questions] Transcript length:', transcript.length, 'chars');
-    
+
     // Extract slide content if provided
     const slideContent = context?.slideContent;
     if (slideContent) {

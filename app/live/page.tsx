@@ -33,6 +33,7 @@ import QuestionBank from '@/components/QuestionBank';
 import SummaryCard from '@/components/SummaryCard';
 import RubricCard from '@/components/RubricCard';
 import SlideUpload from '@/components/SlideUpload';
+import VideoTimeline, { type TimelineMarker } from '@/components/VideoTimeline';
 import { usePusher } from '@/lib/hooks/usePusher';
 import { useDeepgramStream } from '@/lib/hooks/useDeepgramStream';
 import type {
@@ -104,6 +105,7 @@ function LiveDashboardContent() {
     topics?: string[];
   } | null>(null);
   const [showSlidesPanel, setShowSlidesPanel] = useState(false);
+  const [timelineMarkers, setTimelineMarkers] = useState<TimelineMarker[]>([]);
   const [linkCopied, setLinkCopied] = useState(false);
   const [audioSource, setAudioSource] = useState<'microphone' | 'system' | 'both'>('microphone');
   const [interimTranscript, setInterimTranscript] = useState<string>('');
@@ -128,6 +130,36 @@ function LiveDashboardContent() {
 
       if (analysisData.analysis) {
         setAnalysis(analysisData.analysis);
+        
+        // Add timeline markers for issues/gaps detected
+        const issueMarkers: TimelineMarker[] = [];
+        const capturedTime = currentTime;
+        
+        // Add markers for logical gaps
+        analysisData.analysis.logicalGaps?.forEach((gap: { id: string; description: string; severity?: string }) => {
+          issueMarkers.push({
+            id: `gap-${gap.id}`,
+            timestamp: capturedTime,
+            type: 'issue',
+            title: gap.description.slice(0, 50) + (gap.description.length > 50 ? '...' : ''),
+            description: `Severity: ${gap.severity || 'moderate'}`,
+          });
+        });
+        
+        // Add markers for key claims (as insights)
+        analysisData.analysis.keyClaims?.slice(0, 2).forEach((claim: { id: string; claim: string }) => {
+          issueMarkers.push({
+            id: `claim-${claim.id}`,
+            timestamp: capturedTime,
+            type: 'insight',
+            title: claim.claim.slice(0, 50) + (claim.claim.length > 50 ? '...' : ''),
+            description: 'Key claim identified',
+          });
+        });
+        
+        if (issueMarkers.length > 0) {
+          setTimelineMarkers(prev => [...prev, ...issueMarkers]);
+        }
 
         // Then trigger question generation with slide context if available
         const questionsResponse = await fetch('/api/generate-questions', {
@@ -150,8 +182,12 @@ function LiveDashboardContent() {
         const questionsData = await questionsResponse.json();
 
         if (questionsData.questions && Array.isArray(questionsData.questions)) {
+          const currentVideoTime = currentTime; // Capture current time for markers
+          
           setQuestions((prev) => {
             const updated = { ...prev };
+            const newMarkers: TimelineMarker[] = [];
+            
             questionsData.questions.forEach((q: GeneratedQuestion) => {
               // Avoid duplicate questions
               const isDuplicate =
@@ -160,6 +196,16 @@ function LiveDashboardContent() {
                 updated.expansion.some(eq => eq.question === q.question);
 
               if (!isDuplicate) {
+                // Add timeline marker for this question
+                newMarkers.push({
+                  id: `q-${q.id}`,
+                  timestamp: currentVideoTime,
+                  type: 'question',
+                  title: q.question.slice(0, 60) + (q.question.length > 60 ? '...' : ''),
+                  description: q.rationale,
+                  category: q.category,
+                });
+                
                 switch (q.category) {
                   case 'clarifying':
                     updated.clarifying = [...updated.clarifying, q];
@@ -173,6 +219,12 @@ function LiveDashboardContent() {
                 }
               }
             });
+            
+            // Add new markers
+            if (newMarkers.length > 0) {
+              setTimelineMarkers(prev => [...prev, ...newMarkers]);
+            }
+            
             return updated;
           });
         }
@@ -1082,6 +1134,61 @@ function LiveDashboardContent() {
     }
   }, [isPlaying]);
 
+  // Keyboard controls for video
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // Only handle when in video/upload mode
+      if (mode !== 'upload' || !videoRef.current) return;
+
+      switch (e.code) {
+        case 'Space':
+          e.preventDefault();
+          togglePlayPause();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          if (videoRef.current) {
+            const newTime = Math.max(0, videoRef.current.currentTime - 5);
+            videoRef.current.currentTime = newTime;
+            setCurrentTime(newTime * 1000);
+          }
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          if (videoRef.current) {
+            const newTime = Math.min(videoDuration, videoRef.current.currentTime + 5);
+            videoRef.current.currentTime = newTime;
+            setCurrentTime(newTime * 1000);
+          }
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          if (videoRef.current) {
+            const newTime = Math.max(0, videoRef.current.currentTime - 10);
+            videoRef.current.currentTime = newTime;
+            setCurrentTime(newTime * 1000);
+          }
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          if (videoRef.current) {
+            const newTime = Math.min(videoDuration, videoRef.current.currentTime + 10);
+            videoRef.current.currentTime = newTime;
+            setCurrentTime(newTime * 1000);
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [mode, videoDuration, togglePlayPause]);
+
   // Format time
   const formatTime = (ms: number) => {
     const seconds = Math.floor(ms / 1000);
@@ -1284,13 +1391,12 @@ function LiveDashboardContent() {
           {/* Slides upload button */}
           <button
             onClick={() => setShowSlidesPanel(!showSlidesPanel)}
-            className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${
-              slideFile
+            className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${slideFile
                 ? 'bg-emerald-100 text-emerald-600'
                 : showSlidesPanel
-                ? 'bg-primary-100 text-primary-600'
-                : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
-            }`}
+                  ? 'bg-primary-100 text-primary-600'
+                  : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
+              }`}
             title={slideFile ? 'Slides uploaded' : 'Upload slides'}
           >
             <Presentation className="w-5 h-5" />
@@ -1527,20 +1633,22 @@ function LiveDashboardContent() {
                       {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
                     </button>
 
-                    {/* Progress Bar */}
-                    <div className="flex-1 relative">
-                      <input
-                        type="range"
-                        min={0}
-                        max={videoDuration || 100}
-                        value={currentTime / 1000}
-                        onChange={(e) => {
+                    {/* Timeline with Markers */}
+                    <div className="flex-1">
+                      <VideoTimeline
+                        currentTime={currentTime}
+                        duration={videoDuration}
+                        markers={timelineMarkers}
+                        onSeek={(timeMs) => {
                           if (videoRef.current) {
-                            videoRef.current.currentTime = parseFloat(e.target.value);
-                            setCurrentTime(parseFloat(e.target.value) * 1000);
+                            videoRef.current.currentTime = timeMs / 1000;
+                            setCurrentTime(timeMs);
                           }
                         }}
-                        className="w-full h-2 bg-surface-700 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary-500 [&::-webkit-slider-thumb]:cursor-pointer"
+                        onMarkerClick={(marker) => {
+                          console.log('[Timeline] Marker clicked:', marker);
+                          // Could show a modal or highlight the question/issue
+                        }}
                       />
                     </div>
 
@@ -1604,11 +1712,10 @@ function LiveDashboardContent() {
                   <div className="flex items-center justify-end px-4 pt-4 gap-2">
                     <button
                       onClick={() => setHighlightKeywords(!highlightKeywords)}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                        highlightKeywords
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${highlightKeywords
                           ? 'bg-primary-100 text-primary-700'
                           : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
-                      }`}
+                        }`}
                     >
                       <Highlighter className="w-4 h-4" />
                       {highlightKeywords ? 'Highlighting On' : 'Highlight Keywords'}

@@ -89,7 +89,7 @@ Respond ONLY with the JSON, no additional text.`;
 
   try {
     console.log('[Claude] Generating questions...');
-    
+
     const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
@@ -109,7 +109,7 @@ Respond ONLY with the JSON, no additional text.`;
     }
 
     const responseText = textContent.text.trim();
-    
+
     // Parse JSON from response
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
@@ -117,7 +117,7 @@ Respond ONLY with the JSON, no additional text.`;
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
-    
+
     const questions: GeneratedQuestion[] = (parsed.questions || []).map((q: any) => ({
       id: uuidv4(),
       question: q.question,
@@ -170,7 +170,7 @@ Respond ONLY with the JSON, no additional text.`;
 
   try {
     console.log('[Claude] Analyzing transcript...');
-    
+
     const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 2048,
