@@ -56,7 +56,7 @@ function LiveDashboardContent() {
   const [currentTime, setCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const [transcript, setTranscriptState] = useState<TranscriptSegment[]>([]);
-  
+
   // Wrapper to log transcript changes
   const setTranscript: typeof setTranscriptState = useCallback((action) => {
     setTranscriptState((prev) => {
@@ -68,7 +68,7 @@ function LiveDashboardContent() {
       return newValue;
     });
   }, []);
-  
+
   // Keep a ref to always have latest transcript (for debugging)
   const transcriptRef = useRef(transcript);
   transcriptRef.current = transcript;
@@ -80,7 +80,7 @@ function LiveDashboardContent() {
   }>({ clarifying: [], criticalThinking: [], expansion: [] });
   const [rubric, setRubric] = useState<RubricEvaluation | null>(null);
   const [activePanel, setActivePanelState] = useState<ActivePanel>('transcript');
-  
+
   // Wrapper to log panel changes
   const setActivePanel = useCallback((panel: ActivePanel) => {
     console.log('[DEBUG] Panel changing to:', panel, 'Current transcript:', transcriptRef.current.length, 'segments');
@@ -730,6 +730,8 @@ function LiveDashboardContent() {
         const connected = await deepgramStream.connect(stream);
         if (connected) {
           console.log('[Live] Deepgram streaming connected - real-time transcription enabled');
+          startTimeRef.current = Date.now(); // Initialize timer
+          setCurrentTime(0); // Reset timer display
           setIsRecording(true);
           setStatus('recording');
           updateAudioLevel();
@@ -1036,8 +1038,16 @@ function LiveDashboardContent() {
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isRecording) {
+      // Ensure startTimeRef is set
+      if (!startTimeRef.current || startTimeRef.current === 0) {
+        startTimeRef.current = Date.now();
+      }
       interval = setInterval(() => {
-        setCurrentTime(Date.now() - startTimeRef.current);
+        const elapsed = Date.now() - startTimeRef.current;
+        // Sanity check - if elapsed time is negative or more than 24 hours, something is wrong
+        if (elapsed >= 0 && elapsed < 86400000) {
+          setCurrentTime(elapsed);
+        }
       }, 1000);
     }
     return () => clearInterval(interval);
