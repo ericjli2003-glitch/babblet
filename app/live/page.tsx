@@ -76,60 +76,6 @@ function LiveDashboardContent() {
   const [useStreamingTranscription, setUseStreamingTranscription] = useState(true);
   const lastWordCountRef = useRef<number>(0);
   const pendingQuestionGenRef = useRef<boolean>(false);
-  
-  // Deepgram streaming for real-time transcription
-  const handleFinalTranscript = useCallback((text: string) => {
-    if (!text.trim()) return;
-    
-    const segment: TranscriptSegment = {
-      id: `stream-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      text: text.trim(),
-      timestamp: Date.now(),
-      duration: 0,
-      isFinal: true,
-    };
-    
-    // Clear interim and add to permanent transcript
-    setInterimTranscript('');
-    setTranscript((prev) => {
-      // Avoid duplicates
-      const segmentText = text.trim().toLowerCase();
-      if (prev.some(s => s.text.trim().toLowerCase() === segmentText)) {
-        return prev;
-      }
-      
-      const newTranscript = [...prev, segment];
-      
-      // Trigger question generation
-      const totalWords = newTranscript.reduce((acc, s) => acc + s.text.split(/\s+/).length, 0);
-      const wordsSinceLastAnalysis = totalWords - lastWordCountRef.current;
-      
-      if (wordsSinceLastAnalysis >= 8 && !pendingQuestionGenRef.current && sessionId) {
-        lastWordCountRef.current = totalWords;
-        pendingQuestionGenRef.current = true;
-        const fullText = newTranscript.map(s => s.text).join(' ');
-        triggerAsyncQuestionGeneration(fullText);
-      }
-      
-      return newTranscript;
-    });
-  }, [sessionId, triggerAsyncQuestionGeneration]);
-  
-  const handleInterimTranscript = useCallback((text: string) => {
-    setInterimTranscript(text);
-  }, []);
-  
-  const handleStreamError = useCallback((error: string) => {
-    console.error('[Deepgram Stream] Error:', error);
-    // Fall back to batch transcription
-    setUseStreamingTranscription(false);
-  }, []);
-  
-  const deepgramStream = useDeepgramStream({
-    onFinalTranscript: handleFinalTranscript,
-    onInterimTranscript: handleInterimTranscript,
-    onError: handleStreamError,
-  });
 
   // Async question generation - non-blocking (defined first to avoid hoisting issues)
   const triggerAsyncQuestionGeneration = useCallback(async (transcriptText: string) => {
@@ -198,6 +144,60 @@ function LiveDashboardContent() {
       pendingQuestionGenRef.current = false;
     }
   }, [sessionId]);
+
+  // Deepgram streaming callbacks for real-time transcription
+  const handleFinalTranscript = useCallback((text: string) => {
+    if (!text.trim()) return;
+
+    const segment: TranscriptSegment = {
+      id: `stream-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      text: text.trim(),
+      timestamp: Date.now(),
+      duration: 0,
+      isFinal: true,
+    };
+
+    // Clear interim and add to permanent transcript
+    setInterimTranscript('');
+    setTranscript((prev) => {
+      // Avoid duplicates
+      const segmentText = text.trim().toLowerCase();
+      if (prev.some(s => s.text.trim().toLowerCase() === segmentText)) {
+        return prev;
+      }
+
+      const newTranscript = [...prev, segment];
+
+      // Trigger question generation
+      const totalWords = newTranscript.reduce((acc, s) => acc + s.text.split(/\s+/).length, 0);
+      const wordsSinceLastAnalysis = totalWords - lastWordCountRef.current;
+
+      if (wordsSinceLastAnalysis >= 8 && !pendingQuestionGenRef.current && sessionId) {
+        lastWordCountRef.current = totalWords;
+        pendingQuestionGenRef.current = true;
+        const fullText = newTranscript.map(s => s.text).join(' ');
+        triggerAsyncQuestionGeneration(fullText);
+      }
+
+      return newTranscript;
+    });
+  }, [sessionId, triggerAsyncQuestionGeneration]);
+
+  const handleInterimTranscript = useCallback((text: string) => {
+    setInterimTranscript(text);
+  }, []);
+
+  const handleStreamError = useCallback((error: string) => {
+    console.error('[Deepgram Stream] Error:', error);
+    // Fall back to batch transcription
+    setUseStreamingTranscription(false);
+  }, []);
+
+  const deepgramStream = useDeepgramStream({
+    onFinalTranscript: handleFinalTranscript,
+    onInterimTranscript: handleInterimTranscript,
+    onError: handleStreamError,
+  });
 
   // Centralized transcript handler - deduplicates and triggers question generation
   const addTranscriptSegment = useCallback((segment: TranscriptSegment) => {
@@ -711,7 +711,7 @@ function LiveDashboardContent() {
           setIsRecording(true);
           setStatus('recording');
           updateAudioLevel();
-          
+
           // Start periodic analysis (questions still need batched transcript)
           analysisIntervalRef.current = setInterval(() => {
             const now = Date.now();
@@ -720,7 +720,7 @@ function LiveDashboardContent() {
               lastAnalysisTimeRef.current = now;
             }
           }, 5000);
-          
+
           return; // Using streaming, skip batch setup
         } else {
           console.log('[Live] Deepgram streaming failed, falling back to batch transcription');
@@ -730,7 +730,7 @@ function LiveDashboardContent() {
 
       // Fallback: Batch transcription setup
       console.log('[Live] Using batch transcription mode');
-      
+
       // Set up MediaRecorder with best supported format
       const mimeType = getSupportedMimeType();
       audioMimeTypeRef.current = mimeType || 'audio/webm';
@@ -843,11 +843,11 @@ function LiveDashboardContent() {
       deepgramStream.disconnect();
       setInterimTranscript('');
     }
-    
+
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
-    
+
     if (isRecording) {
       streamRef.current?.getTracks().forEach((track) => track.stop());
 

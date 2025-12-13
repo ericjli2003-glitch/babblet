@@ -57,7 +57,7 @@ export default function TranscriptFeed({
   // Combine all segments into a single paragraph
   const fullTranscript = segments.map(s => s.text).join(' ').trim();
   const wordCount = fullTranscript ? fullTranscript.split(/\s+/).length : 0;
-  
+
   // Display text includes interim (real-time) transcription
   const hasInterim = interimText.trim().length > 0;
 
