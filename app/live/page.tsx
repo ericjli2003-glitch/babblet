@@ -1727,84 +1727,54 @@ function LiveDashboardContent() {
             </div>
           </div>
 
-          {/* Panel content */}
+          {/* Panel content - using simple conditional rendering for stability */}
           <div className="flex-1 overflow-hidden bg-surface-50">
-            <AnimatePresence mode="sync">
-              {activePanel === 'transcript' && (
-                <motion.div
-                  key="transcript"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  className="h-full flex flex-col"
+            {/* Transcript Panel */}
+            <div className={`h-full flex flex-col ${activePanel === 'transcript' ? '' : 'hidden'}`}>
+              {/* Transcript toolbar */}
+              <div className="flex items-center justify-end px-4 pt-4 gap-2">
+                <button
+                  onClick={() => setHighlightKeywords(!highlightKeywords)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${highlightKeywords
+                    ? 'bg-primary-100 text-primary-700'
+                    : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
+                    }`}
                 >
-                  {/* Transcript toolbar */}
-                  <div className="flex items-center justify-end px-4 pt-4 gap-2">
-                    <button
-                      onClick={() => setHighlightKeywords(!highlightKeywords)}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${highlightKeywords
-                        ? 'bg-primary-100 text-primary-700'
-                        : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
-                        }`}
-                    >
-                      <Highlighter className="w-4 h-4" />
-                      {highlightKeywords ? 'Highlighting On' : 'Highlight Keywords'}
-                    </button>
-                  </div>
-                  <div className="flex-1 bg-white mx-4 mb-4 rounded-3xl shadow-soft overflow-hidden">
-                    <TranscriptFeed
-                      segments={transcript}
-                      isLive={isRecording || isPlaying}
-                      currentTime={currentTime}
-                      highlightKeywords={highlightKeywords ? (analysis?.keyClaims.flatMap((c) => c.claim.split(' ').slice(0, 3)) || []) : []}
-                      interimText={interimTranscript}
-                    />
-                  </div>
-                </motion.div>
-              )}
+                  <Highlighter className="w-4 h-4" />
+                  {highlightKeywords ? 'Highlighting On' : 'Highlight Keywords'}
+                </button>
+              </div>
+              <div className="flex-1 bg-white mx-4 mb-4 rounded-3xl shadow-soft overflow-hidden">
+                <TranscriptFeed
+                  segments={transcript}
+                  isLive={isRecording || isPlaying}
+                  currentTime={currentTime}
+                  highlightKeywords={highlightKeywords ? (analysis?.keyClaims.flatMap((c) => c.claim.split(' ').slice(0, 3)) || []) : []}
+                  interimText={interimTranscript}
+                />
+              </div>
+            </div>
 
-              {activePanel === 'analysis' && (
-                <motion.div
-                  key="analysis"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  className="h-full"
-                >
-                  <div className="h-full bg-white m-4 rounded-3xl shadow-soft overflow-hidden">
-                    <SummaryCard analysis={analysis} isLoading={isAnalyzing} />
-                  </div>
-                </motion.div>
-              )}
+            {/* Analysis Panel */}
+            <div className={`h-full ${activePanel === 'analysis' ? '' : 'hidden'}`}>
+              <div className="h-full bg-white m-4 rounded-3xl shadow-soft overflow-hidden">
+                <SummaryCard analysis={analysis} isLoading={isAnalyzing} />
+              </div>
+            </div>
 
-              {activePanel === 'questions' && (
-                <motion.div
-                  key="questions"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  className="h-full"
-                >
-                  <div className="h-full bg-white m-4 rounded-3xl shadow-soft overflow-hidden">
-                    <QuestionBank questions={questions} isLoading={isGeneratingQuestions} />
-                  </div>
-                </motion.div>
-              )}
+            {/* Questions Panel */}
+            <div className={`h-full ${activePanel === 'questions' ? '' : 'hidden'}`}>
+              <div className="h-full bg-white m-4 rounded-3xl shadow-soft overflow-hidden">
+                <QuestionBank questions={questions} isLoading={isGeneratingQuestions} />
+              </div>
+            </div>
 
-              {activePanel === 'rubric' && (
-                <motion.div
-                  key="rubric"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  className="h-full"
-                >
-                  <div className="h-full bg-white m-4 rounded-3xl shadow-soft overflow-hidden">
-                    <RubricCard rubric={rubric} isLoading={status === 'processing'} />
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* Rubric Panel */}
+            <div className={`h-full ${activePanel === 'rubric' ? '' : 'hidden'}`}>
+              <div className="h-full bg-white m-4 rounded-3xl shadow-soft overflow-hidden">
+                <RubricCard rubric={rubric} isLoading={status === 'processing'} />
+              </div>
+            </div>
           </div>
         </main>
       </div>
