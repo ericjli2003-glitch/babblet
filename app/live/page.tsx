@@ -85,12 +85,30 @@ function LiveDashboardContent() {
   }>({ clarifying: [], criticalThinking: [], expansion: [] });
   const [rubric, setRubric] = useState<RubricEvaluation | null>(null);
   const [activePanel, setActivePanelState] = useState<ActivePanel>('transcript');
-
+  
   // Wrapper to log panel changes
   const setActivePanel = useCallback((panel: ActivePanel) => {
-    console.log('[DEBUG] Panel changing to:', panel, 'Current transcript:', transcriptRef.current.length, 'segments');
+    console.log('[DEBUG] Panel changing to:', panel);
+    console.log('[DEBUG] Current transcript:', transcriptRef.current.length, 'segments');
+    console.log('[DEBUG] Current questions:', questionsRef.current);
     setActivePanelState(panel);
+    // Log state after a tick to see if it persists
+    setTimeout(() => {
+      console.log('[DEBUG] After panel change - transcript:', transcriptRef.current.length, 'questions:', questionsRef.current);
+    }, 100);
   }, []);
+  
+  // Keep refs for questions too
+  const questionsRef = useRef({ clarifying: 0, criticalThinking: 0, expansion: 0 });
+  
+  // Update questionsRef when questions change
+  useEffect(() => {
+    questionsRef.current = {
+      clarifying: questions.clarifying.length,
+      criticalThinking: questions.criticalThinking.length,
+      expansion: questions.expansion.length,
+    };
+  }, [questions]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');

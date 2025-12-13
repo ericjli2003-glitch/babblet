@@ -38,7 +38,7 @@ export function usePusher({
 
     const pusherRef = useRef<Pusher | null>(null);
     const channelRef = useRef<Channel | null>(null);
-    
+
     // Store callbacks in refs to avoid re-triggering the connection effect
     const callbacksRef = useRef({
         onTranscript,
@@ -47,7 +47,7 @@ export function usePusher({
         onRubric,
         onStatusChange,
     });
-    
+
     // Update refs when callbacks change (without triggering reconnection)
     useEffect(() => {
         callbacksRef.current = {
