@@ -10,6 +10,7 @@ interface TranscriptFeedProps {
   isLive?: boolean;
   currentTime?: number;
   highlightKeywords?: string[];
+  interimText?: string; // Real-time interim transcription
 }
 
 function formatTimestamp(ms: number): string {
@@ -48,6 +49,7 @@ export default function TranscriptFeed({
   isLive = false,
   currentTime = 0,
   highlightKeywords = [],
+  interimText = '',
 }: TranscriptFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -55,6 +57,9 @@ export default function TranscriptFeed({
   // Combine all segments into a single paragraph
   const fullTranscript = segments.map(s => s.text).join(' ').trim();
   const wordCount = fullTranscript ? fullTranscript.split(/\s+/).length : 0;
+  
+  // Display text includes interim (real-time) transcription
+  const hasInterim = interimText.trim().length > 0;
 
   // Auto-scroll to bottom when transcript updates
   useEffect(() => {
@@ -87,7 +92,7 @@ export default function TranscriptFeed({
         ref={containerRef}
         className="flex-1 overflow-y-auto p-4 scrollbar-hide"
       >
-        {!fullTranscript ? (
+        {!fullTranscript && !hasInterim ? (
           <div className="h-full flex flex-col items-center justify-center text-surface-400">
             <Mic className="w-12 h-12 mb-3 opacity-50" />
             <p className="text-sm">
@@ -107,6 +112,12 @@ export default function TranscriptFeed({
           >
             <p className="text-surface-700 text-base leading-relaxed whitespace-pre-wrap">
               {highlightText(fullTranscript, highlightKeywords)}
+              {/* Show interim (real-time) text in a different style */}
+              {hasInterim && (
+                <span className="text-surface-400 italic">
+                  {fullTranscript ? ' ' : ''}{interimText}
+                </span>
+              )}
               {isLive && (
                 <span className="inline-flex items-center ml-1">
                   <span className="w-0.5 h-4 bg-primary-500 animate-pulse" />

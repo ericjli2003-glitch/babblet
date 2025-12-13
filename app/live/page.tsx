@@ -30,6 +30,7 @@ import QuestionBank from '@/components/QuestionBank';
 import SummaryCard from '@/components/SummaryCard';
 import RubricCard from '@/components/RubricCard';
 import { usePusher } from '@/lib/hooks/usePusher';
+import { useDeepgramStream } from '@/lib/hooks/useDeepgramStream';
 import type {
   TranscriptSegment,
   AnalysisSummary,
@@ -71,8 +72,64 @@ function LiveDashboardContent() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [audioSource, setAudioSource] = useState<'microphone' | 'system' | 'both'>('microphone');
+  const [interimTranscript, setInterimTranscript] = useState<string>('');
+  const [useStreamingTranscription, setUseStreamingTranscription] = useState(true);
   const lastWordCountRef = useRef<number>(0);
   const pendingQuestionGenRef = useRef<boolean>(false);
+  
+  // Deepgram streaming for real-time transcription
+  const handleFinalTranscript = useCallback((text: string) => {
+    if (!text.trim()) return;
+    
+    const segment: TranscriptSegment = {
+      id: `stream-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      text: text.trim(),
+      timestamp: Date.now(),
+      duration: 0,
+      isFinal: true,
+    };
+    
+    // Clear interim and add to permanent transcript
+    setInterimTranscript('');
+    setTranscript((prev) => {
+      // Avoid duplicates
+      const segmentText = text.trim().toLowerCase();
+      if (prev.some(s => s.text.trim().toLowerCase() === segmentText)) {
+        return prev;
+      }
+      
+      const newTranscript = [...prev, segment];
+      
+      // Trigger question generation
+      const totalWords = newTranscript.reduce((acc, s) => acc + s.text.split(/\s+/).length, 0);
+      const wordsSinceLastAnalysis = totalWords - lastWordCountRef.current;
+      
+      if (wordsSinceLastAnalysis >= 8 && !pendingQuestionGenRef.current && sessionId) {
+        lastWordCountRef.current = totalWords;
+        pendingQuestionGenRef.current = true;
+        const fullText = newTranscript.map(s => s.text).join(' ');
+        triggerAsyncQuestionGeneration(fullText);
+      }
+      
+      return newTranscript;
+    });
+  }, [sessionId, triggerAsyncQuestionGeneration]);
+  
+  const handleInterimTranscript = useCallback((text: string) => {
+    setInterimTranscript(text);
+  }, []);
+  
+  const handleStreamError = useCallback((error: string) => {
+    console.error('[Deepgram Stream] Error:', error);
+    // Fall back to batch transcription
+    setUseStreamingTranscription(false);
+  }, []);
+  
+  const deepgramStream = useDeepgramStream({
+    onFinalTranscript: handleFinalTranscript,
+    onInterimTranscript: handleInterimTranscript,
+    onError: handleStreamError,
+  });
 
   // Async question generation - non-blocking (defined first to avoid hoisting issues)
   const triggerAsyncQuestionGeneration = useCallback(async (transcriptText: string) => {
@@ -645,6 +702,35 @@ function LiveDashboardContent() {
       analyserRef.current.fftSize = 256;
       source.connect(analyserRef.current);
 
+      // Try to connect to Deepgram for real-time streaming transcription
+      if (useStreamingTranscription) {
+        console.log('[Live] Connecting to Deepgram streaming...');
+        const connected = await deepgramStream.connect(stream);
+        if (connected) {
+          console.log('[Live] Deepgram streaming connected - real-time transcription enabled');
+          setIsRecording(true);
+          setStatus('recording');
+          updateAudioLevel();
+          
+          // Start periodic analysis (questions still need batched transcript)
+          analysisIntervalRef.current = setInterval(() => {
+            const now = Date.now();
+            if (now - lastAnalysisTimeRef.current >= 15000 && transcript.length > 0) {
+              triggerAnalysis();
+              lastAnalysisTimeRef.current = now;
+            }
+          }, 5000);
+          
+          return; // Using streaming, skip batch setup
+        } else {
+          console.log('[Live] Deepgram streaming failed, falling back to batch transcription');
+          setUseStreamingTranscription(false);
+        }
+      }
+
+      // Fallback: Batch transcription setup
+      console.log('[Live] Using batch transcription mode');
+      
       // Set up MediaRecorder with best supported format
       const mimeType = getSupportedMimeType();
       audioMimeTypeRef.current = mimeType || 'audio/webm';
@@ -751,8 +837,18 @@ function LiveDashboardContent() {
 
   // Stop recording
   const stopRecording = useCallback(async () => {
-    if (mediaRecorderRef.current && isRecording) {
+    // Disconnect Deepgram streaming if active
+    if (deepgramStream.isConnected) {
+      console.log('[Live] Disconnecting Deepgram stream...');
+      deepgramStream.disconnect();
+      setInterimTranscript('');
+    }
+    
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
+    }
+    
+    if (isRecording) {
       streamRef.current?.getTracks().forEach((track) => track.stop());
 
       // Clean up extra streams from 'both' mode
@@ -1394,6 +1490,7 @@ function LiveDashboardContent() {
                       isLive={isRecording || isPlaying}
                       currentTime={currentTime}
                       highlightKeywords={analysis?.keyClaims.flatMap((c) => c.claim.split(' ').slice(0, 3)) || []}
+                      interimText={interimTranscript}
                     />
                   </div>
                 </motion.div>
