@@ -109,6 +109,14 @@ function LiveDashboardContent() {
       expansion: questions.expansion.length,
     };
   }, [questions]);
+  
+  // Debug: Detect component mount/unmount
+  useEffect(() => {
+    console.log('[DEBUG] LiveDashboardContent MOUNTED');
+    return () => {
+      console.log('[DEBUG] LiveDashboardContent UNMOUNTING');
+    };
+  }, []);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
