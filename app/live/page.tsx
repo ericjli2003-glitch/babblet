@@ -1729,7 +1729,7 @@ function LiveDashboardContent() {
 
           {/* Panel content */}
           <div className="flex-1 overflow-hidden bg-surface-50">
-            <AnimatePresence mode="wait">
+            <AnimatePresence mode="sync">
               {activePanel === 'transcript' && (
                 <motion.div
                   key="transcript"

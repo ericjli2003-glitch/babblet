@@ -60,7 +60,7 @@ export default function TranscriptFeed({
   // Combine all segments into a single paragraph
   const fullTranscript = segments.map(s => s.text).join(' ').trim();
   const wordCount = fullTranscript ? fullTranscript.split(/\s+/).length : 0;
-  
+
   console.log('[TranscriptFeed] Full transcript length:', fullTranscript.length, 'chars,', wordCount, 'words');
 
   // Display text includes interim (real-time) transcription
