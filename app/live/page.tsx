@@ -55,7 +55,23 @@ function LiveDashboardContent() {
   const [audioLevel, setAudioLevel] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
-  const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
+  const [transcript, setTranscriptState] = useState<TranscriptSegment[]>([]);
+  
+  // Wrapper to log transcript changes
+  const setTranscript: typeof setTranscriptState = useCallback((action) => {
+    setTranscriptState((prev) => {
+      const newValue = typeof action === 'function' ? action(prev) : action;
+      console.log('[DEBUG] Transcript changing:', prev.length, '->', newValue.length, 'segments');
+      if (newValue.length === 0 && prev.length > 0) {
+        console.error('[DEBUG] TRANSCRIPT BEING CLEARED! Stack:', new Error().stack);
+      }
+      return newValue;
+    });
+  }, []);
+  
+  // Keep a ref to always have latest transcript (for debugging)
+  const transcriptRef = useRef(transcript);
+  transcriptRef.current = transcript;
   const [analysis, setAnalysis] = useState<AnalysisSummary | null>(null);
   const [questions, setQuestions] = useState<{
     clarifying: GeneratedQuestion[];
@@ -63,7 +79,13 @@ function LiveDashboardContent() {
     expansion: GeneratedQuestion[];
   }>({ clarifying: [], criticalThinking: [], expansion: [] });
   const [rubric, setRubric] = useState<RubricEvaluation | null>(null);
-  const [activePanel, setActivePanel] = useState<ActivePanel>('transcript');
+  const [activePanel, setActivePanelState] = useState<ActivePanel>('transcript');
+  
+  // Wrapper to log panel changes
+  const setActivePanel = useCallback((panel: ActivePanel) => {
+    console.log('[DEBUG] Panel changing to:', panel, 'Current transcript:', transcriptRef.current.length, 'segments');
+    setActivePanelState(panel);
+  }, []);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
