@@ -183,7 +183,7 @@ function LiveDashboardContent() {
 
         if (questionsData.questions && Array.isArray(questionsData.questions)) {
           const currentVideoTime = currentTime; // Capture current time for markers
-          
+
           // First, update questions state
           setQuestions((prev) => {
             const updated = { ...prev };
@@ -212,7 +212,7 @@ function LiveDashboardContent() {
 
             return updated;
           });
-          
+
           // Then, separately add timeline markers for new questions
           const questionMarkers: TimelineMarker[] = questionsData.questions.map((q: GeneratedQuestion) => ({
             id: `q-${q.id}`,
@@ -222,7 +222,7 @@ function LiveDashboardContent() {
             description: q.rationale,
             category: q.category,
           }));
-          
+
           if (questionMarkers.length > 0) {
             setTimelineMarkers(prev => {
               // Avoid duplicate markers

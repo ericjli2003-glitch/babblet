@@ -38,6 +38,26 @@ export function usePusher({
 
     const pusherRef = useRef<Pusher | null>(null);
     const channelRef = useRef<Channel | null>(null);
+    
+    // Store callbacks in refs to avoid re-triggering the connection effect
+    const callbacksRef = useRef({
+        onTranscript,
+        onAnalysis,
+        onQuestions,
+        onRubric,
+        onStatusChange,
+    });
+    
+    // Update refs when callbacks change (without triggering reconnection)
+    useEffect(() => {
+        callbacksRef.current = {
+            onTranscript,
+            onAnalysis,
+            onQuestions,
+            onRubric,
+            onStatusChange,
+        };
+    }, [onTranscript, onAnalysis, onQuestions, onRubric, onStatusChange]);
 
     // Fetch Pusher config from server
     const fetchConfig = useCallback(async (): Promise<PusherConfig | null> => {
@@ -107,30 +127,30 @@ export function usePusher({
 
                 console.log(`[Pusher] Subscribing to channel: ${channelName}`);
 
-                // Bind event handlers
+                // Bind event handlers - use refs to avoid stale closures
                 channel.bind('transcript-update', (data: { segment: TranscriptSegment }) => {
                     console.log('[Pusher] Received transcript:', data.segment.text.slice(0, 50));
-                    onTranscript?.(data.segment);
+                    callbacksRef.current.onTranscript?.(data.segment);
                 });
 
                 channel.bind('analysis-update', (data: { analysis: AnalysisSummary }) => {
                     console.log('[Pusher] Received analysis');
-                    onAnalysis?.(data.analysis);
+                    callbacksRef.current.onAnalysis?.(data.analysis);
                 });
 
                 channel.bind('question-generated', (data: { questions: GeneratedQuestion[] }) => {
                     console.log(`[Pusher] Received ${data.questions.length} questions`);
-                    onQuestions?.(data.questions);
+                    callbacksRef.current.onQuestions?.(data.questions);
                 });
 
                 channel.bind('rubric-update', (data: { rubric: RubricEvaluation }) => {
                     console.log('[Pusher] Received rubric');
-                    onRubric?.(data.rubric);
+                    callbacksRef.current.onRubric?.(data.rubric);
                 });
 
                 channel.bind('status-change', (data: { status: string; message?: string }) => {
                     console.log(`[Pusher] Status change: ${data.status}`);
-                    onStatusChange?.(data.status, data.message);
+                    callbacksRef.current.onStatusChange?.(data.status, data.message);
                 });
 
             } catch (e) {
@@ -159,7 +179,7 @@ export function usePusher({
                 pusherRef.current = null;
             }
         };
-    }, [sessionId, fetchConfig, onTranscript, onAnalysis, onQuestions, onRubric, onStatusChange]);
+    }, [sessionId, fetchConfig]); // Callbacks are in refs, no need to include them
 
     return {
         connectionState,
