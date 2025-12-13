@@ -85,7 +85,7 @@ function LiveDashboardContent() {
   }>({ clarifying: [], criticalThinking: [], expansion: [] });
   const [rubric, setRubric] = useState<RubricEvaluation | null>(null);
   const [activePanel, setActivePanelState] = useState<ActivePanel>('transcript');
-  
+
   // Wrapper to log panel changes
   const setActivePanel = useCallback((panel: ActivePanel) => {
     console.log('[DEBUG] Panel changing to:', panel);
@@ -97,10 +97,10 @@ function LiveDashboardContent() {
       console.log('[DEBUG] After panel change - transcript:', transcriptRef.current.length, 'questions:', questionsRef.current);
     }, 100);
   }, []);
-  
+
   // Keep refs for questions too
   const questionsRef = useRef({ clarifying: 0, criticalThinking: 0, expansion: 0 });
-  
+
   // Update questionsRef when questions change
   useEffect(() => {
     questionsRef.current = {
@@ -109,7 +109,7 @@ function LiveDashboardContent() {
       expansion: questions.expansion.length,
     };
   }, [questions]);
-  
+
   // Debug: Detect component mount/unmount
   useEffect(() => {
     console.log('[DEBUG] LiveDashboardContent MOUNTED');
