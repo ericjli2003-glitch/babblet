@@ -68,13 +68,19 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[generate-questions] Transcript length:', transcript.length, 'chars');
+    
+    // Extract slide content if provided
+    const slideContent = context?.slideContent;
+    if (slideContent) {
+      console.log('[generate-questions] Slide content provided:', slideContent.keyPoints?.length || 0, 'key points');
+    }
 
     let questions: GeneratedQuestion[];
 
     // Prefer Claude, fall back to OpenAI, then mock
     if (isClaudeConfigured()) {
       console.log('[generate-questions] Calling Claude Sonnet 4 for question generation...');
-      questions = await generateQuestionsWithClaude(transcript, analysisContext);
+      questions = await generateQuestionsWithClaude(transcript, analysisContext, slideContent);
       console.log('[generate-questions] Claude returned', questions.length, 'questions');
     } else if (isOpenAIConfigured()) {
       console.log('[generate-questions] Calling OpenAI for question generation...');

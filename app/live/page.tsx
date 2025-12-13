@@ -24,11 +24,15 @@ import {
   Check,
   Monitor,
   Headphones,
+  Highlighter,
+  Presentation,
+  FileImage,
 } from 'lucide-react';
 import TranscriptFeed from '@/components/TranscriptFeed';
 import QuestionBank from '@/components/QuestionBank';
 import SummaryCard from '@/components/SummaryCard';
 import RubricCard from '@/components/RubricCard';
+import SlideUpload from '@/components/SlideUpload';
 import { usePusher } from '@/lib/hooks/usePusher';
 import { useDeepgramStream } from '@/lib/hooks/useDeepgramStream';
 import type {
@@ -92,6 +96,14 @@ function LiveDashboardContent() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [highlightKeywords, setHighlightKeywords] = useState(false);
+  const [slideFile, setSlideFile] = useState<File | null>(null);
+  const [slideAnalysis, setSlideAnalysis] = useState<{
+    extractedText?: string;
+    keyPoints?: string[];
+    topics?: string[];
+  } | null>(null);
+  const [showSlidesPanel, setShowSlidesPanel] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [audioSource, setAudioSource] = useState<'microphone' | 'system' | 'both'>('microphone');
   const [interimTranscript, setInterimTranscript] = useState<string>('');
@@ -117,7 +129,7 @@ function LiveDashboardContent() {
       if (analysisData.analysis) {
         setAnalysis(analysisData.analysis);
 
-        // Then trigger question generation
+        // Then trigger question generation with slide context if available
         const questionsResponse = await fetch('/api/generate-questions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -127,6 +139,11 @@ function LiveDashboardContent() {
               transcript: transcriptText,
               claims: analysisData.analysis.keyClaims,
               gaps: analysisData.analysis.logicalGaps,
+              slideContent: slideAnalysis ? {
+                text: slideAnalysis.extractedText,
+                keyPoints: slideAnalysis.keyPoints,
+                topics: slideAnalysis.topics,
+              } : undefined,
             },
           }),
         });
@@ -165,7 +182,7 @@ function LiveDashboardContent() {
     } finally {
       pendingQuestionGenRef.current = false;
     }
-  }, [sessionId]);
+  }, [sessionId, slideAnalysis]);
 
   // Deepgram streaming callbacks for real-time transcription
   const handleFinalTranscript = useCallback((text: string) => {
@@ -1253,6 +1270,7 @@ function LiveDashboardContent() {
             onClick={triggerQuestionGeneration}
             disabled={!analysis || isGeneratingQuestions}
             className="w-12 h-12 rounded-xl bg-surface-100 text-surface-600 hover:bg-surface-200 flex items-center justify-center transition-colors disabled:opacity-50"
+            title="Generate questions"
           >
             {isGeneratingQuestions ? (
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -1260,7 +1278,73 @@ function LiveDashboardContent() {
               <Sparkles className="w-5 h-5" />
             )}
           </button>
+
+          <div className="w-10 h-px bg-surface-200" />
+
+          {/* Slides upload button */}
+          <button
+            onClick={() => setShowSlidesPanel(!showSlidesPanel)}
+            className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${
+              slideFile
+                ? 'bg-emerald-100 text-emerald-600'
+                : showSlidesPanel
+                ? 'bg-primary-100 text-primary-600'
+                : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
+            }`}
+            title={slideFile ? 'Slides uploaded' : 'Upload slides'}
+          >
+            <Presentation className="w-5 h-5" />
+          </button>
         </aside>
+
+        {/* Slides Panel (collapsible) */}
+        <AnimatePresence>
+          {showSlidesPanel && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 300, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              className="bg-white border-r border-surface-200 overflow-hidden"
+            >
+              <div className="p-4 h-full overflow-y-auto">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-surface-900">Presentation Slides</h3>
+                  <button
+                    onClick={() => setShowSlidesPanel(false)}
+                    className="p-1 text-surface-400 hover:text-surface-600"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                </div>
+                <SlideUpload
+                  selectedFile={slideFile}
+                  onFileSelect={setSlideFile}
+                  onAnalysisComplete={(data: unknown) => {
+                    const analysisData = data as { analysis?: typeof slideAnalysis };
+                    if (analysisData?.analysis) {
+                      setSlideAnalysis(analysisData.analysis);
+                    }
+                  }}
+                />
+                {slideAnalysis && (
+                  <div className="mt-4 p-3 bg-emerald-50 rounded-xl">
+                    <p className="text-xs font-medium text-emerald-700 mb-2">✓ Slides analyzed</p>
+                    {slideAnalysis.keyPoints && slideAnalysis.keyPoints.length > 0 && (
+                      <div className="text-xs text-emerald-600">
+                        <p className="font-medium">Key points detected:</p>
+                        <ul className="list-disc list-inside mt-1">
+                          {slideAnalysis.keyPoints.slice(0, 3).map((point, i) => (
+                            <li key={i} className="truncate">{point}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Main panels */}
         <main className="flex-1 flex flex-col">
@@ -1514,14 +1598,28 @@ function LiveDashboardContent() {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 20 }}
-                  className="h-full"
+                  className="h-full flex flex-col"
                 >
-                  <div className="h-full bg-white m-4 rounded-3xl shadow-soft overflow-hidden">
+                  {/* Transcript toolbar */}
+                  <div className="flex items-center justify-end px-4 pt-4 gap-2">
+                    <button
+                      onClick={() => setHighlightKeywords(!highlightKeywords)}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                        highlightKeywords
+                          ? 'bg-primary-100 text-primary-700'
+                          : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
+                      }`}
+                    >
+                      <Highlighter className="w-4 h-4" />
+                      {highlightKeywords ? 'Highlighting On' : 'Highlight Keywords'}
+                    </button>
+                  </div>
+                  <div className="flex-1 bg-white mx-4 mb-4 rounded-3xl shadow-soft overflow-hidden">
                     <TranscriptFeed
                       segments={transcript}
                       isLive={isRecording || isPlaying}
                       currentTime={currentTime}
-                      highlightKeywords={analysis?.keyClaims.flatMap((c) => c.claim.split(' ').slice(0, 3)) || []}
+                      highlightKeywords={highlightKeywords ? (analysis?.keyClaims.flatMap((c) => c.claim.split(' ').slice(0, 3)) || []) : []}
                       interimText={interimTranscript}
                     />
                   </div>

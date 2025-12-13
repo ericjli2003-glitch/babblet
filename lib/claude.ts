@@ -20,10 +20,18 @@ export function isClaudeConfigured(): boolean {
   return !!process.env.ANTHROPIC_API_KEY;
 }
 
+// Slide content type
+interface SlideContent {
+  text?: string;
+  keyPoints?: string[];
+  topics?: string[];
+}
+
 // Generate questions using Claude Sonnet 4
 export async function generateQuestionsWithClaude(
   transcript: string,
-  analysis?: AnalysisSummary
+  analysis?: AnalysisSummary,
+  slideContent?: SlideContent
 ): Promise<GeneratedQuestion[]> {
   const client = getAnthropicClient();
 
@@ -32,10 +40,27 @@ export async function generateQuestionsWithClaude(
 2. Encourage critical thinking
 3. Expand on interesting topics
 4. Identify gaps in reasoning or evidence
+5. Connect verbal presentation to slide content (if provided)
 
 Generate questions that are appropriate for an academic setting and would help the student demonstrate deeper understanding.`;
 
-  const userPrompt = `Based on this presentation transcript, generate 3-5 high-quality questions.
+  // Build slide context section
+  let slideContextSection = '';
+  if (slideContent) {
+    slideContextSection = `
+PRESENTATION SLIDES CONTENT:
+${slideContent.text ? `- Slide Text: ${slideContent.text}` : ''}
+${slideContent.keyPoints?.length ? `- Key Points from Slides: ${slideContent.keyPoints.join('; ')}` : ''}
+${slideContent.topics?.length ? `- Topics Covered in Slides: ${slideContent.topics.join('; ')}` : ''}
+
+Consider asking questions that:
+- Connect what the student said to what's shown on their slides
+- Probe deeper into topics mentioned in slides but not fully explained verbally
+- Ask about data or visuals shown in the slides
+`;
+  }
+
+  const userPrompt = `Based on this presentation transcript${slideContent ? ' and their presentation slides' : ''}, generate 3-5 high-quality questions.
 
 TRANSCRIPT:
 ${transcript}
@@ -46,6 +71,7 @@ ANALYSIS CONTEXT:
 - Logical Gaps: ${analysis.logicalGaps.map(g => g.description).join('; ')}
 - Missing Evidence: ${analysis.missingEvidence.map(e => e.description).join('; ')}
 ` : ''}
+${slideContextSection}
 
 Generate questions in the following JSON format:
 {
