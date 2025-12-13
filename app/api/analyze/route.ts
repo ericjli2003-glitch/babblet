@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getSession, getFullTranscript, setAnalysis, broadcastToSession } from '@/lib/session-store';
 import { detectSemanticEvents, isGeminiConfigured } from '@/lib/gemini';
+import { analyzeWithClaude, isClaudeConfigured } from '@/lib/claude';
 import { broadcastAnalysis } from '@/lib/pusher';
 import type { AnalysisSummary, KeyClaim, LogicalGap, MissingEvidence } from '@/lib/types';
 
@@ -34,10 +35,15 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Analyze] Processing transcript: ${transcript.slice(0, 100)}...`);
 
-    // Use Gemini to detect semantic events and create analysis
+    // Use Claude for analysis (preferred), fall back to Gemini, then mock
     let analysis: AnalysisSummary;
 
-    if (isGeminiConfigured()) {
+    if (isClaudeConfigured()) {
+      console.log('[Analyze] Using Claude Sonnet 4 for analysis...');
+      analysis = await analyzeWithClaude(transcript);
+      console.log('[Analyze] Claude analysis complete');
+    } else if (isGeminiConfigured()) {
+      console.log('[Analyze] Using Gemini for analysis...');
       const events = await detectSemanticEvents(transcript);
 
       // Convert semantic events to claims, gaps, etc.
@@ -82,18 +88,19 @@ export async function POST(request: NextRequest) {
         timestamp: Date.now(),
       };
     } else {
-      // Mock analysis if Gemini not configured
+      // Mock analysis if no LLM configured
+      console.log('[Analyze] No LLM configured, returning mock analysis');
       analysis = {
         keyClaims: [{
           id: uuidv4(),
-          claim: 'Configure GEMINI_API_KEY for real analysis',
+          claim: 'Add ANTHROPIC_API_KEY or GEMINI_API_KEY for real analysis',
           evidence: [],
           confidence: 0.5,
         }],
         logicalGaps: [],
         missingEvidence: [],
         overallStrength: 2.5,
-        suggestions: ['Add GEMINI_API_KEY to enable analysis'],
+        suggestions: ['Configure an LLM API key in Vercel environment variables'],
         timestamp: Date.now(),
       };
     }

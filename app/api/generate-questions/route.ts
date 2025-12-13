@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getSession, getFullTranscript, addQuestion, broadcastToSession } from '@/lib/session-store';
 import { generateQuestionsFromTranscript, isOpenAIConfigured } from '@/lib/openai-questions';
+import { generateQuestionsWithClaude, isClaudeConfigured } from '@/lib/claude';
 import { broadcastQuestions } from '@/lib/pusher';
 import type { GeneratedQuestion, QuestionCategory, QuestionDifficulty, AnalysisSummary } from '@/lib/types';
 
@@ -70,22 +71,26 @@ export async function POST(request: NextRequest) {
 
     let questions: GeneratedQuestion[];
 
-    if (isOpenAIConfigured()) {
+    // Prefer Claude, fall back to OpenAI, then mock
+    if (isClaudeConfigured()) {
+      console.log('[generate-questions] Calling Claude Sonnet 4 for question generation...');
+      questions = await generateQuestionsWithClaude(transcript, analysisContext);
+      console.log('[generate-questions] Claude returned', questions.length, 'questions');
+    } else if (isOpenAIConfigured()) {
       console.log('[generate-questions] Calling OpenAI for question generation...');
       questions = await generateQuestionsFromTranscript(transcript, analysisContext);
       console.log('[generate-questions] OpenAI returned', questions.length, 'questions');
     } else {
-      // Mock questions if OpenAI not configured
-      const categories: QuestionCategory[] = ['clarifying', 'critical-thinking', 'expansion'];
-      const difficulties: QuestionDifficulty[] = ['easy', 'medium', 'hard'];
+      // Mock questions if no LLM configured
+      console.log('[generate-questions] No LLM configured, returning mock questions');
 
       questions = [
         {
           id: uuidv4(),
-          question: 'Configure OPENAI_API_KEY for real questions',
+          question: 'Add ANTHROPIC_API_KEY or OPENAI_API_KEY to enable real questions',
           category: 'clarifying',
           difficulty: 'easy',
-          rationale: 'Add OPENAI_API_KEY to enable question generation',
+          rationale: 'Configure an LLM API key in Vercel environment variables',
           timestamp: Date.now(),
         },
       ];
