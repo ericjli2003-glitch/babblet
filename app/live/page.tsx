@@ -34,6 +34,7 @@ import SummaryCard from '@/components/SummaryCard';
 import RubricCard from '@/components/RubricCard';
 import SlideUpload from '@/components/SlideUpload';
 import VideoTimeline, { type TimelineMarker } from '@/components/VideoTimeline';
+import QuestionSettings from '@/components/QuestionSettings';
 import { usePusher } from '@/lib/hooks/usePusher';
 import { useDeepgramStream } from '@/lib/hooks/useDeepgramStream';
 import type {
@@ -137,7 +138,7 @@ function LiveDashboardContent() {
   const [interimTranscript, setInterimTranscript] = useState<string>('');
   const [useStreamingTranscription, setUseStreamingTranscription] = useState(true);
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
-  
+
   // Camera and recording playback for live mode
   const [includeCamera, setIncludeCamera] = useState(false);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
@@ -149,10 +150,28 @@ function LiveDashboardContent() {
   const cameraPreviewRef = useRef<HTMLVideoElement | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const videoRecorderRef = useRef<MediaRecorder | null>(null);
-  
+
   const lastWordCountRef = useRef<number>(0);
   const pendingQuestionGenRef = useRef<boolean>(false);
+  const lastQuestionGenTimeRef = useRef<number>(0);
   
+  // Question generation settings
+  const [showQuestionSettings, setShowQuestionSettings] = useState(false);
+  const [questionSettings, setQuestionSettings] = useState({
+    maxQuestions: 10, // Hard cap
+    assignmentContext: '', // Assignment prompt/description
+    rubricCriteria: '', // Grading rubric/criteria
+    priorities: {
+      clarifying: 1, // 0 = none, 1 = some, 2 = focus
+      criticalThinking: 2,
+      expansion: 1,
+    },
+    focusAreas: [] as string[], // Specific topics to focus on
+  });
+  
+  // Candidate question pool (internal, not shown)
+  const [candidateQuestions, setCandidateQuestions] = useState<GeneratedQuestion[]>([]);
+
   // Keep a ref for currentTime to avoid stale closures in callbacks
   const currentTimeRef = useRef(0);
   useEffect(() => {
@@ -163,6 +182,23 @@ function LiveDashboardContent() {
   const triggerAsyncQuestionGeneration = useCallback(async (transcriptText: string) => {
     if (!sessionId) return;
 
+    // Check throttle (45s cooldown)
+    const now = Date.now();
+    if (now - lastQuestionGenTimeRef.current < 45000) {
+      console.log('[Questions] Throttled, waiting for cooldown...');
+      pendingQuestionGenRef.current = false;
+      return;
+    }
+    
+    // Check max questions cap
+    const totalQuestions = questions.clarifying.length + questions.criticalThinking.length + questions.expansion.length;
+    if (totalQuestions >= questionSettings.maxQuestions) {
+      console.log('[Questions] Max questions reached:', totalQuestions);
+      pendingQuestionGenRef.current = false;
+      return;
+    }
+    
+    lastQuestionGenTimeRef.current = now;
     console.log('[Questions] Triggering async generation...');
 
     try {
@@ -180,8 +216,8 @@ function LiveDashboardContent() {
         // Add timeline markers for issues/gaps detected
         const issueMarkers: TimelineMarker[] = [];
         // Use actual video time or ref to avoid stale closure
-        const capturedTime = mode === 'upload' && videoRef.current 
-          ? videoRef.current.currentTime * 1000 
+        const capturedTime = mode === 'upload' && videoRef.current
+          ? videoRef.current.currentTime * 1000
           : currentTimeRef.current;
 
         // Add markers for logical gaps
@@ -205,7 +241,7 @@ function LiveDashboardContent() {
             description: 'Key claim identified',
           });
         });
-        
+
         // Add markers for missing evidence
         analysisData.analysis.missingEvidence?.forEach((evidence: { id: string; description: string; importance?: string }) => {
           issueMarkers.push({
@@ -226,7 +262,7 @@ function LiveDashboardContent() {
           });
         }
 
-        // Then trigger question generation with slide context if available
+        // Then trigger question generation with slide context and settings
         const questionsResponse = await fetch('/api/generate-questions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -242,14 +278,25 @@ function LiveDashboardContent() {
                 topics: slideAnalysis.topics,
               } : undefined,
             },
+            settings: {
+              assignmentContext: questionSettings.assignmentContext,
+              rubricCriteria: questionSettings.rubricCriteria,
+              priorities: questionSettings.priorities,
+              focusAreas: questionSettings.focusAreas,
+              existingQuestions: [
+                ...questions.clarifying,
+                ...questions.criticalThinking,
+                ...questions.expansion,
+              ].map(q => q.question),
+            },
           }),
         });
         const questionsData = await questionsResponse.json();
 
         if (questionsData.questions && Array.isArray(questionsData.questions)) {
           // Use actual video time or ref to avoid stale closure
-          const currentVideoTime = mode === 'upload' && videoRef.current 
-            ? videoRef.current.currentTime * 1000 
+          const currentVideoTime = mode === 'upload' && videoRef.current
+            ? videoRef.current.currentTime * 1000
             : currentTimeRef.current;
 
           // First, update questions state
@@ -786,41 +833,41 @@ function LiveDashboardContent() {
       if (includeCamera) {
         try {
           console.log('[Live] Requesting camera...');
-          const cameraStream = await navigator.mediaDevices.getUserMedia({ 
+          const cameraStream = await navigator.mediaDevices.getUserMedia({
             video: { width: 1280, height: 720 },
             audio: false // Audio already captured separately
           });
           cameraStreamRef.current = cameraStream;
-          
+
           // Show camera preview
           if (cameraPreviewRef.current) {
             cameraPreviewRef.current.srcObject = cameraStream;
             cameraPreviewRef.current.play();
           }
-          
+
           // Combine camera video with audio
           const videoTrack = cameraStream.getVideoTracks()[0];
           const audioTracks = stream.getAudioTracks();
           combinedStream = new MediaStream([videoTrack, ...audioTracks]);
-          
+
           console.log('[Live] Camera stream obtained and combined with audio');
-          
+
           // Set up video recording
-          const videoMimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') 
-            ? 'video/webm;codecs=vp9,opus' 
-            : MediaRecorder.isTypeSupported('video/webm') 
-            ? 'video/webm' 
-            : 'video/mp4';
-          
+          const videoMimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+            ? 'video/webm;codecs=vp9,opus'
+            : MediaRecorder.isTypeSupported('video/webm')
+              ? 'video/webm'
+              : 'video/mp4';
+
           const videoRecorder = new MediaRecorder(combinedStream, { mimeType: videoMimeType });
           videoRecorderRef.current = videoRecorder;
-          
+
           videoRecorder.ondataavailable = (event) => {
             if (event.data.size > 0) {
               recordedChunksRef.current.push(event.data);
             }
           };
-          
+
           videoRecorder.onstop = () => {
             if (recordedChunksRef.current.length > 0) {
               const blob = new Blob(recordedChunksRef.current, { type: videoMimeType });
@@ -829,10 +876,10 @@ function LiveDashboardContent() {
               console.log('[Live] Recording saved, URL created');
             }
           };
-          
+
           videoRecorder.start(1000); // Collect chunks every second
           console.log('[Live] Video recording started');
-          
+
         } catch (e) {
           console.error('[Live] Camera error:', e);
           alert('Failed to access camera. Continuing with audio only.');
@@ -993,19 +1040,19 @@ function LiveDashboardContent() {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
-    
+
     // Stop video recorder if active
     if (videoRecorderRef.current && videoRecorderRef.current.state !== 'inactive') {
       console.log('[Live] Stopping video recorder...');
       videoRecorderRef.current.stop();
     }
-    
+
     // Stop camera stream
     if (cameraStreamRef.current) {
       cameraStreamRef.current.getTracks().forEach(track => track.stop());
       cameraStreamRef.current = null;
     }
-    
+
     // Clear camera preview
     if (cameraPreviewRef.current) {
       cameraPreviewRef.current.srcObject = null;
@@ -1177,7 +1224,7 @@ function LiveDashboardContent() {
   const handleSelectMarker = useCallback((markerId: string) => {
     // Find the marker by ID
     const marker = timelineMarkers.find(m => m.id === markerId);
-    
+
     if (marker) {
       // Seek video to marker timestamp
       if (mode === 'upload' && videoRef.current) {
@@ -1187,13 +1234,13 @@ function LiveDashboardContent() {
         recordedVideoRef.current.currentTime = marker.timestamp / 1000;
         setRecordedVideoTime(marker.timestamp);
       }
-      
+
       // Highlight the marker
       setSelectedMarkerId(markerId);
-      
+
       // Auto-clear selection after 3 seconds
       setTimeout(() => setSelectedMarkerId(null), 3000);
-      
+
       console.log('[Marker] Selected:', markerId, 'at', marker.timestamp, 'ms');
     } else {
       console.log('[Marker] Not found:', markerId);
@@ -1377,7 +1424,11 @@ function LiveDashboardContent() {
 
               {/* Actions */}
               <div className="flex items-center gap-2">
-                <button className="p-2 text-surface-500 hover:text-surface-700 hover:bg-surface-100 rounded-xl transition-colors">
+                <button 
+                  onClick={() => setShowQuestionSettings(true)}
+                  className="p-2 text-surface-500 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-colors"
+                  title="Question Settings"
+                >
                   <Settings className="w-5 h-5" />
                 </button>
                 <button className="p-2 text-surface-500 hover:text-surface-700 hover:bg-surface-100 rounded-xl transition-colors">
@@ -1684,7 +1735,7 @@ function LiveDashboardContent() {
               </div>
             </div>
           )}
-          
+
           {/* Camera preview during live recording */}
           {mode === 'live' && isRecording && includeCamera && (
             <div className="bg-surface-900 p-4">
@@ -1705,7 +1756,7 @@ function LiveDashboardContent() {
               </div>
             </div>
           )}
-          
+
           {/* Recording playback for live mode (after recording ends) */}
           {mode === 'live' && status === 'completed' && recordedVideoUrl && (
             <div className="bg-surface-900 p-4">
@@ -1719,7 +1770,7 @@ function LiveDashboardContent() {
                     onTimeUpdate={(e) => setRecordedVideoTime(e.currentTarget.currentTime * 1000)}
                   />
                 </div>
-                
+
                 {/* Recorded Video Controls */}
                 <div className="flex items-center gap-4 px-2">
                   <button
@@ -1737,7 +1788,7 @@ function LiveDashboardContent() {
                   >
                     {isPlayingRecording ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
                   </button>
-                  
+
                   <div className="flex-1">
                     <VideoTimeline
                       currentTime={recordedVideoTime}
@@ -1756,7 +1807,7 @@ function LiveDashboardContent() {
                       }}
                     />
                   </div>
-                  
+
                   <span className="text-white text-sm font-mono min-w-[100px] text-right">
                     {formatTime(recordedVideoTime)} / {formatTime(recordedVideoDuration * 1000)}
                   </span>
@@ -1930,9 +1981,9 @@ function LiveDashboardContent() {
             {/* Analysis Panel */}
             <div className={`h-full ${activePanel === 'analysis' ? '' : 'hidden'}`}>
               <div className="h-full bg-white m-4 rounded-3xl shadow-soft overflow-hidden">
-                <SummaryCard 
-                  analysis={analysis} 
-                  isLoading={isAnalyzing} 
+                <SummaryCard
+                  analysis={analysis}
+                  isLoading={isAnalyzing}
                   onSelectMarker={handleSelectMarker}
                 />
               </div>
@@ -1941,9 +1992,9 @@ function LiveDashboardContent() {
             {/* Questions Panel */}
             <div className={`h-full ${activePanel === 'questions' ? '' : 'hidden'}`}>
               <div className="h-full bg-white m-4 rounded-3xl shadow-soft overflow-hidden">
-                <QuestionBank 
-                  questions={questions} 
-                  isLoading={isGeneratingQuestions} 
+                <QuestionBank
+                  questions={questions}
+                  isLoading={isGeneratingQuestions}
                   onSelectMarker={handleSelectMarker}
                 />
               </div>
@@ -2076,6 +2127,14 @@ function LiveDashboardContent() {
           </motion.div>
         )}
       </AnimatePresence>
+      
+      {/* Question Settings Modal */}
+      <QuestionSettings
+        isOpen={showQuestionSettings}
+        onClose={() => setShowQuestionSettings(false)}
+        settings={questionSettings}
+        onSettingsChange={setQuestionSettings}
+      />
     </div>
   );
 }

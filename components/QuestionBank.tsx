@@ -186,9 +186,9 @@ function CategorySection({
               </p>
             ) : (
               questions.map((question) => (
-                <QuestionCard 
-                  key={question.id} 
-                  question={question} 
+                <QuestionCard
+                  key={question.id}
+                  question={question}
                   onSelect={() => onSelectMarker?.(`q-${question.id}`)}
                 />
               ))

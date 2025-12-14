@@ -48,7 +48,7 @@ export default function VideoTimeline({
   const handleTrackInteraction = useCallback(
     (clientX: number) => {
       if (!trackRef.current || durationMs <= 0) return;
-      
+
       const rect = trackRef.current.getBoundingClientRect();
       const x = clientX - rect.left;
       const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
@@ -168,12 +168,11 @@ export default function VideoTimeline({
           >
             <div className="bg-surface-900 text-white px-3 py-2 rounded-lg shadow-xl max-w-xs">
               <div className="flex items-center gap-2 mb-1">
-                <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                  hoveredMarker.type === 'question' ? 'bg-primary-500' :
-                  hoveredMarker.type === 'issue' ? 'bg-amber-500' : 'bg-emerald-500'
-                }`}>
+                <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${hoveredMarker.type === 'question' ? 'bg-primary-500' :
+                    hoveredMarker.type === 'issue' ? 'bg-amber-500' : 'bg-emerald-500'
+                  }`}>
                   {hoveredMarker.type === 'question' ? 'Question' :
-                   hoveredMarker.type === 'issue' ? 'Issue' : 'Insight'}
+                    hoveredMarker.type === 'issue' ? 'Issue' : 'Insight'}
                 </span>
                 <span className="text-xs text-surface-400">
                   {formatTime(hoveredMarker.timestamp)}

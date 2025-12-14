@@ -27,22 +27,59 @@ interface SlideContent {
   topics?: string[];
 }
 
+// Question generation settings from user
+interface QuestionGenSettings {
+  assignmentContext?: string;
+  rubricCriteria?: string;
+  priorities?: {
+    clarifying: number; // 0=none, 1=some, 2=focus
+    criticalThinking: number;
+    expansion: number;
+  };
+  focusAreas?: string[];
+  existingQuestions?: string[];
+}
+
 // Generate questions using Claude Sonnet 4
 export async function generateQuestionsWithClaude(
   transcript: string,
   analysis?: AnalysisSummary,
-  slideContent?: SlideContent
+  slideContent?: SlideContent,
+  settings?: QuestionGenSettings
 ): Promise<GeneratedQuestion[]> {
   const client = getAnthropicClient();
 
-  const systemPrompt = `You are an expert educational AI assistant helping professors generate insightful questions during student presentations. Your goal is to create questions that:
-1. Help clarify unclear points
-2. Encourage critical thinking
-3. Expand on interesting topics
-4. Identify gaps in reasoning or evidence
-5. Connect verbal presentation to slide content (if provided)
+  // Build priority guidance
+  const priorityLabels = ['avoid', 'include some', 'prioritize'];
+  const priorityGuidance = settings?.priorities 
+    ? `
+Question Type Priorities (follow these closely):
+- Clarifying questions: ${priorityLabels[settings.priorities.clarifying]}
+- Critical thinking questions: ${priorityLabels[settings.priorities.criticalThinking]}  
+- Expansion questions: ${priorityLabels[settings.priorities.expansion]}`
+    : '';
 
-Generate questions that are appropriate for an academic setting and would help the student demonstrate deeper understanding.`;
+  const systemPrompt = `You are an expert educational AI assistant helping professors generate insightful questions during student presentations.
+
+Your goals:
+1. Generate ONLY the most valuable, high-signal questions
+2. Avoid generic or low-value clarifications
+3. Prioritize questions about evidence, assumptions, counterarguments, and limitations
+4. Questions should help students demonstrate deeper understanding
+5. Never repeat or closely paraphrase existing questions
+${priorityGuidance}
+
+${settings?.assignmentContext ? `
+ASSIGNMENT CONTEXT (align questions to this):
+${settings.assignmentContext}` : ''}
+
+${settings?.rubricCriteria ? `
+GRADING CRITERIA (ask about these aspects):
+${settings.rubricCriteria}` : ''}
+
+${settings?.focusAreas?.length ? `
+FOCUS AREAS (emphasize these topics):
+${settings.focusAreas.join(', ')}` : ''}`;
 
   // Build slide context section
   let slideContextSection = '';
@@ -52,15 +89,19 @@ PRESENTATION SLIDES CONTENT:
 ${slideContent.text ? `- Slide Text: ${slideContent.text}` : ''}
 ${slideContent.keyPoints?.length ? `- Key Points from Slides: ${slideContent.keyPoints.join('; ')}` : ''}
 ${slideContent.topics?.length ? `- Topics Covered in Slides: ${slideContent.topics.join('; ')}` : ''}
-
-Consider asking questions that:
-- Connect what the student said to what's shown on their slides
-- Probe deeper into topics mentioned in slides but not fully explained verbally
-- Ask about data or visuals shown in the slides
 `;
   }
 
-  const userPrompt = `Based on this presentation transcript${slideContent ? ' and their presentation slides' : ''}, generate 3-5 high-quality questions.
+  // Build existing questions section
+  let existingQuestionsSection = '';
+  if (settings?.existingQuestions?.length) {
+    existingQuestionsSection = `
+ALREADY ASKED QUESTIONS (do NOT repeat or closely paraphrase these):
+${settings.existingQuestions.slice(-15).map((q, i) => `${i + 1}. ${q}`).join('\n')}
+`;
+  }
+
+  const userPrompt = `Based on this presentation, generate 2-3 high-value questions only. Quality over quantity.
 
 TRANSCRIPT:
 ${transcript}
@@ -72,20 +113,23 @@ ANALYSIS CONTEXT:
 - Missing Evidence: ${analysis.missingEvidence.map(e => e.description).join('; ')}
 ` : ''}
 ${slideContextSection}
+${existingQuestionsSection}
 
-Generate questions in the following JSON format:
+Return ONLY questions that are genuinely valuable. If nothing new warrants a question, return an empty array.
+
+JSON format:
 {
   "questions": [
     {
       "question": "The question text",
       "category": "clarifying" | "critical-thinking" | "expansion",
       "difficulty": "easy" | "medium" | "hard",
-      "rationale": "Why this question is valuable"
+      "rationale": "Why this question is valuable for this specific presentation"
     }
   ]
 }
 
-Respond ONLY with the JSON, no additional text.`;
+Respond ONLY with JSON.`;
 
   try {
     console.log('[Claude] Generating questions...');

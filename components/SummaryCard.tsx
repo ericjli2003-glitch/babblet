@@ -37,7 +37,7 @@ function ClaimItem({ claim, index, onSelect }: { claim: KeyClaim; index: number;
         </div>
         <div className="flex-1">
           <p className="text-sm text-surface-800 font-medium">{claim.claim}</p>
-          
+
           {claim.evidence.length > 0 && (
             <>
               <button
@@ -47,7 +47,7 @@ function ClaimItem({ claim, index, onSelect }: { claim: KeyClaim; index: number;
                 {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 {claim.evidence.length} supporting evidence
               </button>
-              
+
               <AnimatePresence>
                 {isExpanded && (
                   <motion.ul
@@ -67,7 +67,7 @@ function ClaimItem({ claim, index, onSelect }: { claim: KeyClaim; index: number;
             </>
           )}
         </div>
-        
+
         {claim.confidence && (
           <div className="flex-shrink-0">
             <div className="flex items-center gap-1 text-xs text-surface-400">
@@ -190,7 +190,7 @@ export default function SummaryCard({ analysis, isLoading, onSelectMarker }: Sum
             </div>
           )}
         </div>
-        
+
         {analysis && (
           <div>
             <p className="text-xs text-surface-500 mb-2">Overall Argument Strength</p>
@@ -209,11 +209,10 @@ export default function SummaryCard({ analysis, isLoading, onSelectMarker }: Sum
           <button
             key={tab.id}
             onClick={() => setActiveSection(tab.id)}
-            className={`flex-1 px-3 py-2 text-sm font-medium transition-colors relative ${
-              activeSection === tab.id
+            className={`flex-1 px-3 py-2 text-sm font-medium transition-colors relative ${activeSection === tab.id
                 ? 'text-primary-600'
                 : 'text-surface-500 hover:text-surface-700'
-            }`}
+              }`}
           >
             <div className="flex items-center justify-center gap-1">
               <tab.icon className="w-4 h-4" />
@@ -247,10 +246,10 @@ export default function SummaryCard({ analysis, isLoading, onSelectMarker }: Sum
                 </p>
               ) : (
                 analysis?.keyClaims.map((claim, index) => (
-                  <ClaimItem 
-                    key={claim.id} 
-                    claim={claim} 
-                    index={index} 
+                  <ClaimItem
+                    key={claim.id}
+                    claim={claim}
+                    index={index}
                     onSelect={() => onSelectMarker?.(`claim-${claim.id}`)}
                   />
                 ))
@@ -272,10 +271,10 @@ export default function SummaryCard({ analysis, isLoading, onSelectMarker }: Sum
                 </p>
               ) : (
                 analysis?.logicalGaps.map((gap, index) => (
-                  <GapItem 
-                    key={gap.id} 
-                    gap={gap} 
-                    index={index} 
+                  <GapItem
+                    key={gap.id}
+                    gap={gap}
+                    index={index}
                     onSelect={() => onSelectMarker?.(`gap-${gap.id}`)}
                   />
                 ))
@@ -297,10 +296,10 @@ export default function SummaryCard({ analysis, isLoading, onSelectMarker }: Sum
                 </p>
               ) : (
                 analysis?.missingEvidence.map((item, index) => (
-                  <MissingEvidenceItem 
-                    key={item.id} 
-                    item={item} 
-                    index={index} 
+                  <MissingEvidenceItem
+                    key={item.id}
+                    item={item}
+                    index={index}
                     onSelect={() => onSelectMarker?.(`evidence-${item.id}`)}
                   />
                 ))

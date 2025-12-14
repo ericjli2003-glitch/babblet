@@ -25,9 +25,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { sessionId, context } = body;
+    const { sessionId, context, settings } = body;
 
-    console.log('[generate-questions] Session:', sessionId, 'Has context:', !!context);
+    console.log('[generate-questions] Session:', sessionId, 'Has context:', !!context, 'Has settings:', !!settings);
 
     if (!sessionId) {
       return NextResponse.json(
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     // Prefer Claude, fall back to OpenAI, then mock
     if (isClaudeConfigured()) {
       console.log('[generate-questions] Calling Claude Sonnet 4 for question generation...');
-      questions = await generateQuestionsWithClaude(transcript, analysisContext, slideContent);
+      questions = await generateQuestionsWithClaude(transcript, analysisContext, slideContent, settings);
       console.log('[generate-questions] Claude returned', questions.length, 'questions');
     } else if (isOpenAIConfigured()) {
       console.log('[generate-questions] Calling OpenAI for question generation...');
