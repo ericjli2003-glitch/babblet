@@ -130,7 +130,7 @@ export interface SlideAnalysis {
 // Semantic Event Types (New Gemini Integration)
 // ============================================
 
-export type SemanticEventType = 
+export type SemanticEventType =
   | 'claim'
   | 'topic_shift'
   | 'definition'
@@ -154,7 +154,7 @@ export interface SemanticEvent {
 // Streaming Event Types
 // ============================================
 
-export type StreamEventType = 
+export type StreamEventType =
   | 'init'
   | 'heartbeat'
   | 'transcript_update'

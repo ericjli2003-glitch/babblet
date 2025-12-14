@@ -28,7 +28,7 @@ import {
   Presentation,
   FileImage,
 } from 'lucide-react';
-import TranscriptFeed from '@/components/TranscriptFeed';
+import TranscriptFeed, { type QuestionHighlight } from '@/components/TranscriptFeed';
 import QuestionBank from '@/components/QuestionBank';
 import SummaryCard from '@/components/SummaryCard';
 import RubricCard from '@/components/RubricCard';
@@ -125,6 +125,7 @@ function LiveDashboardContent() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [highlightKeywords, setHighlightKeywords] = useState(false);
+  const [showQuestionHighlights, setShowQuestionHighlights] = useState(false);
   const [slideFile, setSlideFile] = useState<File | null>(null);
   const [slideAnalysis, setSlideAnalysis] = useState<{
     extractedText?: string;
@@ -332,12 +333,12 @@ function LiveDashboardContent() {
           // Try to find the timestamp based on relevantSnippet from Claude
           const questionMarkers: TimelineMarker[] = questionsData.questions.map((q: GeneratedQuestion) => {
             let markerTimestamp = currentVideoTime;
-            
+
             // If question has a relevantSnippet, find it in transcript to get accurate timestamp
             if (q.relevantSnippet && q.relevantSnippet.length > 5) {
               const snippetLower = q.relevantSnippet.toLowerCase();
               // Search through transcript segments to find the matching one
-              const matchingSegment = transcript.find(seg => 
+              const matchingSegment = transcript.find(seg =>
                 seg.text.toLowerCase().includes(snippetLower)
               );
               if (matchingSegment && matchingSegment.timestamp > 0) {
@@ -345,7 +346,7 @@ function LiveDashboardContent() {
                 console.log(`[Markers] Found snippet "${q.relevantSnippet.slice(0, 30)}..." at ${markerTimestamp}ms`);
               }
             }
-            
+
             return {
               id: `q-${q.id}`,
               timestamp: markerTimestamp,
@@ -1982,7 +1983,18 @@ function LiveDashboardContent() {
                     }`}
                 >
                   <Highlighter className="w-4 h-4" />
-                  {highlightKeywords ? 'Highlighting On' : 'Highlight Keywords'}
+                  {highlightKeywords ? 'Keywords On' : 'Keywords'}
+                </button>
+                <button
+                  onClick={() => setShowQuestionHighlights(!showQuestionHighlights)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${showQuestionHighlights
+                    ? 'bg-yellow-100 text-yellow-700'
+                    : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
+                    }`}
+                  title="Show where questions arose from the transcript"
+                >
+                  <span className="text-base">💡</span>
+                  {showQuestionHighlights ? 'Questions On' : 'Questions'}
                 </button>
               </div>
               <div className="flex-1 bg-white mx-4 mb-4 rounded-3xl shadow-soft overflow-hidden">
@@ -1992,27 +2004,30 @@ function LiveDashboardContent() {
                   currentTime={currentTime}
                   highlightKeywords={highlightKeywords ? (
                     // Extract meaningful keywords from claims (not first 3 words)
-                    analysis?.keyClaims.flatMap((c) => 
+                    analysis?.keyClaims.flatMap((c) =>
                       c.claim.split(/\s+/).filter(word => word.length >= 4)
                     ) || []
                   ) : []}
-                  questionHighlights={
-                    // If a question marker is selected, highlight its text in the transcript
-                    selectedMarkerId?.startsWith('q-') 
-                      ? (() => {
-                          const allQuestions = [
-                            ...questions.clarifying,
-                            ...questions.criticalThinking,
-                            ...questions.expansion,
-                          ];
-                          const selectedQ = allQuestions.find(q => `q-${q.id}` === selectedMarkerId);
-                          // Extract key phrases from the question (3+ word sequences)
-                          return selectedQ 
-                            ? selectedQ.question.split(/[.,?!]/).map(s => s.trim()).filter(s => s.length > 10)
-                            : [];
-                        })()
-                      : []
-                  }
+                  questionHighlights={(() => {
+                    // Build question highlights from all questions with relevantSnippets
+                    const allQuestions = [
+                      ...questions.clarifying,
+                      ...questions.criticalThinking,
+                      ...questions.expansion,
+                    ];
+                    return allQuestions
+                      .filter(q => q.relevantSnippet && q.relevantSnippet.length > 5)
+                      .map(q => ({
+                        snippet: q.relevantSnippet || '',
+                        question: q.question,
+                        questionId: q.id,
+                      }));
+                  })()}
+                  showQuestionHighlights={showQuestionHighlights}
+                  onQuestionHighlightClick={(questionId) => {
+                    // Find and select the question marker
+                    handleSelectMarker(`q-${questionId}`);
+                  }}
                   interimText={interimTranscript}
                 />
               </div>

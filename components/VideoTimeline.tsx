@@ -152,40 +152,41 @@ export default function VideoTimeline({
         })}
       </div>
 
-      {/* Tooltip */}
+      {/* Tooltip - positioned ABOVE the timeline */}
       <AnimatePresence>
         {hoveredMarker && (
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            className="fixed z-50 pointer-events-none"
+            exit={{ opacity: 0, y: 8 }}
+            className="fixed z-[100] pointer-events-none"
             style={{
               left: tooltipPosition.x,
-              top: tooltipPosition.y - 10,
+              top: tooltipPosition.y - 16,
               transform: 'translate(-50%, -100%)',
             }}
           >
-            <div className="bg-surface-900 text-white px-3 py-2 rounded-lg shadow-xl max-w-xs">
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${hoveredMarker.type === 'question' ? 'bg-primary-500' :
-                    hoveredMarker.type === 'issue' ? 'bg-amber-500' : 'bg-emerald-500'
-                  }`}>
-                  {hoveredMarker.type === 'question' ? 'Question' :
-                    hoveredMarker.type === 'issue' ? 'Issue' : 'Insight'}
+            <div className="bg-surface-900 text-white px-4 py-3 rounded-xl shadow-2xl max-w-sm border border-surface-700">
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                  hoveredMarker.type === 'question' ? 'bg-primary-500' :
+                  hoveredMarker.type === 'issue' ? 'bg-amber-500' : 'bg-emerald-500'
+                }`}>
+                  {hoveredMarker.type === 'question' ? '❓ Question' :
+                   hoveredMarker.type === 'issue' ? '⚠️ Issue' : '💡 Insight'}
                 </span>
-                <span className="text-xs text-surface-400">
+                <span className="text-xs text-surface-400 font-mono">
                   {formatTime(hoveredMarker.timestamp)}
                 </span>
               </div>
-              <p className="text-sm font-medium">{hoveredMarker.title}</p>
+              <p className="text-sm font-medium leading-snug">{hoveredMarker.title}</p>
               {hoveredMarker.description && (
-                <p className="text-xs text-surface-300 mt-1 line-clamp-2">
+                <p className="text-xs text-surface-400 mt-2 line-clamp-2">
                   {hoveredMarker.description}
                 </p>
               )}
             </div>
-            {/* Arrow */}
+            {/* Arrow pointing down */}
             <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-surface-900" />
           </motion.div>
         )}
