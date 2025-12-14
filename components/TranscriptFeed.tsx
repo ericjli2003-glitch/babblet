@@ -1,15 +1,32 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Clock, Mic } from 'lucide-react';
 import type { TranscriptSegment } from '@/lib/types';
+
+// Common stopwords to exclude from highlighting
+const STOPWORDS = new Set([
+  'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with',
+  'by', 'from', 'as', 'is', 'was', 'are', 'were', 'be', 'been', 'being', 'have', 'has',
+  'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might',
+  'must', 'shall', 'can', 'need', 'dare', 'ought', 'used', 'it', 'its', 'this', 'that',
+  'these', 'those', 'i', 'you', 'he', 'she', 'we', 'they', 'me', 'him', 'her', 'us',
+  'them', 'my', 'your', 'his', 'our', 'their', 'what', 'which', 'who', 'whom', 'whose',
+  'where', 'when', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most',
+  'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than',
+  'too', 'very', 'just', 'also', 'now', 'here', 'there', 'then', 'once', 'if', 'because',
+  'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between',
+  'under', 'again', 'further', 'while', 'really', 'actually', 'basically', 'like', 'kind',
+  'sort', 'thing', 'things', 'something', 'anything', 'everything', 'nothing'
+]);
 
 interface TranscriptFeedProps {
   segments: TranscriptSegment[];
   isLive?: boolean;
   currentTime?: number;
   highlightKeywords?: string[];
+  questionHighlights?: string[]; // Phrases from questions to highlight in yellow
   interimText?: string; // Real-time interim transcription
 }
 
@@ -20,28 +37,96 @@ function formatTimestamp(ms: number): string {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
-function highlightText(text: string, keywords: string[]): React.ReactNode {
-  if (!keywords.length) return text;
+// Escape regex special characters
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
-  const regex = new RegExp(`(${keywords.join('|')})`, 'gi');
-  const parts = text.split(regex);
+// Filter and clean keywords
+function cleanKeywords(keywords: string[]): string[] {
+  return Array.from(new Set(
+    keywords
+      .map(k => k.trim().toLowerCase())
+      .filter(k => k.length >= 4) // Min 4 characters
+      .filter(k => !STOPWORDS.has(k)) // Exclude stopwords
+      .filter(k => /^[a-z]/i.test(k)) // Must start with letter
+  ));
+}
 
-  return parts.map((part, index) => {
-    const isKeyword = keywords.some(
-      (keyword) => keyword.toLowerCase() === part.toLowerCase()
-    );
-    if (isKeyword) {
-      return (
-        <mark
-          key={index}
-          className="bg-primary-100 text-primary-700 px-1 rounded font-medium"
-        >
-          {part}
-        </mark>
-      );
+function highlightText(
+  text: string, 
+  keywords: string[], 
+  questionPhrases: string[] = []
+): React.ReactNode {
+  // Clean and filter keywords
+  const cleanedKeywords = cleanKeywords(keywords);
+  
+  // Build combined pattern with word boundaries
+  const patterns: { pattern: RegExp; type: 'keyword' | 'question' }[] = [];
+  
+  // Add question phrases first (higher priority, yellow highlight)
+  questionPhrases.forEach(phrase => {
+    const cleaned = phrase.trim();
+    if (cleaned.length >= 3) {
+      try {
+        patterns.push({
+          pattern: new RegExp(`\\b${escapeRegex(cleaned)}\\b`, 'gi'),
+          type: 'question'
+        });
+      } catch (e) {
+        // Invalid regex, skip
+      }
     }
-    return part;
   });
+  
+  // Add keywords (blue highlight)
+  if (cleanedKeywords.length > 0) {
+    // Sort by length (longest first) to avoid partial matches
+    const sorted = cleanedKeywords.sort((a, b) => b.length - a.length);
+    const escapedKeywords = sorted.map(escapeRegex);
+    patterns.push({
+      pattern: new RegExp(`\\b(${escapedKeywords.join('|')})\\b`, 'gi'),
+      type: 'keyword'
+    });
+  }
+  
+  if (patterns.length === 0) return text;
+  
+  // Apply highlights
+  let result: React.ReactNode[] = [text];
+  let keyIndex = 0;
+  
+  patterns.forEach(({ pattern, type }) => {
+    const newResult: React.ReactNode[] = [];
+    
+    result.forEach(part => {
+      if (typeof part !== 'string') {
+        newResult.push(part);
+        return;
+      }
+      
+      const splitParts = part.split(pattern);
+      const matches = part.match(pattern) || [];
+      
+      splitParts.forEach((subPart, i) => {
+        if (subPart) newResult.push(subPart);
+        if (i < matches.length) {
+          const className = type === 'question' 
+            ? 'bg-yellow-200 text-yellow-900 px-1 rounded font-medium'
+            : 'bg-primary-100 text-primary-700 px-1 rounded font-medium';
+          newResult.push(
+            <mark key={`${type}-${keyIndex++}`} className={className}>
+              {matches[i]}
+            </mark>
+          );
+        }
+      });
+    });
+    
+    result = newResult;
+  });
+  
+  return result;
 }
 
 export default function TranscriptFeed({
@@ -49,6 +134,7 @@ export default function TranscriptFeed({
   isLive = false,
   currentTime = 0,
   highlightKeywords = [],
+  questionHighlights = [],
   interimText = '',
 }: TranscriptFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -116,7 +202,7 @@ export default function TranscriptFeed({
             className="prose prose-sm max-w-none"
           >
             <p className="text-surface-700 text-base leading-relaxed whitespace-pre-wrap">
-              {highlightText(fullTranscript, highlightKeywords)}
+              {highlightText(fullTranscript, highlightKeywords, questionHighlights)}
               {/* Show interim (real-time) text in a different style */}
               {hasInterim && (
                 <span className="text-surface-400 italic">

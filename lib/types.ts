@@ -75,6 +75,7 @@ export interface GeneratedQuestion {
   difficulty: QuestionDifficulty;
   rationale?: string;
   relatedClaim?: string;
+  relevantSnippet?: string; // Quote from transcript this question relates to
   timestamp: number;
 }
 

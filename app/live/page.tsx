@@ -154,7 +154,7 @@ function LiveDashboardContent() {
   const lastWordCountRef = useRef<number>(0);
   const pendingQuestionGenRef = useRef<boolean>(false);
   const lastQuestionGenTimeRef = useRef<number>(0);
-  
+
   // Question generation settings
   const [showQuestionSettings, setShowQuestionSettings] = useState(false);
   const [questionSettings, setQuestionSettings] = useState({
@@ -168,7 +168,7 @@ function LiveDashboardContent() {
     },
     focusAreas: [] as string[], // Specific topics to focus on
   });
-  
+
   // Candidate question pool (internal, not shown)
   const [candidateQuestions, setCandidateQuestions] = useState<GeneratedQuestion[]>([]);
 
@@ -189,7 +189,7 @@ function LiveDashboardContent() {
       pendingQuestionGenRef.current = false;
       return;
     }
-    
+
     // Check max questions cap
     const totalQuestions = questions.clarifying.length + questions.criticalThinking.length + questions.expansion.length;
     if (totalQuestions >= questionSettings.maxQuestions) {
@@ -197,7 +197,7 @@ function LiveDashboardContent() {
       pendingQuestionGenRef.current = false;
       return;
     }
-    
+
     lastQuestionGenTimeRef.current = now;
     console.log('[Questions] Triggering async generation...');
 
@@ -329,14 +329,32 @@ function LiveDashboardContent() {
           });
 
           // Then, separately add timeline markers for new questions
-          const questionMarkers: TimelineMarker[] = questionsData.questions.map((q: GeneratedQuestion) => ({
-            id: `q-${q.id}`,
-            timestamp: currentVideoTime,
-            type: 'question' as const,
-            title: q.question.slice(0, 60) + (q.question.length > 60 ? '...' : ''),
-            description: q.rationale,
-            category: q.category,
-          }));
+          // Try to find the timestamp based on relevantSnippet from Claude
+          const questionMarkers: TimelineMarker[] = questionsData.questions.map((q: GeneratedQuestion) => {
+            let markerTimestamp = currentVideoTime;
+            
+            // If question has a relevantSnippet, find it in transcript to get accurate timestamp
+            if (q.relevantSnippet && q.relevantSnippet.length > 5) {
+              const snippetLower = q.relevantSnippet.toLowerCase();
+              // Search through transcript segments to find the matching one
+              const matchingSegment = transcript.find(seg => 
+                seg.text.toLowerCase().includes(snippetLower)
+              );
+              if (matchingSegment && matchingSegment.timestamp > 0) {
+                markerTimestamp = matchingSegment.timestamp;
+                console.log(`[Markers] Found snippet "${q.relevantSnippet.slice(0, 30)}..." at ${markerTimestamp}ms`);
+              }
+            }
+            
+            return {
+              id: `q-${q.id}`,
+              timestamp: markerTimestamp,
+              type: 'question' as const,
+              title: q.question.slice(0, 60) + (q.question.length > 60 ? '...' : ''),
+              description: q.rationale,
+              category: q.category,
+            };
+          });
 
           if (questionMarkers.length > 0) {
             setTimelineMarkers(prev => {
@@ -1424,7 +1442,7 @@ function LiveDashboardContent() {
 
               {/* Actions */}
               <div className="flex items-center gap-2">
-                <button 
+                <button
                   onClick={() => setShowQuestionSettings(true)}
                   className="p-2 text-surface-500 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-colors"
                   title="Question Settings"
@@ -1972,7 +1990,29 @@ function LiveDashboardContent() {
                   segments={transcript}
                   isLive={isRecording || isPlaying}
                   currentTime={currentTime}
-                  highlightKeywords={highlightKeywords ? (analysis?.keyClaims.flatMap((c) => c.claim.split(' ').slice(0, 3)) || []) : []}
+                  highlightKeywords={highlightKeywords ? (
+                    // Extract meaningful keywords from claims (not first 3 words)
+                    analysis?.keyClaims.flatMap((c) => 
+                      c.claim.split(/\s+/).filter(word => word.length >= 4)
+                    ) || []
+                  ) : []}
+                  questionHighlights={
+                    // If a question marker is selected, highlight its text in the transcript
+                    selectedMarkerId?.startsWith('q-') 
+                      ? (() => {
+                          const allQuestions = [
+                            ...questions.clarifying,
+                            ...questions.criticalThinking,
+                            ...questions.expansion,
+                          ];
+                          const selectedQ = allQuestions.find(q => `q-${q.id}` === selectedMarkerId);
+                          // Extract key phrases from the question (3+ word sequences)
+                          return selectedQ 
+                            ? selectedQ.question.split(/[.,?!]/).map(s => s.trim()).filter(s => s.length > 10)
+                            : [];
+                        })()
+                      : []
+                  }
                   interimText={interimTranscript}
                 />
               </div>
@@ -2127,7 +2167,7 @@ function LiveDashboardContent() {
           </motion.div>
         )}
       </AnimatePresence>
-      
+
       {/* Question Settings Modal */}
       <QuestionSettings
         isOpen={showQuestionSettings}

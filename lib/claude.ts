@@ -51,7 +51,7 @@ export async function generateQuestionsWithClaude(
 
   // Build priority guidance
   const priorityLabels = ['avoid', 'include some', 'prioritize'];
-  const priorityGuidance = settings?.priorities 
+  const priorityGuidance = settings?.priorities
     ? `
 Question Type Priorities (follow these closely):
 - Clarifying questions: ${priorityLabels[settings.priorities.clarifying]}
@@ -117,6 +117,8 @@ ${existingQuestionsSection}
 
 Return ONLY questions that are genuinely valuable. If nothing new warrants a question, return an empty array.
 
+IMPORTANT: For each question, include a "relevantSnippet" field with a short quote (5-15 words) from the transcript that this question is about. This helps locate where in the presentation the question arose.
+
 JSON format:
 {
   "questions": [
@@ -124,7 +126,8 @@ JSON format:
       "question": "The question text",
       "category": "clarifying" | "critical-thinking" | "expansion",
       "difficulty": "easy" | "medium" | "hard",
-      "rationale": "Why this question is valuable for this specific presentation"
+      "rationale": "Why this question is valuable for this specific presentation",
+      "relevantSnippet": "exact quote from transcript this question relates to"
     }
   ]
 }
@@ -168,6 +171,7 @@ Respond ONLY with JSON.`;
       category: q.category || 'clarifying',
       difficulty: q.difficulty || 'medium',
       rationale: q.rationale || '',
+      relevantSnippet: q.relevantSnippet || '',
       timestamp: Date.now(),
     }));
 
