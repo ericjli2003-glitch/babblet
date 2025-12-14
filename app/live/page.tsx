@@ -136,8 +136,28 @@ function LiveDashboardContent() {
   const [audioSource, setAudioSource] = useState<'microphone' | 'system' | 'both'>('microphone');
   const [interimTranscript, setInterimTranscript] = useState<string>('');
   const [useStreamingTranscription, setUseStreamingTranscription] = useState(true);
+  const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
+  
+  // Camera and recording playback for live mode
+  const [includeCamera, setIncludeCamera] = useState(false);
+  const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
+  const [recordedVideoDuration, setRecordedVideoDuration] = useState(0);
+  const [recordedVideoTime, setRecordedVideoTime] = useState(0);
+  const [isPlayingRecording, setIsPlayingRecording] = useState(false);
+  const recordedVideoRef = useRef<HTMLVideoElement | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const cameraPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const videoRecorderRef = useRef<MediaRecorder | null>(null);
+  
   const lastWordCountRef = useRef<number>(0);
   const pendingQuestionGenRef = useRef<boolean>(false);
+  
+  // Keep a ref for currentTime to avoid stale closures in callbacks
+  const currentTimeRef = useRef(0);
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
 
   // Async question generation - non-blocking (defined first to avoid hoisting issues)
   const triggerAsyncQuestionGeneration = useCallback(async (transcriptText: string) => {
@@ -159,7 +179,10 @@ function LiveDashboardContent() {
 
         // Add timeline markers for issues/gaps detected
         const issueMarkers: TimelineMarker[] = [];
-        const capturedTime = currentTime;
+        // Use actual video time or ref to avoid stale closure
+        const capturedTime = mode === 'upload' && videoRef.current 
+          ? videoRef.current.currentTime * 1000 
+          : currentTimeRef.current;
 
         // Add markers for logical gaps
         analysisData.analysis.logicalGaps?.forEach((gap: { id: string; description: string; severity?: string }) => {
@@ -182,9 +205,25 @@ function LiveDashboardContent() {
             description: 'Key claim identified',
           });
         });
+        
+        // Add markers for missing evidence
+        analysisData.analysis.missingEvidence?.forEach((evidence: { id: string; description: string; importance?: string }) => {
+          issueMarkers.push({
+            id: `evidence-${evidence.id}`,
+            timestamp: capturedTime,
+            type: 'issue',
+            title: evidence.description.slice(0, 50) + (evidence.description.length > 50 ? '...' : ''),
+            description: `Missing evidence (${evidence.importance || 'medium'} importance)`,
+          });
+        });
 
         if (issueMarkers.length > 0) {
-          setTimelineMarkers(prev => [...prev, ...issueMarkers]);
+          setTimelineMarkers(prev => {
+            // Avoid duplicate markers
+            const existingIds = new Set(prev.map(m => m.id));
+            const newMarkers = issueMarkers.filter(m => !existingIds.has(m.id));
+            return [...prev, ...newMarkers];
+          });
         }
 
         // Then trigger question generation with slide context if available
@@ -208,7 +247,10 @@ function LiveDashboardContent() {
         const questionsData = await questionsResponse.json();
 
         if (questionsData.questions && Array.isArray(questionsData.questions)) {
-          const currentVideoTime = currentTime; // Capture current time for markers
+          // Use actual video time or ref to avoid stale closure
+          const currentVideoTime = mode === 'upload' && videoRef.current 
+            ? videoRef.current.currentTime * 1000 
+            : currentTimeRef.current;
 
           // First, update questions state
           setQuestions((prev) => {
@@ -559,7 +601,7 @@ function LiveDashboardContent() {
 
       // Connect to Deepgram streaming for real-time transcription
       const connected = await deepgramStream.connect(destination.stream);
-      
+
       if (!connected) {
         console.error('[Video] Failed to connect to Deepgram streaming');
         alert('Failed to connect to transcription service. Please check your API key.');
@@ -739,6 +781,64 @@ function LiveDashboardContent() {
 
       streamRef.current = stream;
 
+      // Capture camera video if enabled
+      let combinedStream = stream;
+      if (includeCamera) {
+        try {
+          console.log('[Live] Requesting camera...');
+          const cameraStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { width: 1280, height: 720 },
+            audio: false // Audio already captured separately
+          });
+          cameraStreamRef.current = cameraStream;
+          
+          // Show camera preview
+          if (cameraPreviewRef.current) {
+            cameraPreviewRef.current.srcObject = cameraStream;
+            cameraPreviewRef.current.play();
+          }
+          
+          // Combine camera video with audio
+          const videoTrack = cameraStream.getVideoTracks()[0];
+          const audioTracks = stream.getAudioTracks();
+          combinedStream = new MediaStream([videoTrack, ...audioTracks]);
+          
+          console.log('[Live] Camera stream obtained and combined with audio');
+          
+          // Set up video recording
+          const videoMimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') 
+            ? 'video/webm;codecs=vp9,opus' 
+            : MediaRecorder.isTypeSupported('video/webm') 
+            ? 'video/webm' 
+            : 'video/mp4';
+          
+          const videoRecorder = new MediaRecorder(combinedStream, { mimeType: videoMimeType });
+          videoRecorderRef.current = videoRecorder;
+          
+          videoRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              recordedChunksRef.current.push(event.data);
+            }
+          };
+          
+          videoRecorder.onstop = () => {
+            if (recordedChunksRef.current.length > 0) {
+              const blob = new Blob(recordedChunksRef.current, { type: videoMimeType });
+              const url = URL.createObjectURL(blob);
+              setRecordedVideoUrl(url);
+              console.log('[Live] Recording saved, URL created');
+            }
+          };
+          
+          videoRecorder.start(1000); // Collect chunks every second
+          console.log('[Live] Video recording started');
+          
+        } catch (e) {
+          console.error('[Live] Camera error:', e);
+          alert('Failed to access camera. Continuing with audio only.');
+        }
+      }
+
       // Set up audio context for visualization
       audioContextRef.current = new AudioContext();
       const source = audioContextRef.current.createMediaStreamSource(stream);
@@ -892,6 +992,23 @@ function LiveDashboardContent() {
 
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
+    }
+    
+    // Stop video recorder if active
+    if (videoRecorderRef.current && videoRecorderRef.current.state !== 'inactive') {
+      console.log('[Live] Stopping video recorder...');
+      videoRecorderRef.current.stop();
+    }
+    
+    // Stop camera stream
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach(track => track.stop());
+      cameraStreamRef.current = null;
+    }
+    
+    // Clear camera preview
+    if (cameraPreviewRef.current) {
+      cameraPreviewRef.current.srcObject = null;
     }
 
     if (isRecording) {
@@ -1055,6 +1172,33 @@ function LiveDashboardContent() {
       console.error('Rubric generation failed:', e);
     }
   };
+
+  // Handle marker selection from SummaryCard/QuestionBank
+  const handleSelectMarker = useCallback((markerId: string) => {
+    // Find the marker by ID
+    const marker = timelineMarkers.find(m => m.id === markerId);
+    
+    if (marker) {
+      // Seek video to marker timestamp
+      if (mode === 'upload' && videoRef.current) {
+        videoRef.current.currentTime = marker.timestamp / 1000;
+        setCurrentTime(marker.timestamp);
+      } else if (mode === 'live' && recordedVideoRef.current) {
+        recordedVideoRef.current.currentTime = marker.timestamp / 1000;
+        setRecordedVideoTime(marker.timestamp);
+      }
+      
+      // Highlight the marker
+      setSelectedMarkerId(markerId);
+      
+      // Auto-clear selection after 3 seconds
+      setTimeout(() => setSelectedMarkerId(null), 3000);
+      
+      console.log('[Marker] Selected:', markerId, 'at', marker.timestamp, 'ms');
+    } else {
+      console.log('[Marker] Not found:', markerId);
+    }
+  }, [timelineMarkers, mode]);
 
   // Timer for live recording
   useEffect(() => {
@@ -1492,6 +1636,28 @@ function LiveDashboardContent() {
                   )}
                 </div>
 
+                {/* Camera Toggle */}
+                <div className="mb-6">
+                  <button
+                    onClick={() => setIncludeCamera(!includeCamera)}
+                    className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all mx-auto ${includeCamera
+                      ? 'border-primary-500 bg-primary-500/10 text-primary-600'
+                      : 'border-surface-200 text-surface-600 hover:border-surface-300'
+                      }`}
+                  >
+                    <Video className="w-5 h-5" />
+                    <div className="text-left">
+                      <div className="font-medium">Include Camera</div>
+                      <div className="text-xs opacity-70">{includeCamera ? 'Camera ON - Recording video' : 'Click to enable webcam'}</div>
+                    </div>
+                  </button>
+                  {includeCamera && (
+                    <p className="mt-2 text-xs text-primary-600 bg-primary-50 px-3 py-2 rounded-lg max-w-md mx-auto">
+                      📹 Your webcam will be recorded. You can play back the video after the session!
+                    </p>
+                  )}
+                </div>
+
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
@@ -1515,6 +1681,86 @@ function LiveDashboardContent() {
                     </>
                   )}
                 </motion.button>
+              </div>
+            </div>
+          )}
+          
+          {/* Camera preview during live recording */}
+          {mode === 'live' && isRecording && includeCamera && (
+            <div className="bg-surface-900 p-4">
+              <div className="max-w-md mx-auto">
+                <div className="relative rounded-xl overflow-hidden bg-black">
+                  <video
+                    ref={cameraPreviewRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    className="w-full max-h-48 transform scale-x-[-1]"
+                  />
+                  <div className="absolute top-2 left-2 px-2 py-1 bg-red-500 text-white text-xs rounded-full flex items-center gap-1">
+                    <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                    Recording
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Recording playback for live mode (after recording ends) */}
+          {mode === 'live' && status === 'completed' && recordedVideoUrl && (
+            <div className="bg-surface-900 p-4">
+              <div className="space-y-3">
+                <div className="relative rounded-xl overflow-hidden bg-black">
+                  <video
+                    ref={recordedVideoRef}
+                    src={recordedVideoUrl}
+                    className="w-full max-h-72"
+                    onLoadedMetadata={(e) => setRecordedVideoDuration(e.currentTarget.duration)}
+                    onTimeUpdate={(e) => setRecordedVideoTime(e.currentTarget.currentTime * 1000)}
+                  />
+                </div>
+                
+                {/* Recorded Video Controls */}
+                <div className="flex items-center gap-4 px-2">
+                  <button
+                    onClick={() => {
+                      if (recordedVideoRef.current) {
+                        if (isPlayingRecording) {
+                          recordedVideoRef.current.pause();
+                        } else {
+                          recordedVideoRef.current.play();
+                        }
+                        setIsPlayingRecording(!isPlayingRecording);
+                      }
+                    }}
+                    className="p-2 rounded-lg bg-surface-800 text-white hover:bg-surface-700 transition-colors"
+                  >
+                    {isPlayingRecording ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                  </button>
+                  
+                  <div className="flex-1">
+                    <VideoTimeline
+                      currentTime={recordedVideoTime}
+                      duration={recordedVideoDuration}
+                      markers={timelineMarkers}
+                      activeMarkerId={selectedMarkerId}
+                      onSeek={(timeMs) => {
+                        if (recordedVideoRef.current) {
+                          recordedVideoRef.current.currentTime = timeMs / 1000;
+                          setRecordedVideoTime(timeMs);
+                        }
+                      }}
+                      onMarkerClick={(marker) => {
+                        setSelectedMarkerId(marker.id);
+                        setTimeout(() => setSelectedMarkerId(null), 3000);
+                      }}
+                    />
+                  </div>
+                  
+                  <span className="text-white text-sm font-mono min-w-[100px] text-right">
+                    {formatTime(recordedVideoTime)} / {formatTime(recordedVideoDuration * 1000)}
+                  </span>
+                </div>
               </div>
             </div>
           )}
@@ -1592,6 +1838,7 @@ function LiveDashboardContent() {
                         currentTime={currentTime}
                         duration={videoDuration}
                         markers={timelineMarkers}
+                        activeMarkerId={selectedMarkerId}
                         onSeek={(timeMs) => {
                           if (videoRef.current) {
                             videoRef.current.currentTime = timeMs / 1000;
@@ -1600,7 +1847,9 @@ function LiveDashboardContent() {
                         }}
                         onMarkerClick={(marker) => {
                           console.log('[Timeline] Marker clicked:', marker);
-                          // Could show a modal or highlight the question/issue
+                          setSelectedMarkerId(marker.id);
+                          // Auto-clear selection after 3 seconds
+                          setTimeout(() => setSelectedMarkerId(null), 3000);
                         }}
                       />
                     </div>
@@ -1681,14 +1930,22 @@ function LiveDashboardContent() {
             {/* Analysis Panel */}
             <div className={`h-full ${activePanel === 'analysis' ? '' : 'hidden'}`}>
               <div className="h-full bg-white m-4 rounded-3xl shadow-soft overflow-hidden">
-                <SummaryCard analysis={analysis} isLoading={isAnalyzing} />
+                <SummaryCard 
+                  analysis={analysis} 
+                  isLoading={isAnalyzing} 
+                  onSelectMarker={handleSelectMarker}
+                />
               </div>
             </div>
 
             {/* Questions Panel */}
             <div className={`h-full ${activePanel === 'questions' ? '' : 'hidden'}`}>
               <div className="h-full bg-white m-4 rounded-3xl shadow-soft overflow-hidden">
-                <QuestionBank questions={questions} isLoading={isGeneratingQuestions} />
+                <QuestionBank 
+                  questions={questions} 
+                  isLoading={isGeneratingQuestions} 
+                  onSelectMarker={handleSelectMarker}
+                />
               </div>
             </div>
 

@@ -19,6 +19,7 @@ interface VideoTimelineProps {
   markers: TimelineMarker[];
   onSeek: (timeMs: number) => void;
   onMarkerClick?: (marker: TimelineMarker) => void;
+  activeMarkerId?: string | null; // Highlighted marker
 }
 
 export default function VideoTimeline({
@@ -27,6 +28,7 @@ export default function VideoTimeline({
   markers,
   onSeek,
   onMarkerClick,
+  activeMarkerId,
 }: VideoTimelineProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [hoveredMarker, setHoveredMarker] = useState<TimelineMarker | null>(null);
@@ -123,13 +125,15 @@ export default function VideoTimeline({
           const position = getMarkerPosition(marker.timestamp);
           const style = getMarkerStyle(marker.type);
           const Icon = style.icon;
+          const isActive = marker.id === activeMarkerId;
 
           return (
             <motion.div
               key={marker.id}
-              className={`absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full ${style.color} flex items-center justify-center cursor-pointer shadow-md border-2 border-white z-10`}
+              className={`absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full ${style.color} flex items-center justify-center cursor-pointer shadow-md border-2 border-white z-10 ${isActive ? 'ring-4 ring-white/80 scale-125' : ''}`}
               style={{ left: `calc(${position}% - 10px)` }}
               whileHover={{ scale: 1.3, y: -4 }}
+              animate={isActive ? { scale: 1.25, y: -2 } : { scale: 1, y: 0 }}
               onMouseEnter={(e) => {
                 setHoveredMarker(marker);
                 const rect = e.currentTarget.getBoundingClientRect();

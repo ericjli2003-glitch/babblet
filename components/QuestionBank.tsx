@@ -22,6 +22,7 @@ interface QuestionBankProps {
     expansion: GeneratedQuestion[];
   };
   isLoading?: boolean;
+  onSelectMarker?: (markerId: string) => void;
 }
 
 const categoryConfig: Record<
@@ -54,11 +55,12 @@ const difficultyColors: Record<QuestionDifficulty, string> = {
   hard: 'badge-hard',
 };
 
-function QuestionCard({ question }: { question: GeneratedQuestion }) {
+function QuestionCard({ question, onSelect }: { question: GeneratedQuestion; onSelect?: () => void }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
 
-  const handleCopy = async () => {
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     await navigator.clipboard.writeText(question.question);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
@@ -70,7 +72,8 @@ function QuestionCard({ question }: { question: GeneratedQuestion }) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className="question-card group"
+      className="question-card group cursor-pointer hover:border-primary-200"
+      onClick={onSelect}
     >
       <div className="relative z-10">
         <div className="flex items-start justify-between gap-3">
@@ -136,9 +139,11 @@ function QuestionCard({ question }: { question: GeneratedQuestion }) {
 function CategorySection({
   category,
   questions,
+  onSelectMarker,
 }: {
   category: QuestionCategory;
   questions: GeneratedQuestion[];
+  onSelectMarker?: (markerId: string) => void;
 }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const config = categoryConfig[category];
@@ -181,7 +186,11 @@ function CategorySection({
               </p>
             ) : (
               questions.map((question) => (
-                <QuestionCard key={question.id} question={question} />
+                <QuestionCard 
+                  key={question.id} 
+                  question={question} 
+                  onSelect={() => onSelectMarker?.(`q-${question.id}`)}
+                />
               ))
             )}
           </motion.div>
@@ -191,7 +200,7 @@ function CategorySection({
   );
 }
 
-export default function QuestionBank({ questions, isLoading }: QuestionBankProps) {
+export default function QuestionBank({ questions, isLoading, onSelectMarker }: QuestionBankProps) {
   const totalQuestions =
     questions.clarifying.length +
     questions.criticalThinking.length +
@@ -228,9 +237,9 @@ export default function QuestionBank({ questions, isLoading }: QuestionBankProps
           </div>
         ) : (
           <>
-            <CategorySection category="clarifying" questions={questions.clarifying} />
-            <CategorySection category="critical-thinking" questions={questions.criticalThinking} />
-            <CategorySection category="expansion" questions={questions.expansion} />
+            <CategorySection category="clarifying" questions={questions.clarifying} onSelectMarker={onSelectMarker} />
+            <CategorySection category="critical-thinking" questions={questions.criticalThinking} onSelectMarker={onSelectMarker} />
+            <CategorySection category="expansion" questions={questions.expansion} onSelectMarker={onSelectMarker} />
           </>
         )}
       </div>

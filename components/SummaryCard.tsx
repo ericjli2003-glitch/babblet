@@ -17,9 +17,10 @@ import type { AnalysisSummary, KeyClaim, LogicalGap, MissingEvidence } from '@/l
 interface SummaryCardProps {
   analysis: AnalysisSummary | null;
   isLoading?: boolean;
+  onSelectMarker?: (markerId: string) => void;
 }
 
-function ClaimItem({ claim, index }: { claim: KeyClaim; index: number }) {
+function ClaimItem({ claim, index, onSelect }: { claim: KeyClaim; index: number; onSelect?: () => void }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
@@ -27,7 +28,8 @@ function ClaimItem({ claim, index }: { claim: KeyClaim; index: number }) {
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.1 }}
-      className="p-3 rounded-xl bg-white border border-surface-100 shadow-soft"
+      className="p-3 rounded-xl bg-white border border-surface-100 shadow-soft cursor-pointer hover:border-primary-300 hover:shadow-md transition-all"
+      onClick={onSelect}
     >
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gradient-primary text-white text-xs flex items-center justify-center font-medium">
@@ -79,7 +81,7 @@ function ClaimItem({ claim, index }: { claim: KeyClaim; index: number }) {
   );
 }
 
-function GapItem({ gap, index }: { gap: LogicalGap; index: number }) {
+function GapItem({ gap, index, onSelect }: { gap: LogicalGap; index: number; onSelect?: () => void }) {
   const severityColors = {
     minor: 'bg-amber-100 text-amber-700 border-amber-200',
     moderate: 'bg-orange-100 text-orange-700 border-orange-200',
@@ -91,7 +93,8 @@ function GapItem({ gap, index }: { gap: LogicalGap; index: number }) {
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.1 }}
-      className={`p-3 rounded-xl border ${severityColors[gap.severity]}`}
+      className={`p-3 rounded-xl border cursor-pointer hover:shadow-md transition-all ${severityColors[gap.severity]}`}
+      onClick={onSelect}
     >
       <div className="flex items-start gap-2">
         <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -112,7 +115,7 @@ function GapItem({ gap, index }: { gap: LogicalGap; index: number }) {
   );
 }
 
-function MissingEvidenceItem({ item, index }: { item: MissingEvidence; index: number }) {
+function MissingEvidenceItem({ item, index, onSelect }: { item: MissingEvidence; index: number; onSelect?: () => void }) {
   const importanceColors = {
     low: 'text-surface-500',
     medium: 'text-amber-600',
@@ -124,7 +127,8 @@ function MissingEvidenceItem({ item, index }: { item: MissingEvidence; index: nu
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.1 }}
-      className="flex items-start gap-2 p-2"
+      className="flex items-start gap-2 p-2 cursor-pointer hover:bg-surface-50 rounded-lg transition-all"
+      onClick={onSelect}
     >
       <FileQuestion className={`w-4 h-4 flex-shrink-0 ${importanceColors[item.importance]}`} />
       <div>
@@ -157,7 +161,7 @@ function StrengthMeter({ value }: { value: number }) {
   );
 }
 
-export default function SummaryCard({ analysis, isLoading }: SummaryCardProps) {
+export default function SummaryCard({ analysis, isLoading, onSelectMarker }: SummaryCardProps) {
   const [activeSection, setActiveSection] = useState<'claims' | 'gaps' | 'evidence'>('claims');
 
   if (!analysis && !isLoading) {
@@ -243,7 +247,12 @@ export default function SummaryCard({ analysis, isLoading }: SummaryCardProps) {
                 </p>
               ) : (
                 analysis?.keyClaims.map((claim, index) => (
-                  <ClaimItem key={claim.id} claim={claim} index={index} />
+                  <ClaimItem 
+                    key={claim.id} 
+                    claim={claim} 
+                    index={index} 
+                    onSelect={() => onSelectMarker?.(`claim-${claim.id}`)}
+                  />
                 ))
               )}
             </motion.div>
@@ -263,7 +272,12 @@ export default function SummaryCard({ analysis, isLoading }: SummaryCardProps) {
                 </p>
               ) : (
                 analysis?.logicalGaps.map((gap, index) => (
-                  <GapItem key={gap.id} gap={gap} index={index} />
+                  <GapItem 
+                    key={gap.id} 
+                    gap={gap} 
+                    index={index} 
+                    onSelect={() => onSelectMarker?.(`gap-${gap.id}`)}
+                  />
                 ))
               )}
             </motion.div>
@@ -283,7 +297,12 @@ export default function SummaryCard({ analysis, isLoading }: SummaryCardProps) {
                 </p>
               ) : (
                 analysis?.missingEvidence.map((item, index) => (
-                  <MissingEvidenceItem key={item.id} item={item} index={index} />
+                  <MissingEvidenceItem 
+                    key={item.id} 
+                    item={item} 
+                    index={index} 
+                    onSelect={() => onSelectMarker?.(`evidence-${item.id}`)}
+                  />
                 ))
               )}
             </motion.div>
