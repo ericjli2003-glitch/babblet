@@ -527,7 +527,7 @@ function LiveDashboardContent() {
     }
   }, []);
 
-  // Process video - extract audio and send for transcription
+  // Process video - extract audio and stream to Deepgram for real-time transcription
   const processVideo = async () => {
     if (!videoRef.current || !videoUrl) return;
 
@@ -544,91 +544,29 @@ function LiveDashboardContent() {
       analyserRef.current = audioContextRef.current.createAnalyser();
       analyserRef.current.fftSize = 256;
 
-      // Create destination for recording
+      // Create destination for streaming to Deepgram
       const destination = audioContextRef.current.createMediaStreamDestination();
 
-      // Connect: source -> analyser -> destination (for recording)
+      // Connect: source -> analyser -> destination (for Deepgram)
       source.connect(analyserRef.current);
       analyserRef.current.connect(audioContextRef.current.destination); // So we can hear it
       source.connect(destination);
 
-      // Set up MediaRecorder to capture audio with best supported format
-      const mimeType = getSupportedMimeType();
-      audioMimeTypeRef.current = mimeType || 'audio/webm';
-
-      const recorderOptions: MediaRecorderOptions = mimeType ? { mimeType } : {};
-      const mediaRecorder = new MediaRecorder(destination.stream, recorderOptions);
-      mediaRecorderRef.current = mediaRecorder;
-
-      console.log(`[Video] MediaRecorder initialized with mimeType: ${mediaRecorder.mimeType}`);
+      console.log('[Video] Audio context set up, connecting to Deepgram streaming...');
 
       startTimeRef.current = Date.now();
+      setCurrentTime(0);
 
-      // Use onstop to send complete audio segments
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-          console.log(`[Video] Audio chunk received: ${event.data.size} bytes, type: ${event.data.type}`);
-        }
-      };
+      // Connect to Deepgram streaming for real-time transcription
+      const connected = await deepgramStream.connect(destination.stream);
+      
+      if (!connected) {
+        console.error('[Video] Failed to connect to Deepgram streaming');
+        alert('Failed to connect to transcription service. Please check your API key.');
+        return;
+      }
 
-      mediaRecorder.onstop = async () => {
-        if (audioChunksRef.current.length > 0 && video && !video.paused) {
-          const actualMimeType = audioChunksRef.current[0]?.type || audioMimeTypeRef.current;
-          const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
-          console.log(`[Video] Sending complete audio: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
-          const currentTimestamp = video.currentTime * 1000;
-
-          // Clear chunks for next segment
-          audioChunksRef.current = [];
-
-          if (audioBlob.size > 5000) {
-            const formData = new FormData();
-            formData.append('audio', audioBlob, 'audio.webm');
-            formData.append('sessionId', sessionId || '');
-            formData.append('timestamp', String(currentTimestamp));
-
-            try {
-              const response = await fetch('/api/transcribe', {
-                method: 'POST',
-                body: formData,
-              });
-              const data = await response.json();
-
-              if (data.segment && data.segment.text) {
-                addTranscriptSegment(data.segment);
-              }
-
-              if (data.error) {
-                console.log('[Video] Transcription message:', data.error);
-              }
-            } catch (e) {
-              console.error('Failed to send audio:', e);
-            }
-          }
-
-          // Restart recording if video is still playing
-          if (!video.paused && !video.ended && mediaRecorderRef.current?.state === 'inactive') {
-            try {
-              mediaRecorderRef.current?.start();
-              console.log('[Video] MediaRecorder restarted');
-            } catch (e) {
-              console.log('[Video] Could not restart recorder:', e);
-            }
-          }
-        }
-      };
-
-      // Stop and restart recorder every 4 seconds for near real-time transcription
-      sendAudioIntervalRef.current = setInterval(() => {
-        if (mediaRecorderRef.current?.state === 'recording') {
-          console.log('[Video] Stopping recorder for segment...');
-          mediaRecorderRef.current.stop();
-        }
-      }, 4000);
-
-      // Start recording (onstop handler will send and restart)
-      mediaRecorder.start();
+      console.log('[Video] Deepgram streaming connected - real-time transcription enabled');
 
       // Play the video
       video.play();
@@ -647,40 +585,13 @@ function LiveDashboardContent() {
 
       // Handle video end
       video.onended = async () => {
-        mediaRecorder.stop();
+        console.log('[Video] Video ended, disconnecting Deepgram...');
+        deepgramStream.disconnect();
         setIsPlaying(false);
         setStatus('processing');
 
         if (analysisIntervalRef.current) {
           clearInterval(analysisIntervalRef.current);
-        }
-
-        if (sendAudioIntervalRef.current) {
-          clearInterval(sendAudioIntervalRef.current);
-        }
-
-        // Send any remaining audio chunks
-        if (audioChunksRef.current.length > 0) {
-          const actualMimeType = audioChunksRef.current[0]?.type || audioMimeTypeRef.current;
-          const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
-          audioChunksRef.current = [];
-
-          if (audioBlob.size > 1000) {
-            const formData = new FormData();
-            formData.append('audio', audioBlob, 'audio.webm');
-            formData.append('sessionId', sessionId || '');
-            formData.append('timestamp', String(video.currentTime * 1000));
-
-            try {
-              const response = await fetch('/api/transcribe', { method: 'POST', body: formData });
-              const data = await response.json();
-              if (data.segment && data.segment.text) {
-                addTranscriptSegment(data.segment);
-              }
-            } catch (e) {
-              console.error('Failed to send final audio chunk:', e);
-            }
-          }
         }
 
         // Final analysis and rubric
@@ -690,8 +601,22 @@ function LiveDashboardContent() {
         setStatus('completed');
       };
 
+      // Handle video pause - pause Deepgram streaming
+      video.onpause = () => {
+        if (!video.ended) {
+          console.log('[Video] Video paused');
+          // Note: Deepgram WebSocket stays connected, we just stop sending audio
+        }
+      };
+
+      // Handle video play/resume
+      video.onplay = () => {
+        console.log('[Video] Video playing/resumed');
+      };
+
     } catch (error) {
       console.error('Failed to process video:', error);
+      alert('Failed to process video: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 
@@ -701,11 +626,9 @@ function LiveDashboardContent() {
 
     if (isPlaying) {
       videoRef.current.pause();
-      mediaRecorderRef.current?.pause();
       setIsPlaying(false);
     } else {
       videoRef.current.play();
-      mediaRecorderRef.current?.resume();
       setIsPlaying(true);
     }
   };
