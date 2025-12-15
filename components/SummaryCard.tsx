@@ -6,18 +6,20 @@ import {
   Lightbulb,
   AlertTriangle,
   FileQuestion,
+  ShieldAlert,
   ChevronDown,
   ChevronRight,
   TrendingUp,
   Zap,
   Target,
 } from 'lucide-react';
-import type { AnalysisSummary, KeyClaim, LogicalGap, MissingEvidence } from '@/lib/types';
+import type { AnalysisSummary, KeyClaim, LogicalGap, MissingEvidence, VerificationFinding } from '@/lib/types';
 
 interface SummaryCardProps {
   analysis: AnalysisSummary | null;
   isLoading?: boolean;
   onSelectMarker?: (markerId: string) => void;
+  verificationFindings?: VerificationFinding[];
 }
 
 function ClaimItem({ claim, index, onSelect }: { claim: KeyClaim; index: number; onSelect?: () => void }) {
@@ -161,8 +163,8 @@ function StrengthMeter({ value }: { value: number }) {
   );
 }
 
-export default function SummaryCard({ analysis, isLoading, onSelectMarker }: SummaryCardProps) {
-  const [activeSection, setActiveSection] = useState<'claims' | 'gaps' | 'evidence'>('claims');
+export default function SummaryCard({ analysis, isLoading, onSelectMarker, verificationFindings = [] }: SummaryCardProps) {
+  const [activeSection, setActiveSection] = useState<'claims' | 'gaps' | 'evidence' | 'verify'>('claims');
 
   if (!analysis && !isLoading) {
     return (
@@ -205,6 +207,7 @@ export default function SummaryCard({ analysis, isLoading, onSelectMarker }: Sum
           { id: 'claims' as const, label: 'Key Claims', icon: Lightbulb, count: analysis?.keyClaims.length || 0 },
           { id: 'gaps' as const, label: 'Logical Gaps', icon: AlertTriangle, count: analysis?.logicalGaps.length || 0 },
           { id: 'evidence' as const, label: 'Missing Evidence', icon: FileQuestion, count: analysis?.missingEvidence.length || 0 },
+          { id: 'verify' as const, label: 'Verification', icon: ShieldAlert, count: verificationFindings.length || 0 },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -302,6 +305,64 @@ export default function SummaryCard({ analysis, isLoading, onSelectMarker }: Sum
                     index={index}
                     onSelect={() => onSelectMarker?.(`evidence-${item.id}`)}
                   />
+                ))
+              )}
+            </motion.div>
+          )}
+
+          {activeSection === 'verify' && (
+            <motion.div
+              key="verify"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-3"
+            >
+              {verificationFindings.length === 0 ? (
+                <p className="text-sm text-surface-400 text-center py-8 italic">
+                  No verification findings yet
+                </p>
+              ) : (
+                verificationFindings.map((f, index) => (
+                  <motion.div
+                    key={f.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="p-3 rounded-xl bg-white border border-surface-100 shadow-soft cursor-pointer hover:border-amber-300 hover:shadow-md transition-all"
+                    onClick={() => onSelectMarker?.(`verify-${f.id}`)}
+                  >
+                    <div className="flex items-start gap-2">
+                      <ShieldAlert className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-600" />
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium text-surface-800">{f.statement}</p>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full ${
+                              f.verdict === 'likely-false'
+                                ? 'bg-red-100 text-red-700'
+                                : f.verdict === 'likely-true'
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : 'bg-amber-100 text-amber-700'
+                            }`}
+                          >
+                            {f.verdict.replace('-', ' ')}
+                          </span>
+                        </div>
+                        <p className="text-xs text-surface-600 mt-1">{f.explanation}</p>
+                        {f.whatToVerify && (
+                          <p className="text-xs text-surface-500 mt-2">
+                            <span className="font-medium">Verify:</span> {f.whatToVerify}
+                          </p>
+                        )}
+                        {f.suggestedCorrection && (
+                          <p className="text-xs text-surface-500 mt-2">
+                            <span className="font-medium">Safer wording:</span> {f.suggestedCorrection}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
                 ))
               )}
             </motion.div>

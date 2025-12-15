@@ -5,22 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, Mic, MessageSquareText, User } from 'lucide-react';
 import type { TranscriptSegment } from '@/lib/types';
 
-// Common stopwords to exclude from highlighting
-const STOPWORDS = new Set([
-  'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with',
-  'by', 'from', 'as', 'is', 'was', 'are', 'were', 'be', 'been', 'being', 'have', 'has',
-  'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might',
-  'must', 'shall', 'can', 'need', 'dare', 'ought', 'used', 'it', 'its', 'this', 'that',
-  'these', 'those', 'i', 'you', 'he', 'she', 'we', 'they', 'me', 'him', 'her', 'us',
-  'them', 'my', 'your', 'his', 'our', 'their', 'what', 'which', 'who', 'whom', 'whose',
-  'where', 'when', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most',
-  'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than',
-  'too', 'very', 'just', 'also', 'now', 'here', 'there', 'then', 'once', 'if', 'because',
-  'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between',
-  'under', 'again', 'further', 'while', 'really', 'actually', 'basically', 'like', 'kind',
-  'sort', 'thing', 'things', 'something', 'anything', 'everything', 'nothing'
-]);
-
 // Question highlight with associated question text
 interface QuestionHighlight {
   snippet: string;
@@ -32,7 +16,6 @@ interface TranscriptFeedProps {
   segments: TranscriptSegment[];
   isLive?: boolean;
   currentTime?: number;
-  highlightKeywords?: string[];
   questionHighlights?: QuestionHighlight[]; // Snippets with their questions
   interimText?: string;
   showQuestionHighlights?: boolean; // Toggle for yellow highlights
@@ -75,16 +58,6 @@ function buildFuzzySnippetRegex(snippet: string): RegExp | null {
   }
 }
 
-function cleanKeywords(keywords: string[]): string[] {
-  return Array.from(new Set(
-    keywords
-      .map(k => k.trim().toLowerCase())
-      .filter(k => k.length >= 4)
-      .filter(k => !STOPWORDS.has(k))
-      .filter(k => /^[a-z]/i.test(k))
-  ));
-}
-
 // Speaker colors for differentiation
 const SPEAKER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   'Speaker 1': { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
@@ -103,7 +76,6 @@ export default function TranscriptFeed({
   segments,
   isLive = false,
   currentTime = 0,
-  highlightKeywords = [],
   questionHighlights = [],
   interimText = '',
   showQuestionHighlights = false,
@@ -132,10 +104,8 @@ export default function TranscriptFeed({
 
   // Render text with highlights
   const renderHighlightedText = (text: string) => {
-    const cleanedKeywords = cleanKeywords(highlightKeywords);
-
     // If no highlights needed, return plain text
-    if (cleanedKeywords.length === 0 && (!showQuestionHighlights || questionHighlights.length === 0)) {
+    if (!showQuestionHighlights || questionHighlights.length === 0) {
       return text;
     }
 
@@ -186,40 +156,6 @@ export default function TranscriptFeed({
 
         result = newResult;
       });
-    }
-
-    // Then, apply keyword highlights (blue)
-    if (cleanedKeywords.length > 0) {
-      const sorted = cleanedKeywords.sort((a, b) => b.length - a.length);
-      const pattern = new RegExp(`\\b(${sorted.map(escapeRegex).join('|')})\\b`, 'gi');
-
-      const newResult: React.ReactNode[] = [];
-
-      result.forEach(part => {
-        if (typeof part !== 'string') {
-          newResult.push(part);
-          return;
-        }
-
-        const splitParts = part.split(pattern);
-
-        splitParts.forEach((subPart) => {
-          if (!subPart) return;
-
-          const isKeyword = cleanedKeywords.some(k => k.toLowerCase() === subPart.toLowerCase());
-          if (isKeyword) {
-            newResult.push(
-              <mark key={`k-${keyIndex++}`} className="bg-primary-100 text-primary-700 px-1 rounded font-medium">
-                {subPart}
-              </mark>
-            );
-          } else {
-            newResult.push(subPart);
-          }
-        });
-      });
-
-      result = newResult;
     }
 
     return result;

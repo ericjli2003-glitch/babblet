@@ -24,7 +24,6 @@ import {
   Check,
   Monitor,
   Headphones,
-  Highlighter,
   Presentation,
   FileImage,
 } from 'lucide-react';
@@ -41,6 +40,7 @@ import type {
   TranscriptSegment,
   AnalysisSummary,
   GeneratedQuestion,
+  VerificationFinding,
   RubricEvaluation,
   PresentationStatus,
 } from '@/lib/types';
@@ -79,6 +79,7 @@ function LiveDashboardContent() {
   const transcriptRef = useRef(transcript);
   transcriptRef.current = transcript;
   const [analysis, setAnalysis] = useState<AnalysisSummary | null>(null);
+  const [verificationFindings, setVerificationFindings] = useState<VerificationFinding[]>([]);
   const [questions, setQuestions] = useState<{
     clarifying: GeneratedQuestion[];
     criticalThinking: GeneratedQuestion[];
@@ -124,7 +125,6 @@ function LiveDashboardContent() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
-  const [highlightKeywords, setHighlightKeywords] = useState(false);
   const [showQuestionHighlights, setShowQuestionHighlights] = useState(false);
   const [slideFile, setSlideFile] = useState<File | null>(null);
   const [slideAnalysis, setSlideAnalysis] = useState<{
@@ -263,6 +263,54 @@ function LiveDashboardContent() {
           });
         }
 
+        // Verification: flag factual claims that may be incorrect or need source checking
+        try {
+          const verifyResponse = await fetch('/api/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              transcript: transcriptText,
+              claims: (analysisData.analysis.keyClaims || []).map((c: { claim: string }) => c.claim),
+            }),
+          });
+          const verifyData = await verifyResponse.json();
+          if (Array.isArray(verifyData.findings)) {
+            setVerificationFindings(verifyData.findings);
+
+            // Add timeline markers for verification findings
+            const verifyMarkers: TimelineMarker[] = verifyData.findings.map((f: VerificationFinding) => {
+              let markerTimestamp = capturedTime;
+
+              // Anchor to snippet if available
+              if (f.relevantSnippet && f.relevantSnippet.length > 5) {
+                const snippetLower = f.relevantSnippet.toLowerCase();
+                const matchingSegment = transcript.find(seg => seg.text.toLowerCase().includes(snippetLower));
+                if (matchingSegment && matchingSegment.timestamp > 0) {
+                  markerTimestamp = matchingSegment.timestamp;
+                }
+              }
+
+              return {
+                id: `verify-${f.id}`,
+                timestamp: markerTimestamp,
+                type: 'issue',
+                title: `Verify: ${f.statement.slice(0, 50)}${f.statement.length > 50 ? '...' : ''}`,
+                description: f.verdict,
+              };
+            });
+
+            if (verifyMarkers.length > 0) {
+              setTimelineMarkers(prev => {
+                const existing = new Set(prev.map(m => m.id));
+                const newOnes = verifyMarkers.filter(m => !existing.has(m.id));
+                return [...prev, ...newOnes];
+              });
+            }
+          }
+        } catch (e) {
+          console.error('[Verify] Failed:', e);
+        }
+
         // Then trigger question generation with slide context and settings
         const questionsResponse = await fetch('/api/generate-questions', {
           method: 'POST',
@@ -378,10 +426,23 @@ function LiveDashboardContent() {
   const handleFinalTranscript = useCallback((text: string) => {
     if (!text.trim()) return;
 
+    // Ensure we have a start time for elapsed timestamps (important for live)
+    if (!startTimeRef.current || startTimeRef.current === 0) {
+      startTimeRef.current = Date.now();
+    }
+
+    // Use consistent timestamps (ms) for both modes:
+    // - upload: current video time (ms)
+    // - live: elapsed time since start (ms)
+    const segmentTimestampMs =
+      mode === 'upload' && videoRef.current
+        ? videoRef.current.currentTime * 1000
+        : Date.now() - startTimeRef.current;
+
     const segment: TranscriptSegment = {
       id: `stream-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       text: text.trim(),
-      timestamp: Date.now(),
+      timestamp: segmentTimestampMs,
       duration: 0,
       isFinal: true,
     };
@@ -1976,16 +2037,6 @@ function LiveDashboardContent() {
               {/* Transcript toolbar */}
               <div className="flex items-center justify-end px-4 pt-4 gap-2">
                 <button
-                  onClick={() => setHighlightKeywords(!highlightKeywords)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${highlightKeywords
-                    ? 'bg-primary-100 text-primary-700'
-                    : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
-                    }`}
-                >
-                  <Highlighter className="w-4 h-4" />
-                  {highlightKeywords ? 'Keywords On' : 'Keywords'}
-                </button>
-                <button
                   onClick={() => setShowQuestionHighlights(!showQuestionHighlights)}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${showQuestionHighlights
                     ? 'bg-yellow-100 text-yellow-700'
@@ -2002,12 +2053,6 @@ function LiveDashboardContent() {
                   segments={transcript}
                   isLive={isRecording || isPlaying}
                   currentTime={currentTime}
-                  highlightKeywords={highlightKeywords ? (
-                    // Extract meaningful keywords from claims (not first 3 words)
-                    analysis?.keyClaims.flatMap((c) =>
-                      c.claim.split(/\s+/).filter(word => word.length >= 4)
-                    ) || []
-                  ) : []}
                   questionHighlights={((): QuestionHighlight[] => {
                     // Build question highlights for ALL questions.
                     // Prefer Claude's relevantSnippet, otherwise fall back to nearest transcript segment around the marker timestamp.
@@ -2070,6 +2115,7 @@ function LiveDashboardContent() {
                   analysis={analysis}
                   isLoading={isAnalyzing}
                   onSelectMarker={handleSelectMarker}
+                  verificationFindings={verificationFindings}
                 />
               </div>
             </div>

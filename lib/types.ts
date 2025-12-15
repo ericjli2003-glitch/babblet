@@ -79,6 +79,24 @@ export interface GeneratedQuestion {
   timestamp: number;
 }
 
+// ============================================
+// Verification Types
+// ============================================
+
+export type VerificationVerdict = 'likely-true' | 'uncertain' | 'likely-false';
+
+export interface VerificationFinding {
+  id: string;
+  statement: string;
+  verdict: VerificationVerdict;
+  confidence: number; // 0-1
+  explanation: string;
+  suggestedCorrection?: string;
+  whatToVerify?: string; // what to check / what evidence would confirm
+  relevantSnippet?: string; // quote from transcript to anchor this finding
+  timestamp?: number; // optional: where in transcript this came from (ms)
+}
+
 export interface QuestionBank {
   clarifying: GeneratedQuestion[];
   criticalThinking: GeneratedQuestion[];
