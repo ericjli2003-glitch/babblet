@@ -5,7 +5,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, Mic, MessageSquareText, User } from 'lucide-react';
 import type { TranscriptSegment } from '@/lib/types';
 
-// Question highlight with associated question text
+// Highlight for any marker type (question, issue, insight)
+interface MarkerHighlight {
+  id: string;
+  snippet: string;
+  label: string; // The question/issue/insight text to show on hover
+  type: 'question' | 'issue' | 'insight';
+}
+
+// Legacy export for backward compatibility
 interface QuestionHighlight {
   snippet: string;
   question: string;
@@ -16,9 +24,20 @@ interface TranscriptFeedProps {
   segments: TranscriptSegment[];
   isLive?: boolean;
   currentTime?: number;
-  questionHighlights?: QuestionHighlight[]; // Snippets with their questions
+  // All marker highlights (questions, issues, insights)
+  markerHighlights?: MarkerHighlight[];
+  // Toggle visibility per type
+  showQuestions?: boolean;
+  showIssues?: boolean;
+  showInsights?: boolean;
+  // Temporary highlight when hovering timeline marker (overrides toggles)
+  hoveredMarkerId?: string | null;
+  // Click handler
+  onHighlightClick?: (markerId: string) => void;
   interimText?: string;
-  showQuestionHighlights?: boolean; // Toggle for yellow highlights
+  // Legacy props for backward compatibility
+  questionHighlights?: QuestionHighlight[];
+  showQuestionHighlights?: boolean;
   onQuestionHighlightClick?: (questionId: string) => void;
 }
 
@@ -76,14 +95,41 @@ export default function TranscriptFeed({
   segments,
   isLive = false,
   currentTime = 0,
-  questionHighlights = [],
+  markerHighlights = [],
+  showQuestions = false,
+  showIssues = false,
+  showInsights = false,
+  hoveredMarkerId,
+  onHighlightClick,
   interimText = '',
+  // Legacy props
+  questionHighlights = [],
   showQuestionHighlights = false,
   onQuestionHighlightClick,
 }: TranscriptFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [hoveredQuestion, setHoveredQuestion] = useState<{ question: string; x: number; y: number } | null>(null);
+  const highlightRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const [hoveredHighlight, setHoveredHighlight] = useState<{ label: string; type: string; x: number; y: number } | null>(null);
+
+  // Merge legacy questionHighlights into markerHighlights
+  const allHighlights: MarkerHighlight[] = [
+    ...markerHighlights,
+    ...questionHighlights.map(q => ({
+      id: q.questionId,
+      snippet: q.snippet,
+      label: q.question,
+      type: 'question' as const,
+    })),
+  ];
+
+  // Dedupe by id
+  const uniqueHighlights = allHighlights.filter((h, i, arr) => 
+    arr.findIndex(x => x.id === h.id) === i
+  );
+
+  // Merge legacy toggle
+  const effectiveShowQuestions = showQuestions || showQuestionHighlights;
 
   // Group segments by speaker for display
   const hasSpeakers = segments.some(s => s.speaker);
@@ -102,62 +148,169 @@ export default function TranscriptFeed({
     }
   }, [fullTranscript, isLive]);
 
-  // Render text with highlights
+  // Auto-scroll to hovered marker highlight
+  useEffect(() => {
+    if (hoveredMarkerId && highlightRefs.current.has(hoveredMarkerId)) {
+      const el = highlightRefs.current.get(hoveredMarkerId);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [hoveredMarkerId]);
+
+  // Get highlight colors by type
+  const getHighlightColors = (type: 'question' | 'issue' | 'insight', isHovered: boolean) => {
+    if (isHovered) {
+      // Brighter when hovered from timeline
+      switch (type) {
+        case 'question':
+          return 'bg-yellow-300 text-yellow-900 ring-2 ring-yellow-400';
+        case 'issue':
+          return 'bg-amber-300 text-amber-900 ring-2 ring-amber-400';
+        case 'insight':
+          return 'bg-emerald-300 text-emerald-900 ring-2 ring-emerald-400';
+      }
+    }
+    switch (type) {
+      case 'question':
+        return 'bg-yellow-200 text-yellow-900 hover:bg-yellow-300';
+      case 'issue':
+        return 'bg-amber-200 text-amber-900 hover:bg-amber-300';
+      case 'insight':
+        return 'bg-emerald-200 text-emerald-900 hover:bg-emerald-300';
+    }
+  };
+
+  // Build a single-pass regex from all active highlights
+  const buildSinglePassHighlighter = () => {
+    // Filter highlights based on toggles (or if it's the hovered marker)
+    const activeHighlights = uniqueHighlights.filter(h => {
+      // Always show if this is the hovered marker
+      if (h.id === hoveredMarkerId) return true;
+      // Otherwise respect toggles
+      switch (h.type) {
+        case 'question': return effectiveShowQuestions;
+        case 'issue': return showIssues;
+        case 'insight': return showInsights;
+      }
+    });
+
+    if (activeHighlights.length === 0) return null;
+
+    // Sort by snippet length descending to match longer phrases first
+    const sorted = [...activeHighlights].sort((a, b) => b.snippet.length - a.snippet.length);
+
+    return { highlights: sorted };
+  };
+
+  // Render text with highlights using single-pass approach
   const renderHighlightedText = (text: string) => {
-    // If no highlights needed, return plain text
-    if (!showQuestionHighlights || questionHighlights.length === 0) {
-      return text;
-    }
+    const highlighter = buildSinglePassHighlighter();
+    if (!highlighter) return text;
 
-    let result: React.ReactNode[] = [text];
+    const { highlights } = highlighter;
+    
+    // Build array of { start, end, highlight } for all matches
+    type MatchRange = { start: number; end: number; highlight: MarkerHighlight };
+    const matches: MatchRange[] = [];
+    
+    const normalizedText = normalizeForMatch(text);
+    
+    for (const h of highlights) {
+      if (!h.snippet || h.snippet.length < 5) continue;
+      
+      const pattern = buildFuzzySnippetRegex(h.snippet);
+      if (!pattern) continue;
+      
+      // Find all matches in normalized text
+      let match;
+      const normalizedPattern = new RegExp(pattern.source, 'gi');
+      while ((match = normalizedPattern.exec(normalizedText)) !== null) {
+        // Check for overlap with existing matches
+        const start = match.index;
+        const end = match.index + match[0].length;
+        
+        const hasOverlap = matches.some(m => 
+          (start >= m.start && start < m.end) || 
+          (end > m.start && end <= m.end) ||
+          (start <= m.start && end >= m.end)
+        );
+        
+        if (!hasOverlap) {
+          matches.push({ start, end, highlight: h });
+        }
+      }
+    }
+    
+    if (matches.length === 0) return text;
+    
+    // Sort matches by start position
+    matches.sort((a, b) => a.start - b.start);
+    
+    // Now we need to map normalized positions back to original text
+    // Build the result by walking through original text
+    const result: React.ReactNode[] = [];
     let keyIndex = 0;
-
-    // First, apply question highlights (yellow) if enabled
-    if (showQuestionHighlights && questionHighlights.length > 0) {
-      questionHighlights.forEach(({ snippet, question, questionId }) => {
-        if (!snippet || snippet.length < 5) return;
-
-        const newResult: React.ReactNode[] = [];
-        const pattern = buildFuzzySnippetRegex(snippet) ?? new RegExp(`(${escapeRegex(snippet)})`, 'gi');
-
-        result.forEach(part => {
-          if (typeof part !== 'string') {
-            newResult.push(part);
-            return;
-          }
-
-          const splitParts = part.split(pattern);
-
-          splitParts.forEach((subPart, i) => {
-            if (!subPart) return;
-
-            // With capturing groups, matches show up at odd indices.
-            // Highlight those directly instead of requiring exact equality (snippets often differ by punctuation/spacing).
-            if (i % 2 === 1) {
-              newResult.push(
-                <mark
-                  key={`q-${keyIndex++}`}
-                  className="bg-yellow-200 text-yellow-900 px-1 rounded font-medium cursor-pointer hover:bg-yellow-300 transition-colors relative"
-                  onMouseEnter={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    setHoveredQuestion({ question, x: rect.left + rect.width / 2, y: rect.top });
-                  }}
-                  onMouseLeave={() => setHoveredQuestion(null)}
-                  onClick={() => onQuestionHighlightClick?.(questionId)}
-                >
-                  {subPart}
-                </mark>
-              );
-            } else {
-              newResult.push(subPart);
-            }
-          });
-        });
-
-        result = newResult;
-      });
+    let lastEnd = 0;
+    
+    // Create normalized-to-original position mapping
+    const normalizedToOriginal: number[] = [];
+    let ni = 0;
+    for (let oi = 0; oi < text.length; oi++) {
+      const char = text[oi];
+      const normalizedChar = normalizeForMatch(char);
+      if (normalizedChar.length > 0) {
+        normalizedToOriginal[ni] = oi;
+        ni++;
+      }
     }
-
+    normalizedToOriginal[ni] = text.length; // End marker
+    
+    for (const m of matches) {
+      const origStart = normalizedToOriginal[m.start] ?? 0;
+      const origEnd = normalizedToOriginal[m.end] ?? text.length;
+      
+      // Add text before this match
+      if (origStart > lastEnd) {
+        result.push(text.slice(lastEnd, origStart));
+      }
+      
+      const matchedText = text.slice(origStart, origEnd);
+      const isHovered = m.highlight.id === hoveredMarkerId;
+      const colors = getHighlightColors(m.highlight.type, isHovered);
+      
+      result.push(
+        <mark
+          key={`hl-${keyIndex++}`}
+          ref={(el) => {
+            if (el) highlightRefs.current.set(m.highlight.id, el);
+          }}
+          className={`${colors} px-1 rounded font-medium cursor-pointer transition-all relative`}
+          onMouseEnter={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            setHoveredHighlight({ 
+              label: m.highlight.label, 
+              type: m.highlight.type,
+              x: rect.left + rect.width / 2, 
+              y: rect.top 
+            });
+          }}
+          onMouseLeave={() => setHoveredHighlight(null)}
+          onClick={() => {
+            onHighlightClick?.(m.highlight.id);
+            onQuestionHighlightClick?.(m.highlight.id);
+          }}
+        >
+          {matchedText}
+        </mark>
+      );
+      
+      lastEnd = origEnd;
+    }
+    
+    // Add remaining text
+    if (lastEnd < text.length) {
+      result.push(text.slice(lastEnd));
+    }
+    
     return result;
   };
 
@@ -175,11 +328,23 @@ export default function TranscriptFeed({
           )}
         </div>
         <div className="flex items-center gap-3">
-          {/* Question highlights indicator */}
-          {showQuestionHighlights && questionHighlights.length > 0 && (
+          {/* Highlight counts per type */}
+          {effectiveShowQuestions && uniqueHighlights.filter(h => h.type === 'question').length > 0 && (
             <div className="flex items-center gap-1.5 px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded-full text-xs font-medium">
               <MessageSquareText className="w-3 h-3" />
-              <span>{questionHighlights.length} Q</span>
+              <span>{uniqueHighlights.filter(h => h.type === 'question').length} Q</span>
+            </div>
+          )}
+          {showIssues && uniqueHighlights.filter(h => h.type === 'issue').length > 0 && (
+            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full text-xs font-medium">
+              <span className="text-xs">⚠️</span>
+              <span>{uniqueHighlights.filter(h => h.type === 'issue').length}</span>
+            </div>
+          )}
+          {showInsights && uniqueHighlights.filter(h => h.type === 'insight').length > 0 && (
+            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-xs font-medium">
+              <span className="text-xs">💡</span>
+              <span>{uniqueHighlights.filter(h => h.type === 'insight').length}</span>
             </div>
           )}
           <div className="flex items-center gap-1 text-sm text-surface-500">
@@ -265,26 +430,42 @@ export default function TranscriptFeed({
         <div ref={bottomRef} />
       </div>
 
-      {/* Question Hover Tooltip */}
+      {/* Highlight Hover Tooltip */}
       <AnimatePresence>
-        {hoveredQuestion && (
+        {hoveredHighlight && (
           <motion.div
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 5 }}
             className="fixed z-50 pointer-events-none"
             style={{
-              left: hoveredQuestion.x,
-              top: hoveredQuestion.y - 10,
+              left: hoveredHighlight.x,
+              top: hoveredHighlight.y - 10,
               transform: 'translate(-50%, -100%)',
             }}
           >
             <div className="bg-surface-900 text-white px-3 py-2 rounded-lg shadow-xl max-w-sm">
               <div className="flex items-center gap-2 mb-1">
-                <MessageSquareText className="w-3.5 h-3.5 text-yellow-400" />
-                <span className="text-xs text-yellow-400 font-medium">Question</span>
+                {hoveredHighlight.type === 'question' && (
+                  <>
+                    <MessageSquareText className="w-3.5 h-3.5 text-yellow-400" />
+                    <span className="text-xs text-yellow-400 font-medium">Question</span>
+                  </>
+                )}
+                {hoveredHighlight.type === 'issue' && (
+                  <>
+                    <span className="text-sm">⚠️</span>
+                    <span className="text-xs text-amber-400 font-medium">Issue</span>
+                  </>
+                )}
+                {hoveredHighlight.type === 'insight' && (
+                  <>
+                    <span className="text-sm">💡</span>
+                    <span className="text-xs text-emerald-400 font-medium">Insight</span>
+                  </>
+                )}
               </div>
-              <p className="text-sm">{hoveredQuestion.question}</p>
+              <p className="text-sm">{hoveredHighlight.label}</p>
             </div>
             <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-6 border-r-6 border-t-6 border-l-transparent border-r-transparent border-t-surface-900" />
           </motion.div>
@@ -307,4 +488,4 @@ export default function TranscriptFeed({
   );
 }
 
-export type { QuestionHighlight };
+export type { QuestionHighlight, MarkerHighlight };

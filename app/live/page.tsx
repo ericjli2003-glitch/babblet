@@ -27,7 +27,7 @@ import {
   Presentation,
   FileImage,
 } from 'lucide-react';
-import TranscriptFeed, { type QuestionHighlight } from '@/components/TranscriptFeed';
+import TranscriptFeed, { type MarkerHighlight } from '@/components/TranscriptFeed';
 import QuestionBank from '@/components/QuestionBank';
 import SummaryCard from '@/components/SummaryCard';
 import RubricCard from '@/components/RubricCard';
@@ -125,7 +125,11 @@ function LiveDashboardContent() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
+  // Highlight toggles for transcript
   const [showQuestionHighlights, setShowQuestionHighlights] = useState(false);
+  const [showIssueHighlights, setShowIssueHighlights] = useState(false);
+  const [showInsightHighlights, setShowInsightHighlights] = useState(false);
+  const [hoveredMarkerId, setHoveredMarkerId] = useState<string | null>(null);
   const [slideFile, setSlideFile] = useState<File | null>(null);
   const [slideAnalysis, setSlideAnalysis] = useState<{
     extractedText?: string;
@@ -221,38 +225,68 @@ function LiveDashboardContent() {
           ? videoRef.current.currentTime * 1000
           : currentTimeRef.current;
 
-        // Add markers for logical gaps
-        analysisData.analysis.logicalGaps?.forEach((gap: { id: string; description: string; severity?: string }) => {
-          issueMarkers.push({
-            id: `gap-${gap.id}`,
-            timestamp: capturedTime,
-            type: 'issue',
-            title: gap.description.slice(0, 50) + (gap.description.length > 50 ? '...' : ''),
-            description: `Severity: ${gap.severity || 'moderate'}`,
-          });
-        });
+                // Helper to find best snippet from transcript near a timestamp
+                const findAnchorSnippet = (text: string, nearTime: number): string => {
+                  // Try to find the text in transcript, otherwise use nearest segment
+                  const textLower = text.toLowerCase();
+                  const matchingSegment = transcript.find(seg => 
+                    seg.text.toLowerCase().includes(textLower.slice(0, 30))
+                  );
+                  if (matchingSegment) {
+                    return matchingSegment.text.slice(0, 80);
+                  }
+                  // Fallback: nearest segment by time
+                  let best = transcript[0];
+                  let bestDelta = Infinity;
+                  for (const seg of transcript) {
+                    const delta = Math.abs((seg.timestamp || 0) - nearTime);
+                    if (delta < bestDelta) {
+                      best = seg;
+                      bestDelta = delta;
+                    }
+                  }
+                  return best?.text?.slice(0, 80) || '';
+                };
 
-        // Add markers for key claims (as insights)
-        analysisData.analysis.keyClaims?.slice(0, 2).forEach((claim: { id: string; claim: string }) => {
-          issueMarkers.push({
-            id: `claim-${claim.id}`,
-            timestamp: capturedTime,
-            type: 'insight',
-            title: claim.claim.slice(0, 50) + (claim.claim.length > 50 ? '...' : ''),
-            description: 'Key claim identified',
-          });
-        });
+                // Add markers for logical gaps
+                analysisData.analysis.logicalGaps?.forEach((gap: { id: string; description: string; severity?: string }) => {
+                  const snippet = findAnchorSnippet(gap.description, capturedTime);
+                  issueMarkers.push({
+                    id: `gap-${gap.id}`,
+                    timestamp: capturedTime,
+                    type: 'issue',
+                    title: gap.description.slice(0, 50) + (gap.description.length > 50 ? '...' : ''),
+                    description: `Severity: ${gap.severity || 'moderate'}`,
+                    anchorSnippet: snippet,
+                  });
+                });
 
-        // Add markers for missing evidence
-        analysisData.analysis.missingEvidence?.forEach((evidence: { id: string; description: string; importance?: string }) => {
-          issueMarkers.push({
-            id: `evidence-${evidence.id}`,
-            timestamp: capturedTime,
-            type: 'issue',
-            title: evidence.description.slice(0, 50) + (evidence.description.length > 50 ? '...' : ''),
-            description: `Missing evidence (${evidence.importance || 'medium'} importance)`,
-          });
-        });
+                // Add markers for key claims (as insights)
+                analysisData.analysis.keyClaims?.slice(0, 2).forEach((claim: { id: string; claim: string; evidence?: string }) => {
+                  // Use the claim text or evidence as anchor
+                  const snippet = findAnchorSnippet(claim.claim, capturedTime);
+                  issueMarkers.push({
+                    id: `claim-${claim.id}`,
+                    timestamp: capturedTime,
+                    type: 'insight',
+                    title: claim.claim.slice(0, 50) + (claim.claim.length > 50 ? '...' : ''),
+                    description: 'Key claim identified',
+                    anchorSnippet: snippet,
+                  });
+                });
+
+                // Add markers for missing evidence
+                analysisData.analysis.missingEvidence?.forEach((evidence: { id: string; description: string; importance?: string }) => {
+                  const snippet = findAnchorSnippet(evidence.description, capturedTime);
+                  issueMarkers.push({
+                    id: `evidence-${evidence.id}`,
+                    timestamp: capturedTime,
+                    type: 'issue',
+                    title: evidence.description.slice(0, 50) + (evidence.description.length > 50 ? '...' : ''),
+                    description: `Missing evidence (${evidence.importance || 'medium'} importance)`,
+                    anchorSnippet: snippet,
+                  });
+                });
 
         if (issueMarkers.length > 0) {
           setTimelineMarkers(prev => {
@@ -280,6 +314,7 @@ function LiveDashboardContent() {
             // Add timeline markers for verification findings
             const verifyMarkers: TimelineMarker[] = verifyData.findings.map((f: VerificationFinding) => {
               let markerTimestamp = capturedTime;
+              let anchorSnippet = f.relevantSnippet || f.statement.slice(0, 80);
 
               // Anchor to snippet if available
               if (f.relevantSnippet && f.relevantSnippet.length > 5) {
@@ -287,15 +322,17 @@ function LiveDashboardContent() {
                 const matchingSegment = transcript.find(seg => seg.text.toLowerCase().includes(snippetLower));
                 if (matchingSegment && matchingSegment.timestamp > 0) {
                   markerTimestamp = matchingSegment.timestamp;
+                  anchorSnippet = matchingSegment.text.slice(0, 80);
                 }
               }
 
               return {
                 id: `verify-${f.id}`,
                 timestamp: markerTimestamp,
-                type: 'issue',
+                type: 'issue' as const,
                 title: `Verify: ${f.statement.slice(0, 50)}${f.statement.length > 50 ? '...' : ''}`,
                 description: f.verdict,
+                anchorSnippet,
               };
             });
 
@@ -381,6 +418,7 @@ function LiveDashboardContent() {
           // Try to find the timestamp based on relevantSnippet from Claude
           const questionMarkers: TimelineMarker[] = questionsData.questions.map((q: GeneratedQuestion) => {
             let markerTimestamp = currentVideoTime;
+            let anchorSnippet = q.relevantSnippet || '';
 
             // If question has a relevantSnippet, find it in transcript to get accurate timestamp
             if (q.relevantSnippet && q.relevantSnippet.length > 5) {
@@ -391,7 +429,22 @@ function LiveDashboardContent() {
               );
               if (matchingSegment && matchingSegment.timestamp > 0) {
                 markerTimestamp = matchingSegment.timestamp;
+                anchorSnippet = matchingSegment.text.slice(0, 80);
                 console.log(`[Markers] Found snippet "${q.relevantSnippet.slice(0, 30)}..." at ${markerTimestamp}ms`);
+              }
+            } else {
+              // Fallback: use nearest segment text
+              let best = transcript[0];
+              let bestDelta = Infinity;
+              for (const seg of transcript) {
+                const delta = Math.abs((seg.timestamp || 0) - markerTimestamp);
+                if (delta < bestDelta) {
+                  best = seg;
+                  bestDelta = delta;
+                }
+              }
+              if (best) {
+                anchorSnippet = best.text.slice(0, 80);
               }
             }
 
@@ -402,6 +455,7 @@ function LiveDashboardContent() {
               title: q.question.slice(0, 60) + (q.question.length > 60 ? '...' : ''),
               description: q.rationale,
               category: q.category,
+              anchorSnippet,
             };
           });
 
@@ -1885,6 +1939,7 @@ function LiveDashboardContent() {
                         setSelectedMarkerId(marker.id);
                         setTimeout(() => setSelectedMarkerId(null), 3000);
                       }}
+                      onMarkerHover={(marker) => setHoveredMarkerId(marker?.id || null)}
                     />
                   </div>
 
@@ -1982,6 +2037,7 @@ function LiveDashboardContent() {
                           // Auto-clear selection after 3 seconds
                           setTimeout(() => setSelectedMarkerId(null), 3000);
                         }}
+                        onMarkerHover={(marker) => setHoveredMarkerId(marker?.id || null)}
                       />
                     </div>
 
@@ -2034,18 +2090,41 @@ function LiveDashboardContent() {
           <div className="flex-1 overflow-hidden bg-surface-50">
             {/* Transcript Panel */}
             <div className={`h-full flex flex-col ${activePanel === 'transcript' ? '' : 'hidden'}`}>
-              {/* Transcript toolbar */}
-              <div className="flex items-center justify-end px-4 pt-4 gap-2">
+              {/* Transcript toolbar - highlight toggles */}
+              <div className="flex items-center justify-end px-4 pt-4 gap-2 flex-wrap">
+                <span className="text-xs text-surface-400 mr-2">Highlights:</span>
                 <button
                   onClick={() => setShowQuestionHighlights(!showQuestionHighlights)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${showQuestionHighlights
-                    ? 'bg-yellow-100 text-yellow-700'
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${showQuestionHighlights
+                    ? 'bg-yellow-100 text-yellow-700 ring-1 ring-yellow-300'
                     : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
                     }`}
-                  title="Show where questions arose from the transcript"
+                  title="Highlight where questions arose in the transcript"
                 >
-                  <span className="text-base">💡</span>
-                  {showQuestionHighlights ? 'Questions On' : 'Questions'}
+                  <span className="text-sm">❓</span>
+                  Questions
+                </button>
+                <button
+                  onClick={() => setShowIssueHighlights(!showIssueHighlights)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${showIssueHighlights
+                    ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-300'
+                    : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
+                    }`}
+                  title="Highlight logical gaps and issues in the transcript"
+                >
+                  <span className="text-sm">⚠️</span>
+                  Issues
+                </button>
+                <button
+                  onClick={() => setShowInsightHighlights(!showInsightHighlights)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${showInsightHighlights
+                    ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300'
+                    : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
+                    }`}
+                  title="Highlight key claims and insights in the transcript"
+                >
+                  <span className="text-sm">💡</span>
+                  Insights
                 </button>
               </div>
               <div className="flex-1 bg-white mx-4 mb-4 rounded-3xl shadow-soft overflow-hidden">
@@ -2053,55 +2132,20 @@ function LiveDashboardContent() {
                   segments={transcript}
                   isLive={isRecording || isPlaying}
                   currentTime={currentTime}
-                  questionHighlights={((): QuestionHighlight[] => {
-                    // Build question highlights for ALL questions.
-                    // Prefer Claude's relevantSnippet, otherwise fall back to nearest transcript segment around the marker timestamp.
-                    const allQuestions = [
-                      ...questions.clarifying,
-                      ...questions.criticalThinking,
-                      ...questions.expansion,
-                    ];
-
-                    const findMarkerTime = (questionId: string): number | null => {
-                      const marker = timelineMarkers.find(m => m.id === `q-${questionId}`);
-                      return marker ? marker.timestamp : null;
-                    };
-
-                    const nearestSegmentText = (timeMs: number): string => {
-                      if (!transcript.length) return '';
-                      // transcript segment timestamps may be absolute or relative depending on source;
-                      // still, nearest-match works well for our use.
-                      let best = transcript[0];
-                      let bestDelta = Math.abs((best.timestamp || 0) - timeMs);
-                      for (const seg of transcript) {
-                        const delta = Math.abs((seg.timestamp || 0) - timeMs);
-                        if (delta < bestDelta) {
-                          best = seg;
-                          bestDelta = delta;
-                        }
-                      }
-                      // Use a short slice to reduce collisions
-                      const words = best.text.split(/\s+/).filter(Boolean);
-                      return words.slice(0, 14).join(' ');
-                    };
-
-                    return allQuestions
-                      .map((q): QuestionHighlight => {
-                        const markerTime = findMarkerTime(q.id);
-                        const fallbackSnippet = markerTime != null ? nearestSegmentText(markerTime) : '';
-                        return {
-                          snippet: (q.relevantSnippet && q.relevantSnippet.length > 5) ? q.relevantSnippet : fallbackSnippet,
-                          question: q.question,
-                          questionId: q.id,
-                        };
-                      })
-                      // Drop any that still have no snippet
-                      .filter(h => h.snippet.trim().length >= 5);
-                  })()}
-                  showQuestionHighlights={showQuestionHighlights}
-                  onQuestionHighlightClick={(questionId) => {
-                    // Find and select the question marker
-                    handleSelectMarker(`q-${questionId}`);
+                  markerHighlights={timelineMarkers
+                    .filter(m => m.anchorSnippet && m.anchorSnippet.length >= 5)
+                    .map((m): MarkerHighlight => ({
+                      id: m.id,
+                      snippet: m.anchorSnippet!,
+                      label: m.title,
+                      type: m.type,
+                    }))}
+                  showQuestions={showQuestionHighlights}
+                  showIssues={showIssueHighlights}
+                  showInsights={showInsightHighlights}
+                  hoveredMarkerId={hoveredMarkerId}
+                  onHighlightClick={(markerId) => {
+                    handleSelectMarker(markerId);
                   }}
                   interimText={interimTranscript}
                 />

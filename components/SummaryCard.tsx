@@ -213,8 +213,8 @@ export default function SummaryCard({ analysis, isLoading, onSelectMarker, verif
             key={tab.id}
             onClick={() => setActiveSection(tab.id)}
             className={`flex-1 px-3 py-2 text-sm font-medium transition-colors relative ${activeSection === tab.id
-                ? 'text-primary-600'
-                : 'text-surface-500 hover:text-surface-700'
+              ? 'text-primary-600'
+              : 'text-surface-500 hover:text-surface-700'
               }`}
           >
             <div className="flex items-center justify-center gap-1">
@@ -338,13 +338,12 @@ export default function SummaryCard({ analysis, isLoading, onSelectMarker, verif
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-sm font-medium text-surface-800">{f.statement}</p>
                           <span
-                            className={`text-xs px-2 py-0.5 rounded-full ${
-                              f.verdict === 'likely-false'
+                            className={`text-xs px-2 py-0.5 rounded-full ${f.verdict === 'likely-false'
                                 ? 'bg-red-100 text-red-700'
                                 : f.verdict === 'likely-true'
                                   ? 'bg-emerald-100 text-emerald-700'
                                   : 'bg-amber-100 text-amber-700'
-                            }`}
+                              }`}
                           >
                             {f.verdict.replace('-', ' ')}
                           </span>

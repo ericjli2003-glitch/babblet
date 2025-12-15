@@ -11,6 +11,7 @@ interface TimelineMarker {
   title: string;
   description?: string;
   category?: string;
+  anchorSnippet?: string; // Text snippet from transcript for highlighting
 }
 
 interface VideoTimelineProps {
@@ -19,6 +20,7 @@ interface VideoTimelineProps {
   markers: TimelineMarker[];
   onSeek: (timeMs: number) => void;
   onMarkerClick?: (marker: TimelineMarker) => void;
+  onMarkerHover?: (marker: TimelineMarker | null) => void; // For transcript highlighting
   activeMarkerId?: string | null; // Highlighted marker
 }
 
@@ -28,6 +30,7 @@ export default function VideoTimeline({
   markers,
   onSeek,
   onMarkerClick,
+  onMarkerHover,
   activeMarkerId,
 }: VideoTimelineProps) {
   const trackRef = useRef<HTMLDivElement>(null);
@@ -136,10 +139,14 @@ export default function VideoTimeline({
               animate={isActive ? { scale: 1.25, y: -2 } : { scale: 1, y: 0 }}
               onMouseEnter={(e) => {
                 setHoveredMarker(marker);
+                onMarkerHover?.(marker);
                 const rect = e.currentTarget.getBoundingClientRect();
                 setTooltipPosition({ x: rect.left + rect.width / 2, y: rect.top });
               }}
-              onMouseLeave={() => setHoveredMarker(null)}
+              onMouseLeave={() => {
+                setHoveredMarker(null);
+                onMarkerHover?.(null);
+              }}
               onClick={(e) => {
                 e.stopPropagation();
                 onSeek(marker.timestamp);
