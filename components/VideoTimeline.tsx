@@ -168,12 +168,11 @@ export default function VideoTimeline({
           >
             <div className="bg-surface-900 text-white px-4 py-3 rounded-xl shadow-2xl max-w-sm border border-surface-700">
               <div className="flex items-center gap-2 mb-2">
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                  hoveredMarker.type === 'question' ? 'bg-primary-500' :
-                  hoveredMarker.type === 'issue' ? 'bg-amber-500' : 'bg-emerald-500'
-                }`}>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${hoveredMarker.type === 'question' ? 'bg-primary-500' :
+                    hoveredMarker.type === 'issue' ? 'bg-amber-500' : 'bg-emerald-500'
+                  }`}>
                   {hoveredMarker.type === 'question' ? '❓ Question' :
-                   hoveredMarker.type === 'issue' ? '⚠️ Issue' : '💡 Insight'}
+                    hoveredMarker.type === 'issue' ? '⚠️ Issue' : '💡 Insight'}
                 </span>
                 <span className="text-xs text-surface-400 font-mono">
                   {formatTime(hoveredMarker.timestamp)}

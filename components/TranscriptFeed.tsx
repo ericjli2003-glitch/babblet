@@ -50,6 +50,31 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function normalizeForMatch(s: string): string {
+  return (s || '')
+    .toLowerCase()
+    .replace(/[\u2019\u2018]/g, "'")
+    .replace(/[^\w\s']/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildFuzzySnippetRegex(snippet: string): RegExp | null {
+  const normalized = normalizeForMatch(snippet);
+  if (!normalized) return null;
+  const words = normalized.split(' ').filter(Boolean);
+  if (words.length < 2) return null;
+
+  // Allow punctuation/whitespace differences between words
+  const sep = `[\\s\\.,;:!\\?\\\"\\'\\(\\)\\[\\]\\-]+`;
+  const pattern = `(${words.map(escapeRegex).join(sep)})`;
+  try {
+    return new RegExp(pattern, 'gi');
+  } catch {
+    return null;
+  }
+}
+
 function cleanKeywords(keywords: string[]): string[] {
   return Array.from(new Set(
     keywords
@@ -108,7 +133,7 @@ export default function TranscriptFeed({
   // Render text with highlights
   const renderHighlightedText = (text: string) => {
     const cleanedKeywords = cleanKeywords(highlightKeywords);
-    
+
     // If no highlights needed, return plain text
     if (cleanedKeywords.length === 0 && (!showQuestionHighlights || questionHighlights.length === 0)) {
       return text;
@@ -121,23 +146,24 @@ export default function TranscriptFeed({
     if (showQuestionHighlights && questionHighlights.length > 0) {
       questionHighlights.forEach(({ snippet, question, questionId }) => {
         if (!snippet || snippet.length < 5) return;
-        
+
         const newResult: React.ReactNode[] = [];
-        const pattern = new RegExp(`(${escapeRegex(snippet)})`, 'gi');
-        
+        const pattern = buildFuzzySnippetRegex(snippet) ?? new RegExp(`(${escapeRegex(snippet)})`, 'gi');
+
         result.forEach(part => {
           if (typeof part !== 'string') {
             newResult.push(part);
             return;
           }
-          
+
           const splitParts = part.split(pattern);
-          
+
           splitParts.forEach((subPart, i) => {
             if (!subPart) return;
-            
-            const isMatch = subPart.toLowerCase() === snippet.toLowerCase();
-            if (isMatch) {
+
+            // With capturing groups, matches show up at odd indices.
+            // Highlight those directly instead of requiring exact equality (snippets often differ by punctuation/spacing).
+            if (i % 2 === 1) {
               newResult.push(
                 <mark
                   key={`q-${keyIndex++}`}
@@ -157,7 +183,7 @@ export default function TranscriptFeed({
             }
           });
         });
-        
+
         result = newResult;
       });
     }
@@ -166,20 +192,20 @@ export default function TranscriptFeed({
     if (cleanedKeywords.length > 0) {
       const sorted = cleanedKeywords.sort((a, b) => b.length - a.length);
       const pattern = new RegExp(`\\b(${sorted.map(escapeRegex).join('|')})\\b`, 'gi');
-      
+
       const newResult: React.ReactNode[] = [];
-      
+
       result.forEach(part => {
         if (typeof part !== 'string') {
           newResult.push(part);
           return;
         }
-        
+
         const splitParts = part.split(pattern);
-        
+
         splitParts.forEach((subPart) => {
           if (!subPart) return;
-          
+
           const isKeyword = cleanedKeywords.some(k => k.toLowerCase() === subPart.toLowerCase());
           if (isKeyword) {
             newResult.push(
@@ -192,7 +218,7 @@ export default function TranscriptFeed({
           }
         });
       });
-      
+
       result = newResult;
     }
 
@@ -250,7 +276,7 @@ export default function TranscriptFeed({
             {segments.map((segment, index) => {
               const colors = getSpeakerColor(segment.speaker);
               const isNewSpeaker = index === 0 || segments[index - 1].speaker !== segment.speaker;
-              
+
               return (
                 <motion.div
                   key={segment.id}

@@ -2008,20 +2008,50 @@ function LiveDashboardContent() {
                       c.claim.split(/\s+/).filter(word => word.length >= 4)
                     ) || []
                   ) : []}
-                  questionHighlights={(() => {
-                    // Build question highlights from all questions with relevantSnippets
+                  questionHighlights={((): QuestionHighlight[] => {
+                    // Build question highlights for ALL questions.
+                    // Prefer Claude's relevantSnippet, otherwise fall back to nearest transcript segment around the marker timestamp.
                     const allQuestions = [
                       ...questions.clarifying,
                       ...questions.criticalThinking,
                       ...questions.expansion,
                     ];
+
+                    const findMarkerTime = (questionId: string): number | null => {
+                      const marker = timelineMarkers.find(m => m.id === `q-${questionId}`);
+                      return marker ? marker.timestamp : null;
+                    };
+
+                    const nearestSegmentText = (timeMs: number): string => {
+                      if (!transcript.length) return '';
+                      // transcript segment timestamps may be absolute or relative depending on source;
+                      // still, nearest-match works well for our use.
+                      let best = transcript[0];
+                      let bestDelta = Math.abs((best.timestamp || 0) - timeMs);
+                      for (const seg of transcript) {
+                        const delta = Math.abs((seg.timestamp || 0) - timeMs);
+                        if (delta < bestDelta) {
+                          best = seg;
+                          bestDelta = delta;
+                        }
+                      }
+                      // Use a short slice to reduce collisions
+                      const words = best.text.split(/\s+/).filter(Boolean);
+                      return words.slice(0, 14).join(' ');
+                    };
+
                     return allQuestions
-                      .filter(q => q.relevantSnippet && q.relevantSnippet.length > 5)
-                      .map(q => ({
-                        snippet: q.relevantSnippet || '',
-                        question: q.question,
-                        questionId: q.id,
-                      }));
+                      .map((q): QuestionHighlight => {
+                        const markerTime = findMarkerTime(q.id);
+                        const fallbackSnippet = markerTime != null ? nearestSegmentText(markerTime) : '';
+                        return {
+                          snippet: (q.relevantSnippet && q.relevantSnippet.length > 5) ? q.relevantSnippet : fallbackSnippet,
+                          question: q.question,
+                          questionId: q.id,
+                        };
+                      })
+                      // Drop any that still have no snippet
+                      .filter(h => h.snippet.trim().length >= 5);
                   })()}
                   showQuestionHighlights={showQuestionHighlights}
                   onQuestionHighlightClick={(questionId) => {
