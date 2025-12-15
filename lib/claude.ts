@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { v4 as uuidv4 } from 'uuid';
 import type { GeneratedQuestion, AnalysisSummary, KeyClaim, LogicalGap, MissingEvidence } from './types';
+import { config } from './config';
 
 // Lazy-load Claude client to avoid build-time errors
 let anthropicClient: Anthropic | null = null;
@@ -97,7 +98,7 @@ ${slideContent.topics?.length ? `- Topics Covered in Slides: ${slideContent.topi
   if (settings?.existingQuestions?.length) {
     existingQuestionsSection = `
 ALREADY ASKED QUESTIONS (do NOT repeat or closely paraphrase these):
-${settings.existingQuestions.slice(-15).map((q, i) => `${i + 1}. ${q}`).join('\n')}
+${settings.existingQuestions.slice(-config.ui.existingQuestionsContext).map((q, i) => `${i + 1}. ${q}`).join('\n')}
 `;
   }
 
@@ -151,8 +152,8 @@ Respond ONLY with JSON.`;
     console.log('[Claude] Generating questions...');
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1024,
+      model: config.models.claude,
+      max_tokens: config.api.questionMaxTokens,
       messages: [
         {
           role: 'user',
@@ -257,8 +258,8 @@ Respond ONLY with the JSON.`;
     console.log('[Claude] Analyzing transcript...');
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2048,
+      model: config.models.claude,
+      max_tokens: config.api.analysisMaxTokens,
       messages: [
         {
           role: 'user',

@@ -28,6 +28,7 @@ import {
   FileImage,
 } from 'lucide-react';
 import TranscriptFeed, { type MarkerHighlight } from '@/components/TranscriptFeed';
+import { config } from '@/lib/config';
 import QuestionBank from '@/components/QuestionBank';
 import SummaryCard from '@/components/SummaryCard';
 import RubricCard from '@/components/RubricCard';
@@ -195,9 +196,9 @@ function LiveDashboardContent() {
   const triggerAsyncQuestionGeneration = useCallback(async (transcriptText: string) => {
     if (!sessionId) return;
 
-    // Check throttle (45s cooldown)
+    // Check throttle (configurable cooldown)
     const now = Date.now();
-    if (now - lastQuestionGenTimeRef.current < 45000) {
+    if (now - lastQuestionGenTimeRef.current < config.timing.questionCooldownMs) {
       console.log('[Questions] Throttled, waiting for cooldown...');
       pendingQuestionGenRef.current = false;
       return;
@@ -259,8 +260,8 @@ function LiveDashboardContent() {
         // Add markers for logical gaps
         analysisData.analysis.logicalGaps?.forEach((gap: { id: string; description: string; severity?: string; relevantSnippet?: string }) => {
           // Prefer Claude's relevantSnippet, fallback to search
-          const snippet = (gap.relevantSnippet && gap.relevantSnippet.length >= 5) 
-            ? gap.relevantSnippet 
+          const snippet = (gap.relevantSnippet && gap.relevantSnippet.length >= 5)
+            ? gap.relevantSnippet
             : findAnchorSnippet(gap.description, capturedTime);
           issueMarkers.push({
             id: `gap-${gap.id}`,
@@ -537,7 +538,7 @@ function LiveDashboardContent() {
       const totalWords = newTranscript.reduce((acc, s) => acc + s.text.split(/\s+/).length, 0);
       const wordsSinceLastAnalysis = totalWords - lastWordCountRef.current;
 
-      if (wordsSinceLastAnalysis >= 8 && !pendingQuestionGenRef.current && sessionId) {
+      if (wordsSinceLastAnalysis >= config.limits.wordsBetweenAnalysis && !pendingQuestionGenRef.current && sessionId) {
         lastWordCountRef.current = totalWords;
         pendingQuestionGenRef.current = true;
         const fullText = newTranscript.map(s => s.text).join(' ');
@@ -583,11 +584,10 @@ function LiveDashboardContent() {
       let newTranscript = [...prev, segment];
 
       // Memory safeguard: Consolidate old segments if we have too many
-      // Keep last 100 segments to prevent memory issues
-      if (newTranscript.length > 100) {
+      if (newTranscript.length > config.limits.maxTranscriptSegments) {
         // Merge older segments into fewer chunks
-        const olderSegments = newTranscript.slice(0, -50);
-        const recentSegments = newTranscript.slice(-50);
+        const olderSegments = newTranscript.slice(0, -config.limits.recentSegmentsToKeep);
+        const recentSegments = newTranscript.slice(-config.limits.recentSegmentsToKeep);
         const consolidatedText = olderSegments.map(s => s.text).join(' ');
         const consolidatedSegment: TranscriptSegment = {
           id: 'consolidated-' + Date.now(),
@@ -606,8 +606,8 @@ function LiveDashboardContent() {
 
       console.log(`[Transcript] Added segment. Total words: ${totalWords}, since last analysis: ${wordsSinceLastAnalysis}`);
 
-      // Trigger question generation every 8 new words (non-blocking)
-      if (wordsSinceLastAnalysis >= 8 && !pendingQuestionGenRef.current) {
+      // Trigger question generation every N words (non-blocking)
+      if (wordsSinceLastAnalysis >= config.limits.wordsBetweenAnalysis && !pendingQuestionGenRef.current) {
         lastWordCountRef.current = totalWords;
         pendingQuestionGenRef.current = true;
 
@@ -1403,8 +1403,8 @@ function LiveDashboardContent() {
         timestamp: marker.timestamp,
       });
 
-      // Auto-clear selection after 3 seconds (but keep popup open)
-      setTimeout(() => setSelectedMarkerId(null), 3000);
+      // Auto-clear selection after configured time (but keep popup open)
+      setTimeout(() => setSelectedMarkerId(null), config.timing.markerSelectionClearMs);
 
       console.log('[Marker] Selected:', markerId, 'at', marker.timestamp, 'ms');
     } else {
@@ -2166,13 +2166,13 @@ function LiveDashboardContent() {
                   markerHighlights={timelineMarkers
                     .filter(m => m.anchorSnippet && m.anchorSnippet.length >= 5)
                     .map((m): MarkerHighlight => {
-                      // Truncate overly long snippets to ~15 words max
+                      // Truncate overly long snippets using config
                       let snippet = m.anchorSnippet!;
                       const words = snippet.split(/\s+/);
-                      if (words.length > 15) {
+                      if (words.length > config.limits.maxSnippetWords) {
                         // Take the most distinctive middle portion
-                        const midStart = Math.floor((words.length - 12) / 2);
-                        snippet = words.slice(midStart, midStart + 12).join(' ');
+                        const midStart = Math.floor((words.length - config.limits.truncatedSnippetWords) / 2);
+                        snippet = words.slice(midStart, midStart + config.limits.truncatedSnippetWords).join(' ');
                       }
                       return {
                         id: m.id,

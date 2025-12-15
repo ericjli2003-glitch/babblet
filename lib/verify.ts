@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { v4 as uuidv4 } from 'uuid';
 import type { VerificationFinding, VerificationVerdict } from '@/lib/types';
+import { config } from './config';
 
 let client: Anthropic | null = null;
 
@@ -26,9 +27,11 @@ function isVerdict(v: any): v is VerificationVerdict {
 export async function verifyWithClaude(transcript: string, claims?: string[]): Promise<VerificationFinding[]> {
   const c = getClient();
 
-  // Keep prompt bounded
-  const transcriptTrimmed = transcript.length > 6000 ? transcript.slice(-6000) : transcript;
-  const claimsTrimmed = (claims || []).slice(0, 8);
+  // Keep prompt bounded using config
+  const transcriptTrimmed = transcript.length > config.api.maxTranscriptForLLM 
+    ? transcript.slice(-config.api.maxTranscriptForLLM) 
+    : transcript;
+  const claimsTrimmed = (claims || []).slice(0, config.limits.maxClaimsForVerification);
 
   const system = `You are a strict fact-checking filter for academic presentations.
 
@@ -95,8 +98,8 @@ Return JSON only in this schema:
 If unsure whether something is a verifiable fact, DO NOT include it.`;
 
   const resp = await c.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 1200,
+    model: config.models.claude,
+    max_tokens: config.api.verificationMaxTokens,
     system,
     messages: [{ role: 'user', content: user }],
   });
@@ -128,7 +131,7 @@ If unsure whether something is a verifiable fact, DO NOT include it.`;
     })
     .filter(Boolean) as VerificationFinding[];
 
-  return findings.slice(0, 8);
+  return findings.slice(0, config.limits.maxVerificationFindings);
 }
 
 
