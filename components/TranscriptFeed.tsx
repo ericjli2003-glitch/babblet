@@ -69,8 +69,10 @@ function buildFuzzySnippetRegex(snippet: string): RegExp | null {
   if (words.length < 2) return null;
 
   // Allow punctuation/whitespace differences between words
+  // Use word boundaries (\b) to ensure we only match complete words
   const sep = `[\\s\\.,;:!\\?\\\"\\'\\(\\)\\[\\]\\-]+`;
-  const pattern = `(${words.map(escapeRegex).join(sep)})`;
+  // Add word boundary at start and end to prevent matching inside words
+  const pattern = `\\b(${words.map(escapeRegex).join(sep)})\\b`;
   try {
     return new RegExp(pattern, 'gi');
   } catch {
