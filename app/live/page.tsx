@@ -2355,10 +2355,10 @@ function LiveDashboardContent() {
               {/* Header with type badge */}
               <div className="flex items-start gap-3 mb-4">
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${markerPopup.type === 'question'
-                    ? 'bg-violet-100'
-                    : markerPopup.type === 'issue'
-                      ? 'bg-amber-100'
-                      : 'bg-emerald-100'
+                  ? 'bg-violet-100'
+                  : markerPopup.type === 'issue'
+                    ? 'bg-amber-100'
+                    : 'bg-emerald-100'
                   }`}>
                   <span className="text-2xl">
                     {markerPopup.type === 'question' ? '❓' : markerPopup.type === 'issue' ? '⚠️' : '💡'}
@@ -2367,10 +2367,10 @@ function LiveDashboardContent() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${markerPopup.type === 'question'
-                        ? 'bg-violet-100 text-violet-700'
-                        : markerPopup.type === 'issue'
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-emerald-100 text-emerald-700'
+                      ? 'bg-violet-100 text-violet-700'
+                      : markerPopup.type === 'issue'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-emerald-100 text-emerald-700'
                       }`}>
                       {markerPopup.type === 'question' ? 'Question' : markerPopup.type === 'issue' ? 'Issue' : 'Insight'}
                     </span>

@@ -187,32 +187,54 @@ Respond ONLY with JSON.`;
 export async function analyzeWithClaude(transcript: string): Promise<AnalysisSummary> {
   const client = getAnthropicClient();
 
-  const systemPrompt = `You are an expert at analyzing presentations and identifying key claims, logical gaps, and areas needing more evidence. Provide structured analysis.`;
+  const systemPrompt = `You are an expert at analyzing academic presentations. You focus on substantive issues, not minor stylistic choices.
 
-  const userPrompt = `Analyze this presentation transcript and identify:
-1. Key claims being made
-2. Logical gaps or unclear reasoning
-3. Areas where more evidence is needed
-4. Overall strength assessment (1-5)
-5. Suggestions for improvement
+STRICT ANALYSIS MODE:
+
+For KEY CLAIMS:
+- Only extract claims that are central to the presenter's argument
+- Focus on substantive assertions, not passing remarks or transitions
+- Claims should be specific enough to evaluate
+
+For LOGICAL GAPS:
+- ONLY flag genuine logical fallacies or reasoning errors
+- A gap must be: a missing step in an argument, a non-sequitur, a contradiction, or an unsupported causal claim
+- DO NOT flag: informal speech, teaching style choices, rhetorical questions, jokes, or things that are simply "unclear"
+- DO NOT flag: presentation structure choices, pacing, or meta-commentary
+- If the speaker is casually explaining something, that's not a logical gap
+- When in doubt, do NOT flag a logical gap
+
+For MISSING EVIDENCE:
+- Only flag when a specific factual claim was made but no supporting evidence was provided
+- The claim must be the type that actually requires evidence (not opinions or common knowledge)
+- DO NOT flag: conceptual explanations, definitions, or introductory/contextual remarks
+
+Be conservative. Flag fewer, higher-quality issues rather than many minor observations.
+If the presentation is reasonably coherent, return minimal or empty gap/evidence arrays.`;
+
+  const userPrompt = `Analyze this presentation transcript. Be conservative - only flag substantive issues.
 
 TRANSCRIPT:
 ${transcript}
 
+Apply STRICT ANALYSIS MODE. Return fewer, higher-quality findings.
+
 Respond in this JSON format:
 {
   "keyClaims": [
-    {"claim": "The claim text", "evidence": ["supporting points"], "confidence": 0.8}
+    {"claim": "The central claim text", "evidence": ["supporting points if any"], "confidence": 0.8}
   ],
   "logicalGaps": [
-    {"description": "Gap description", "severity": "minor" | "moderate" | "major", "suggestion": "How to fix"}
+    {"description": "Specific logical error or reasoning gap", "severity": "minor" | "moderate" | "major", "suggestion": "How to address it"}
   ],
   "missingEvidence": [
-    {"description": "What's missing", "relatedClaim": "Which claim needs it", "importance": "low" | "medium" | "high"}
+    {"description": "What specific evidence is missing", "relatedClaim": "Which claim needs it", "importance": "low" | "medium" | "high"}
   ],
   "overallStrength": 3.5,
-  "suggestions": ["Suggestion 1", "Suggestion 2"]
+  "suggestions": ["Constructive suggestion 1", "Constructive suggestion 2"]
 }
+
+Remember: If the presentation is coherent, logicalGaps and missingEvidence can be empty arrays.
 
 Respond ONLY with the JSON, no additional text.`;
 
