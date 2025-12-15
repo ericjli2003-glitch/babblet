@@ -256,48 +256,48 @@ function LiveDashboardContent() {
           return best?.text?.slice(0, 80) || '';
         };
 
-                // Add markers for logical gaps
-                analysisData.analysis.logicalGaps?.forEach((gap: { id: string; description: string; severity?: string }) => {
-                  const snippet = findAnchorSnippet(gap.description, capturedTime);
-                  issueMarkers.push({
-                    id: `gap-${gap.id}`,
-                    timestamp: capturedTime,
-                    type: 'issue',
-                    title: gap.description.slice(0, 50) + (gap.description.length > 50 ? '...' : ''),
-                    fullText: gap.description,
-                    description: `Severity: ${gap.severity || 'moderate'}`,
-                    anchorSnippet: snippet,
-                  });
-                });
+        // Add markers for logical gaps
+        analysisData.analysis.logicalGaps?.forEach((gap: { id: string; description: string; severity?: string }) => {
+          const snippet = findAnchorSnippet(gap.description, capturedTime);
+          issueMarkers.push({
+            id: `gap-${gap.id}`,
+            timestamp: capturedTime,
+            type: 'issue',
+            title: gap.description.slice(0, 50) + (gap.description.length > 50 ? '...' : ''),
+            fullText: gap.description,
+            description: `Severity: ${gap.severity || 'moderate'}`,
+            anchorSnippet: snippet,
+          });
+        });
 
-                // Add markers for key claims (as insights)
-                analysisData.analysis.keyClaims?.slice(0, 2).forEach((claim: { id: string; claim: string; evidence?: string }) => {
-                  // Use the claim text or evidence as anchor
-                  const snippet = findAnchorSnippet(claim.claim, capturedTime);
-                  issueMarkers.push({
-                    id: `claim-${claim.id}`,
-                    timestamp: capturedTime,
-                    type: 'insight',
-                    title: claim.claim.slice(0, 50) + (claim.claim.length > 50 ? '...' : ''),
-                    fullText: claim.claim,
-                    description: 'Key claim identified',
-                    anchorSnippet: snippet,
-                  });
-                });
+        // Add markers for key claims (as insights)
+        analysisData.analysis.keyClaims?.slice(0, 2).forEach((claim: { id: string; claim: string; evidence?: string }) => {
+          // Use the claim text or evidence as anchor
+          const snippet = findAnchorSnippet(claim.claim, capturedTime);
+          issueMarkers.push({
+            id: `claim-${claim.id}`,
+            timestamp: capturedTime,
+            type: 'insight',
+            title: claim.claim.slice(0, 50) + (claim.claim.length > 50 ? '...' : ''),
+            fullText: claim.claim,
+            description: 'Key claim identified',
+            anchorSnippet: snippet,
+          });
+        });
 
-                // Add markers for missing evidence
-                analysisData.analysis.missingEvidence?.forEach((evidence: { id: string; description: string; importance?: string }) => {
-                  const snippet = findAnchorSnippet(evidence.description, capturedTime);
-                  issueMarkers.push({
-                    id: `evidence-${evidence.id}`,
-                    timestamp: capturedTime,
-                    type: 'issue',
-                    title: evidence.description.slice(0, 50) + (evidence.description.length > 50 ? '...' : ''),
-                    fullText: evidence.description,
-                    description: `Missing evidence (${evidence.importance || 'medium'} importance)`,
-                    anchorSnippet: snippet,
-                  });
-                });
+        // Add markers for missing evidence
+        analysisData.analysis.missingEvidence?.forEach((evidence: { id: string; description: string; importance?: string }) => {
+          const snippet = findAnchorSnippet(evidence.description, capturedTime);
+          issueMarkers.push({
+            id: `evidence-${evidence.id}`,
+            timestamp: capturedTime,
+            type: 'issue',
+            title: evidence.description.slice(0, 50) + (evidence.description.length > 50 ? '...' : ''),
+            fullText: evidence.description,
+            description: `Missing evidence (${evidence.importance || 'medium'} importance)`,
+            anchorSnippet: snippet,
+          });
+        });
 
         if (issueMarkers.length > 0) {
           setTimelineMarkers(prev => {
@@ -2119,7 +2119,7 @@ function LiveDashboardContent() {
                 <button
                   onClick={() => setShowQuestionHighlights(!showQuestionHighlights)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${showQuestionHighlights
-                    ? 'bg-yellow-100 text-yellow-700 ring-1 ring-yellow-300'
+                    ? 'bg-violet-100 text-violet-700 ring-1 ring-violet-300'
                     : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
                     }`}
                   title="Highlight where questions arose in the transcript"
@@ -2354,26 +2354,24 @@ function LiveDashboardContent() {
             >
               {/* Header with type badge */}
               <div className="flex items-start gap-3 mb-4">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${
-                  markerPopup.type === 'question' 
-                    ? 'bg-yellow-100' 
-                    : markerPopup.type === 'issue' 
-                      ? 'bg-amber-100' 
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${markerPopup.type === 'question'
+                    ? 'bg-violet-100'
+                    : markerPopup.type === 'issue'
+                      ? 'bg-amber-100'
                       : 'bg-emerald-100'
-                }`}>
+                  }`}>
                   <span className="text-2xl">
                     {markerPopup.type === 'question' ? '❓' : markerPopup.type === 'issue' ? '⚠️' : '💡'}
                   </span>
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      markerPopup.type === 'question'
-                        ? 'bg-yellow-100 text-yellow-700'
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${markerPopup.type === 'question'
+                        ? 'bg-violet-100 text-violet-700'
                         : markerPopup.type === 'issue'
                           ? 'bg-amber-100 text-amber-700'
                           : 'bg-emerald-100 text-emerald-700'
-                    }`}>
+                      }`}>
                       {markerPopup.type === 'question' ? 'Question' : markerPopup.type === 'issue' ? 'Issue' : 'Insight'}
                     </span>
                     <span className="text-xs text-surface-400 font-mono">

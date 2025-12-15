@@ -163,7 +163,7 @@ export default function TranscriptFeed({
       // Brighter when hovered from timeline
       switch (type) {
         case 'question':
-          return 'bg-yellow-300 text-yellow-900 ring-2 ring-yellow-400';
+          return 'bg-violet-300 text-violet-900 ring-2 ring-violet-400';
         case 'issue':
           return 'bg-amber-300 text-amber-900 ring-2 ring-amber-400';
         case 'insight':
@@ -172,7 +172,7 @@ export default function TranscriptFeed({
     }
     switch (type) {
       case 'question':
-        return 'bg-yellow-200 text-yellow-900 hover:bg-yellow-300';
+        return 'bg-violet-200 text-violet-900 hover:bg-violet-300';
       case 'issue':
         return 'bg-amber-200 text-amber-900 hover:bg-amber-300';
       case 'insight':
@@ -287,12 +287,12 @@ export default function TranscriptFeed({
           className={`${colors} px-1 rounded font-medium cursor-pointer transition-all relative`}
           onMouseEnter={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
-            setHoveredHighlight({ 
-              label: m.highlight.label, 
+            setHoveredHighlight({
+              label: m.highlight.label,
               fullText: m.highlight.fullText,
               type: m.highlight.type,
-              x: rect.left + rect.width / 2, 
-              y: rect.top 
+              x: rect.left + rect.width / 2,
+              y: rect.top
             });
           }}
           onMouseLeave={() => setHoveredHighlight(null)}
@@ -332,7 +332,7 @@ export default function TranscriptFeed({
         <div className="flex items-center gap-3">
           {/* Highlight counts per type */}
           {effectiveShowQuestions && uniqueHighlights.filter(h => h.type === 'question').length > 0 && (
-            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded-full text-xs font-medium">
+            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-violet-50 text-violet-700 rounded-full text-xs font-medium">
               <MessageSquareText className="w-3 h-3" />
               <span>{uniqueHighlights.filter(h => h.type === 'question').length} Q</span>
             </div>
@@ -450,8 +450,8 @@ export default function TranscriptFeed({
               <div className="flex items-center gap-2 mb-1">
                 {hoveredHighlight.type === 'question' && (
                   <>
-                    <MessageSquareText className="w-3.5 h-3.5 text-yellow-400" />
-                    <span className="text-xs text-yellow-400 font-medium">Question</span>
+                    <MessageSquareText className="w-3.5 h-3.5 text-violet-400" />
+                    <span className="text-xs text-violet-400 font-medium">Question</span>
                   </>
                 )}
                 {hoveredHighlight.type === 'issue' && (

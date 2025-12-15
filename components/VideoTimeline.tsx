@@ -87,7 +87,7 @@ export default function VideoTimeline({
   const getMarkerStyle = (type: TimelineMarker['type']) => {
     switch (type) {
       case 'question':
-        return { color: 'bg-primary-500', icon: MessageCircleQuestion, hoverColor: 'bg-primary-600' };
+        return { color: 'bg-violet-500', icon: MessageCircleQuestion, hoverColor: 'bg-violet-600' };
       case 'issue':
         return { color: 'bg-amber-500', icon: AlertTriangle, hoverColor: 'bg-amber-600' };
       case 'insight':
@@ -176,8 +176,8 @@ export default function VideoTimeline({
           >
             <div className="bg-surface-900 text-white px-4 py-3 rounded-xl shadow-2xl max-w-sm border border-surface-700">
               <div className="flex items-center gap-2 mb-2">
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${hoveredMarker.type === 'question' ? 'bg-primary-500' :
-                  hoveredMarker.type === 'issue' ? 'bg-amber-500' : 'bg-emerald-500'
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${hoveredMarker.type === 'question' ? 'bg-violet-500' :
+                    hoveredMarker.type === 'issue' ? 'bg-amber-500' : 'bg-emerald-500'
                   }`}>
                   {hoveredMarker.type === 'question' ? '❓ Question' :
                     hoveredMarker.type === 'issue' ? '⚠️ Issue' : '💡 Insight'}
@@ -202,7 +202,7 @@ export default function VideoTimeline({
       {/* Marker Legend */}
       <div className="flex items-center justify-center gap-4 mt-2 text-xs text-surface-400">
         <div className="flex items-center gap-1">
-          <div className="w-2.5 h-2.5 rounded-full bg-primary-500" />
+          <div className="w-2.5 h-2.5 rounded-full bg-violet-500" />
           <span>Questions</span>
         </div>
         <div className="flex items-center gap-1">
