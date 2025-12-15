@@ -143,6 +143,14 @@ function LiveDashboardContent() {
   const [interimTranscript, setInterimTranscript] = useState<string>('');
   const [useStreamingTranscription, setUseStreamingTranscription] = useState(true);
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
+  const [markerPopup, setMarkerPopup] = useState<{
+    id: string;
+    type: 'question' | 'issue' | 'insight';
+    title: string;
+    fullText: string;
+    description?: string;
+    timestamp: number;
+  } | null>(null);
 
   // Camera and recording playback for live mode
   const [includeCamera, setIncludeCamera] = useState(false);
@@ -225,28 +233,28 @@ function LiveDashboardContent() {
           ? videoRef.current.currentTime * 1000
           : currentTimeRef.current;
 
-                // Helper to find best snippet from transcript near a timestamp
-                const findAnchorSnippet = (text: string, nearTime: number): string => {
-                  // Try to find the text in transcript, otherwise use nearest segment
-                  const textLower = text.toLowerCase();
-                  const matchingSegment = transcript.find(seg => 
-                    seg.text.toLowerCase().includes(textLower.slice(0, 30))
-                  );
-                  if (matchingSegment) {
-                    return matchingSegment.text.slice(0, 80);
-                  }
-                  // Fallback: nearest segment by time
-                  let best = transcript[0];
-                  let bestDelta = Infinity;
-                  for (const seg of transcript) {
-                    const delta = Math.abs((seg.timestamp || 0) - nearTime);
-                    if (delta < bestDelta) {
-                      best = seg;
-                      bestDelta = delta;
-                    }
-                  }
-                  return best?.text?.slice(0, 80) || '';
-                };
+        // Helper to find best snippet from transcript near a timestamp
+        const findAnchorSnippet = (text: string, nearTime: number): string => {
+          // Try to find the text in transcript, otherwise use nearest segment
+          const textLower = text.toLowerCase();
+          const matchingSegment = transcript.find(seg =>
+            seg.text.toLowerCase().includes(textLower.slice(0, 30))
+          );
+          if (matchingSegment) {
+            return matchingSegment.text.slice(0, 80);
+          }
+          // Fallback: nearest segment by time
+          let best = transcript[0];
+          let bestDelta = Infinity;
+          for (const seg of transcript) {
+            const delta = Math.abs((seg.timestamp || 0) - nearTime);
+            if (delta < bestDelta) {
+              best = seg;
+              bestDelta = delta;
+            }
+          }
+          return best?.text?.slice(0, 80) || '';
+        };
 
                 // Add markers for logical gaps
                 analysisData.analysis.logicalGaps?.forEach((gap: { id: string; description: string; severity?: string }) => {
@@ -256,6 +264,7 @@ function LiveDashboardContent() {
                     timestamp: capturedTime,
                     type: 'issue',
                     title: gap.description.slice(0, 50) + (gap.description.length > 50 ? '...' : ''),
+                    fullText: gap.description,
                     description: `Severity: ${gap.severity || 'moderate'}`,
                     anchorSnippet: snippet,
                   });
@@ -270,6 +279,7 @@ function LiveDashboardContent() {
                     timestamp: capturedTime,
                     type: 'insight',
                     title: claim.claim.slice(0, 50) + (claim.claim.length > 50 ? '...' : ''),
+                    fullText: claim.claim,
                     description: 'Key claim identified',
                     anchorSnippet: snippet,
                   });
@@ -283,6 +293,7 @@ function LiveDashboardContent() {
                     timestamp: capturedTime,
                     type: 'issue',
                     title: evidence.description.slice(0, 50) + (evidence.description.length > 50 ? '...' : ''),
+                    fullText: evidence.description,
                     description: `Missing evidence (${evidence.importance || 'medium'} importance)`,
                     anchorSnippet: snippet,
                   });
@@ -331,7 +342,8 @@ function LiveDashboardContent() {
                 timestamp: markerTimestamp,
                 type: 'issue' as const,
                 title: `Verify: ${f.statement.slice(0, 50)}${f.statement.length > 50 ? '...' : ''}`,
-                description: f.verdict,
+                fullText: f.statement,
+                description: `${f.verdict} - ${f.explanation || 'Needs verification'}`,
                 anchorSnippet,
               };
             });
@@ -453,6 +465,7 @@ function LiveDashboardContent() {
               timestamp: markerTimestamp,
               type: 'question' as const,
               title: q.question.slice(0, 60) + (q.question.length > 60 ? '...' : ''),
+              fullText: q.question,
               description: q.rationale,
               category: q.category,
               anchorSnippet,
@@ -1354,7 +1367,7 @@ function LiveDashboardContent() {
     }
   };
 
-  // Handle marker selection from SummaryCard/QuestionBank
+  // Handle marker selection from SummaryCard/QuestionBank/transcript highlights
   const handleSelectMarker = useCallback((markerId: string) => {
     // Find the marker by ID
     const marker = timelineMarkers.find(m => m.id === markerId);
@@ -1372,7 +1385,17 @@ function LiveDashboardContent() {
       // Highlight the marker
       setSelectedMarkerId(markerId);
 
-      // Auto-clear selection after 3 seconds
+      // Show popup with full details
+      setMarkerPopup({
+        id: marker.id,
+        type: marker.type,
+        title: marker.title,
+        fullText: marker.fullText || marker.title,
+        description: marker.description,
+        timestamp: marker.timestamp,
+      });
+
+      // Auto-clear selection after 3 seconds (but keep popup open)
       setTimeout(() => setSelectedMarkerId(null), 3000);
 
       console.log('[Marker] Selected:', markerId, 'at', marker.timestamp, 'ms');
@@ -2138,6 +2161,7 @@ function LiveDashboardContent() {
                       id: m.id,
                       snippet: m.anchorSnippet!,
                       label: m.title,
+                      fullText: m.fullText,
                       type: m.type,
                     }))}
                   showQuestions={showQuestionHighlights}
@@ -2310,6 +2334,109 @@ function LiveDashboardContent() {
         settings={questionSettings}
         onSettingsChange={setQuestionSettings}
       />
+
+      {/* Marker Detail Popup */}
+      <AnimatePresence>
+        {markerPopup && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+            onClick={() => setMarkerPopup(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white rounded-3xl p-6 max-w-lg w-full mx-4 shadow-2xl max-h-[80vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header with type badge */}
+              <div className="flex items-start gap-3 mb-4">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${
+                  markerPopup.type === 'question' 
+                    ? 'bg-yellow-100' 
+                    : markerPopup.type === 'issue' 
+                      ? 'bg-amber-100' 
+                      : 'bg-emerald-100'
+                }`}>
+                  <span className="text-2xl">
+                    {markerPopup.type === 'question' ? '❓' : markerPopup.type === 'issue' ? '⚠️' : '💡'}
+                  </span>
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      markerPopup.type === 'question'
+                        ? 'bg-yellow-100 text-yellow-700'
+                        : markerPopup.type === 'issue'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-emerald-100 text-emerald-700'
+                    }`}>
+                      {markerPopup.type === 'question' ? 'Question' : markerPopup.type === 'issue' ? 'Issue' : 'Insight'}
+                    </span>
+                    <span className="text-xs text-surface-400 font-mono">
+                      at {formatTime(markerPopup.timestamp)}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setMarkerPopup(null)}
+                  className="p-1 text-surface-400 hover:text-surface-600 rounded-lg hover:bg-surface-100"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Full text */}
+              <div className="mb-4">
+                <p className="text-lg text-surface-900 leading-relaxed">
+                  {markerPopup.fullText}
+                </p>
+              </div>
+
+              {/* Description/rationale if available */}
+              {markerPopup.description && (
+                <div className="p-4 bg-surface-50 rounded-xl mb-4">
+                  <p className="text-sm text-surface-600 leading-relaxed">
+                    {markerPopup.description}
+                  </p>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    // Seek to this position
+                    if (mode === 'upload' && videoRef.current) {
+                      videoRef.current.currentTime = markerPopup.timestamp / 1000;
+                      setCurrentTime(markerPopup.timestamp);
+                    } else if (mode === 'live' && recordedVideoRef.current) {
+                      recordedVideoRef.current.currentTime = markerPopup.timestamp / 1000;
+                      setRecordedVideoTime(markerPopup.timestamp);
+                    }
+                    setMarkerPopup(null);
+                  }}
+                  className="px-4 py-2 bg-surface-100 text-surface-700 rounded-xl hover:bg-surface-200 transition-colors flex items-center gap-2"
+                >
+                  <Play className="w-4 h-4" />
+                  Go to moment
+                </button>
+                <button
+                  onClick={() => setMarkerPopup(null)}
+                  className="px-4 py-2 bg-gradient-primary text-white rounded-xl hover:shadow-lg transition-shadow"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -9,7 +9,8 @@ import type { TranscriptSegment } from '@/lib/types';
 interface MarkerHighlight {
   id: string;
   snippet: string;
-  label: string; // The question/issue/insight text to show on hover
+  label: string; // Truncated text for hover tooltip
+  fullText?: string; // Full text for popup
   type: 'question' | 'issue' | 'insight';
 }
 
@@ -110,7 +111,7 @@ export default function TranscriptFeed({
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const highlightRefs = useRef<Map<string, HTMLElement>>(new Map());
-  const [hoveredHighlight, setHoveredHighlight] = useState<{ label: string; type: string; x: number; y: number } | null>(null);
+  const [hoveredHighlight, setHoveredHighlight] = useState<{ label: string; fullText?: string; type: string; x: number; y: number } | null>(null);
 
   // Merge legacy questionHighlights into markerHighlights
   const allHighlights: MarkerHighlight[] = [
@@ -124,7 +125,7 @@ export default function TranscriptFeed({
   ];
 
   // Dedupe by id
-  const uniqueHighlights = allHighlights.filter((h, i, arr) => 
+  const uniqueHighlights = allHighlights.filter((h, i, arr) =>
     arr.findIndex(x => x.id === h.id) === i
   );
 
@@ -207,19 +208,19 @@ export default function TranscriptFeed({
     if (!highlighter) return text;
 
     const { highlights } = highlighter;
-    
+
     // Build array of { start, end, highlight } for all matches
     type MatchRange = { start: number; end: number; highlight: MarkerHighlight };
     const matches: MatchRange[] = [];
-    
+
     const normalizedText = normalizeForMatch(text);
-    
+
     for (const h of highlights) {
       if (!h.snippet || h.snippet.length < 5) continue;
-      
+
       const pattern = buildFuzzySnippetRegex(h.snippet);
       if (!pattern) continue;
-      
+
       // Find all matches in normalized text
       let match;
       const normalizedPattern = new RegExp(pattern.source, 'gi');
@@ -227,30 +228,30 @@ export default function TranscriptFeed({
         // Check for overlap with existing matches
         const start = match.index;
         const end = match.index + match[0].length;
-        
-        const hasOverlap = matches.some(m => 
-          (start >= m.start && start < m.end) || 
+
+        const hasOverlap = matches.some(m =>
+          (start >= m.start && start < m.end) ||
           (end > m.start && end <= m.end) ||
           (start <= m.start && end >= m.end)
         );
-        
+
         if (!hasOverlap) {
           matches.push({ start, end, highlight: h });
         }
       }
     }
-    
+
     if (matches.length === 0) return text;
-    
+
     // Sort matches by start position
     matches.sort((a, b) => a.start - b.start);
-    
+
     // Now we need to map normalized positions back to original text
     // Build the result by walking through original text
     const result: React.ReactNode[] = [];
     let keyIndex = 0;
     let lastEnd = 0;
-    
+
     // Create normalized-to-original position mapping
     const normalizedToOriginal: number[] = [];
     let ni = 0;
@@ -263,20 +264,20 @@ export default function TranscriptFeed({
       }
     }
     normalizedToOriginal[ni] = text.length; // End marker
-    
+
     for (const m of matches) {
       const origStart = normalizedToOriginal[m.start] ?? 0;
       const origEnd = normalizedToOriginal[m.end] ?? text.length;
-      
+
       // Add text before this match
       if (origStart > lastEnd) {
         result.push(text.slice(lastEnd, origStart));
       }
-      
+
       const matchedText = text.slice(origStart, origEnd);
       const isHovered = m.highlight.id === hoveredMarkerId;
       const colors = getHighlightColors(m.highlight.type, isHovered);
-      
+
       result.push(
         <mark
           key={`hl-${keyIndex++}`}
@@ -288,6 +289,7 @@ export default function TranscriptFeed({
             const rect = e.currentTarget.getBoundingClientRect();
             setHoveredHighlight({ 
               label: m.highlight.label, 
+              fullText: m.highlight.fullText,
               type: m.highlight.type,
               x: rect.left + rect.width / 2, 
               y: rect.top 
@@ -302,15 +304,15 @@ export default function TranscriptFeed({
           {matchedText}
         </mark>
       );
-      
+
       lastEnd = origEnd;
     }
-    
+
     // Add remaining text
     if (lastEnd < text.length) {
       result.push(text.slice(lastEnd));
     }
-    
+
     return result;
   };
 
@@ -444,7 +446,7 @@ export default function TranscriptFeed({
               transform: 'translate(-50%, -100%)',
             }}
           >
-            <div className="bg-surface-900 text-white px-3 py-2 rounded-lg shadow-xl max-w-sm">
+            <div className="bg-surface-900 text-white px-3 py-2 rounded-lg shadow-xl max-w-md">
               <div className="flex items-center gap-2 mb-1">
                 {hoveredHighlight.type === 'question' && (
                   <>
@@ -465,7 +467,13 @@ export default function TranscriptFeed({
                   </>
                 )}
               </div>
-              <p className="text-sm">{hoveredHighlight.label}</p>
+              <p className="text-sm leading-relaxed">
+                {(hoveredHighlight.fullText || hoveredHighlight.label).slice(0, 150)}
+                {(hoveredHighlight.fullText || hoveredHighlight.label).length > 150 ? '...' : ''}
+              </p>
+              {(hoveredHighlight.fullText || hoveredHighlight.label).length > 100 && (
+                <p className="text-xs text-surface-400 mt-1">Click for full details</p>
+              )}
             </div>
             <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-6 border-r-6 border-t-6 border-l-transparent border-r-transparent border-t-surface-900" />
           </motion.div>
