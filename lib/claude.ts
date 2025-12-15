@@ -117,7 +117,20 @@ ${existingQuestionsSection}
 
 Return ONLY questions that are genuinely valuable. If nothing new warrants a question, return an empty array.
 
-IMPORTANT: For each question, include a "relevantSnippet" field with a short quote (5-15 words) from the transcript that this question is about. This helps locate where in the presentation the question arose.
+CRITICAL: For each question, include a "relevantSnippet" field. This MUST be:
+- A SHORT, PRECISE quote: exactly 5-15 words maximum
+- The specific phrase that triggered the question (not a whole sentence or paragraph)
+- A distinctive phrase that can be uniquely located in the transcript
+- NOT generic filler words or common phrases
+
+BAD examples (too long/vague):
+- "So to get into the mode of thinking about this, let's consider the case I bet many of you have been thinking about..." (way too long)
+- "I think" or "you know" (too generic)
+
+GOOD examples (precise):
+- "self driving cars can't turn left"
+- "toaster model of cognition"
+- "social cognition nobody's mastered"
 
 JSON format:
 {
@@ -126,8 +139,8 @@ JSON format:
       "question": "The question text",
       "category": "clarifying" | "critical-thinking" | "expansion",
       "difficulty": "easy" | "medium" | "hard",
-      "rationale": "Why this question is valuable for this specific presentation",
-      "relevantSnippet": "exact quote from transcript this question relates to"
+      "rationale": "Why this question is valuable",
+      "relevantSnippet": "5-15 word EXACT quote - be precise!"
     }
   ]
 }
@@ -219,24 +232,26 @@ ${transcript}
 
 Apply STRICT ANALYSIS MODE. Return fewer, higher-quality findings.
 
+IMPORTANT: For each item, include a "relevantSnippet" field with a SHORT quote (5-12 words) from the transcript - the specific phrase, not a whole sentence.
+
 Respond in this JSON format:
 {
   "keyClaims": [
-    {"claim": "The central claim text", "evidence": ["supporting points if any"], "confidence": 0.8}
+    {"claim": "The central claim text", "evidence": ["supporting points"], "confidence": 0.8, "relevantSnippet": "5-12 word quote"}
   ],
   "logicalGaps": [
-    {"description": "Specific logical error or reasoning gap", "severity": "minor" | "moderate" | "major", "suggestion": "How to address it"}
+    {"description": "Specific logical error", "severity": "minor" | "moderate" | "major", "suggestion": "How to fix", "relevantSnippet": "5-12 word quote"}
   ],
   "missingEvidence": [
-    {"description": "What specific evidence is missing", "relatedClaim": "Which claim needs it", "importance": "low" | "medium" | "high"}
+    {"description": "What evidence is missing", "relatedClaim": "Which claim", "importance": "low" | "medium" | "high", "relevantSnippet": "5-12 word quote"}
   ],
   "overallStrength": 3.5,
-  "suggestions": ["Constructive suggestion 1", "Constructive suggestion 2"]
+  "suggestions": ["Suggestion 1", "Suggestion 2"]
 }
 
-Remember: If the presentation is coherent, logicalGaps and missingEvidence can be empty arrays.
+Remember: logicalGaps and missingEvidence can be empty arrays if the presentation is coherent.
 
-Respond ONLY with the JSON, no additional text.`;
+Respond ONLY with the JSON.`;
 
   try {
     console.log('[Claude] Analyzing transcript...');
@@ -279,6 +294,7 @@ Respond ONLY with the JSON, no additional text.`;
       description: g.description,
       severity: g.severity || 'moderate',
       suggestion: g.suggestion || '',
+      relevantSnippet: g.relevantSnippet || '',
     }));
 
     const missingEvidence: MissingEvidence[] = (parsed.missingEvidence || []).map((e: any) => ({
@@ -286,6 +302,7 @@ Respond ONLY with the JSON, no additional text.`;
       description: e.description,
       relatedClaim: e.relatedClaim || '',
       importance: e.importance || 'medium',
+      relevantSnippet: e.relevantSnippet || '',
     }));
 
     const analysis: AnalysisSummary = {

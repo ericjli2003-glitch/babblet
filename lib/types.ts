@@ -46,6 +46,7 @@ export interface LogicalGap {
   relatedClaim?: string;
   severity: 'minor' | 'moderate' | 'major';
   suggestion?: string;
+  relevantSnippet?: string;
 }
 
 export interface MissingEvidence {
@@ -53,6 +54,7 @@ export interface MissingEvidence {
   description: string;
   relatedClaim: string;
   importance: 'low' | 'medium' | 'high';
+  relevantSnippet?: string;
 }
 
 export interface AnalysisSummary {

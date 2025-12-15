@@ -257,8 +257,11 @@ function LiveDashboardContent() {
         };
 
         // Add markers for logical gaps
-        analysisData.analysis.logicalGaps?.forEach((gap: { id: string; description: string; severity?: string }) => {
-          const snippet = findAnchorSnippet(gap.description, capturedTime);
+        analysisData.analysis.logicalGaps?.forEach((gap: { id: string; description: string; severity?: string; relevantSnippet?: string }) => {
+          // Prefer Claude's relevantSnippet, fallback to search
+          const snippet = (gap.relevantSnippet && gap.relevantSnippet.length >= 5) 
+            ? gap.relevantSnippet 
+            : findAnchorSnippet(gap.description, capturedTime);
           issueMarkers.push({
             id: `gap-${gap.id}`,
             timestamp: capturedTime,
@@ -271,9 +274,11 @@ function LiveDashboardContent() {
         });
 
         // Add markers for key claims (as insights)
-        analysisData.analysis.keyClaims?.slice(0, 2).forEach((claim: { id: string; claim: string; evidence?: string }) => {
-          // Use the claim text or evidence as anchor
-          const snippet = findAnchorSnippet(claim.claim, capturedTime);
+        analysisData.analysis.keyClaims?.slice(0, 2).forEach((claim: { id: string; claim: string; evidence?: string; relevantSnippet?: string }) => {
+          // Prefer Claude's relevantSnippet, fallback to search
+          const snippet = (claim.relevantSnippet && claim.relevantSnippet.length >= 5)
+            ? claim.relevantSnippet
+            : findAnchorSnippet(claim.claim, capturedTime);
           issueMarkers.push({
             id: `claim-${claim.id}`,
             timestamp: capturedTime,
@@ -286,8 +291,11 @@ function LiveDashboardContent() {
         });
 
         // Add markers for missing evidence
-        analysisData.analysis.missingEvidence?.forEach((evidence: { id: string; description: string; importance?: string }) => {
-          const snippet = findAnchorSnippet(evidence.description, capturedTime);
+        analysisData.analysis.missingEvidence?.forEach((evidence: { id: string; description: string; importance?: string; relevantSnippet?: string }) => {
+          // Prefer Claude's relevantSnippet, fallback to search
+          const snippet = (evidence.relevantSnippet && evidence.relevantSnippet.length >= 5)
+            ? evidence.relevantSnippet
+            : findAnchorSnippet(evidence.description, capturedTime);
           issueMarkers.push({
             id: `evidence-${evidence.id}`,
             timestamp: capturedTime,
@@ -2157,13 +2165,23 @@ function LiveDashboardContent() {
                   currentTime={currentTime}
                   markerHighlights={timelineMarkers
                     .filter(m => m.anchorSnippet && m.anchorSnippet.length >= 5)
-                    .map((m): MarkerHighlight => ({
-                      id: m.id,
-                      snippet: m.anchorSnippet!,
-                      label: m.title,
-                      fullText: m.fullText,
-                      type: m.type,
-                    }))}
+                    .map((m): MarkerHighlight => {
+                      // Truncate overly long snippets to ~15 words max
+                      let snippet = m.anchorSnippet!;
+                      const words = snippet.split(/\s+/);
+                      if (words.length > 15) {
+                        // Take the most distinctive middle portion
+                        const midStart = Math.floor((words.length - 12) / 2);
+                        snippet = words.slice(midStart, midStart + 12).join(' ');
+                      }
+                      return {
+                        id: m.id,
+                        snippet,
+                        label: m.title,
+                        fullText: m.fullText,
+                        type: m.type,
+                      };
+                    })}
                   showQuestions={showQuestionHighlights}
                   showIssues={showIssueHighlights}
                   showInsights={showInsightHighlights}

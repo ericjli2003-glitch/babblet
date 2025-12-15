@@ -71,22 +71,28 @@ ${claimsTrimmed.map((x) => `- ${x}`).join('\n')}` : ''}
 Apply the STRICT MODE filter. Return ONLY objectively verifiable factual claims.
 If none exist, return {"findings": []}.
 
+CRITICAL: For "relevantSnippet", provide a SHORT, PRECISE quote:
+- Exactly 5-15 words maximum (not entire sentences)
+- The specific phrase containing the factual claim
+- A distinctive phrase that can be uniquely located
+- NOT filler words, transitions, or common phrases
+
 Return JSON only in this schema:
 {
   "findings": [
     {
-      "statement": "the specific factual claim (verbatim or near-verbatim)",
+      "statement": "the specific factual claim",
       "verdict": "likely-true" | "uncertain" | "likely-false",
       "confidence": 0.0-1.0,
-      "explanation": "what specific fact needs verification and why",
-      "whatToVerify": "specific source type or evidence that would confirm/refute this",
-      "suggestedCorrection": "optional: corrected phrasing if claim appears wrong",
-      "relevantSnippet": "5-15 word quote from transcript containing this claim"
+      "explanation": "what needs verification",
+      "whatToVerify": "specific source to check",
+      "suggestedCorrection": "optional: corrected phrasing",
+      "relevantSnippet": "5-15 word PRECISE quote only!"
     }
   ]
 }
 
-Remember: If unsure whether something is a verifiable fact, DO NOT include it.`;
+If unsure whether something is a verifiable fact, DO NOT include it.`;
 
   const resp = await c.messages.create({
     model: 'claude-sonnet-4-20250514',

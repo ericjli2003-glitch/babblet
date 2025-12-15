@@ -276,11 +276,10 @@ export default function TranscriptFeed({
           ref={(el) => {
             if (el) highlightRefs.current.set(m.highlight.id, el);
           }}
-          className={`cursor-pointer transition-all inline ${
-            isHovered 
-              ? 'scale-105 font-bold' 
+          className={`cursor-pointer transition-all inline ${isHovered
+              ? 'scale-105 font-bold'
               : 'hover:font-semibold'
-          }`}
+            }`}
           onMouseEnter={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             setHoveredHighlight({
