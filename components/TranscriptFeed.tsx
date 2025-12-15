@@ -159,26 +159,15 @@ export default function TranscriptFeed({
     }
   }, [hoveredMarkerId]);
 
-  // Get highlight colors by type
-  const getHighlightColors = (type: 'question' | 'issue' | 'insight', isHovered: boolean) => {
-    if (isHovered) {
-      // Brighter when hovered from timeline
-      switch (type) {
-        case 'question':
-          return 'bg-violet-300 text-violet-900 ring-2 ring-violet-400';
-        case 'issue':
-          return 'bg-amber-300 text-amber-900 ring-2 ring-amber-400';
-        case 'insight':
-          return 'bg-emerald-300 text-emerald-900 ring-2 ring-emerald-400';
-      }
-    }
+  // Get bracket/text colors by type - using brackets instead of background highlights
+  const getBracketColors = (type: 'question' | 'issue' | 'insight') => {
     switch (type) {
       case 'question':
-        return 'bg-violet-200 text-violet-900 hover:bg-violet-300';
+        return { bracket: 'text-violet-500', text: 'text-violet-700' };
       case 'issue':
-        return 'bg-amber-200 text-amber-900 hover:bg-amber-300';
+        return { bracket: 'text-amber-500', text: 'text-amber-700' };
       case 'insight':
-        return 'bg-emerald-200 text-emerald-900 hover:bg-emerald-300';
+        return { bracket: 'text-emerald-500', text: 'text-emerald-700' };
     }
   };
 
@@ -278,15 +267,20 @@ export default function TranscriptFeed({
 
       const matchedText = text.slice(origStart, origEnd);
       const isHovered = m.highlight.id === hoveredMarkerId;
-      const colors = getHighlightColors(m.highlight.type, isHovered);
+      const colors = getBracketColors(m.highlight.type);
 
+      // Use bracket notation instead of background highlight
       result.push(
-        <mark
+        <span
           key={`hl-${keyIndex++}`}
           ref={(el) => {
             if (el) highlightRefs.current.set(m.highlight.id, el);
           }}
-          className={`${colors} px-1 rounded font-medium cursor-pointer transition-all relative`}
+          className={`cursor-pointer transition-all inline ${
+            isHovered 
+              ? 'scale-105 font-bold' 
+              : 'hover:font-semibold'
+          }`}
           onMouseEnter={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             setHoveredHighlight({
@@ -303,8 +297,12 @@ export default function TranscriptFeed({
             onQuestionHighlightClick?.(m.highlight.id);
           }}
         >
-          {matchedText}
-        </mark>
+          <span className={`${colors.bracket} font-bold ${isHovered ? 'text-lg' : 'text-base'}`}>[</span>
+          <span className={`${colors.text} ${isHovered ? 'text-lg font-bold underline decoration-2' : ''}`}>
+            {matchedText}
+          </span>
+          <span className={`${colors.bracket} font-bold ${isHovered ? 'text-lg' : 'text-base'}`}>]</span>
+        </span>
       );
 
       lastEnd = origEnd;
