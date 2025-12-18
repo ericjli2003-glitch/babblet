@@ -39,8 +39,8 @@ interface ExtractedImage {
 }
 
 // Extract text AND images from PPTX using JSZip
-async function extractPptxContent(buffer: Buffer): Promise<{ 
-  text: string; 
+async function extractPptxContent(buffer: Buffer): Promise<{
+  text: string;
   slideCount: number;
   images: ExtractedImage[];
 }> {
@@ -109,7 +109,7 @@ async function extractPptxContent(buffer: Buffer): Promise<{
       }
     }
 
-    // Extract images from ppt/media folder
+    // Extract images from ppt/media folder (process ALL images)
     const mediaFiles: string[] = [];
     zip.forEach((relativePath) => {
       if (relativePath.match(/ppt\/media\/(image|picture)\d+\.(png|jpg|jpeg|gif|webp)$/i)) {
@@ -117,17 +117,16 @@ async function extractPptxContent(buffer: Buffer): Promise<{
       }
     });
 
-    // Sort and limit to first 10 images to avoid excessive API calls
+    // Sort images by name for consistent ordering
     mediaFiles.sort();
-    const limitedMediaFiles = mediaFiles.slice(0, 10);
 
-    for (const mediaPath of limitedMediaFiles) {
+    for (const mediaPath of mediaFiles) {
       const mediaFile = zip.file(mediaPath);
       if (mediaFile) {
         const imageData = await mediaFile.async('nodebuffer');
         const ext = mediaPath.split('.').pop()?.toLowerCase() || 'png';
         let mediaType: ExtractedImage['mediaType'] = 'image/png';
-        
+
         if (ext === 'jpg' || ext === 'jpeg') mediaType = 'image/jpeg';
         else if (ext === 'gif') mediaType = 'image/gif';
         else if (ext === 'webp') mediaType = 'image/webp';
@@ -166,7 +165,7 @@ async function analyzeImagesWithClaude(
   const batchSize = 3;
   for (let i = 0; i < images.length; i += batchSize) {
     const batch = images.slice(i, i + batchSize);
-    
+
     try {
       const imageContents: Anthropic.Messages.ImageBlockParam[] = batch.map(img => ({
         type: 'image' as const,
@@ -439,7 +438,7 @@ Format your response as JSON:
         // Analyze images with Claude Vision
         let imageDescriptions: string[] = [];
         let visualElements: string[] = [];
-        
+
         if (images.length > 0) {
           console.log('[Analyze Slides] Analyzing', images.length, 'images with Claude Vision...');
           imageDescriptions = await analyzeImagesWithClaude(client, images);
@@ -472,7 +471,20 @@ Format your response as JSON:
         // Analyze the combined content with Claude
         const analysis = await analyzeTextWithClaude(client, combinedContent, slidesFile.name);
 
-        return NextResponse.json({
+        // Build response with optional warning for large image counts
+        const response: {
+          success: boolean;
+          analysis: {
+            slideCount: number;
+            extractedText: string;
+            keyPoints: string[];
+            topics: string[];
+            data?: string[];
+            visualElements?: string[];
+            imageCount: number;
+            warning?: string;
+          };
+        } = {
           success: true,
           analysis: {
             slideCount,
@@ -480,7 +492,15 @@ Format your response as JSON:
             visualElements: visualElements.length > 0 ? visualElements : undefined,
             imageCount: images.length,
           },
-        });
+        };
+
+        // Add warning for presentations with many images
+        if (images.length >= 20) {
+          response.analysis.warning = `This presentation contains ${images.length} images. Analysis may take longer and use more API credits.`;
+          console.log(`[Analyze Slides] Warning: Large presentation with ${images.length} images`);
+        }
+
+        return NextResponse.json(response);
       } catch (pptxError) {
         console.error('[Analyze Slides] PPTX processing error:', pptxError);
         return NextResponse.json({

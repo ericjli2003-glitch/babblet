@@ -136,6 +136,9 @@ function LiveDashboardContent() {
     extractedText?: string;
     keyPoints?: string[];
     topics?: string[];
+    imageCount?: number;
+    visualElements?: string[];
+    warning?: string;
   } | null>(null);
   const [showSlidesPanel, setShowSlidesPanel] = useState(false);
   const [timelineMarkers, setTimelineMarkers] = useState<TimelineMarker[]>([]);
@@ -1749,13 +1752,35 @@ function LiveDashboardContent() {
                 />
                 {slideAnalysis && (
                   <div className="mt-4 p-3 bg-emerald-50 rounded-xl">
-                    <p className="text-xs font-medium text-emerald-700 mb-2">✓ Slides analyzed</p>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-medium text-emerald-700">✓ Slides analyzed</p>
+                      {slideAnalysis.imageCount !== undefined && slideAnalysis.imageCount > 0 && (
+                        <span className="text-xs text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">
+                          {slideAnalysis.imageCount} images
+                        </span>
+                      )}
+                    </div>
+                    {slideAnalysis.warning && (
+                      <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded-lg mb-2">
+                        ⚠️ {slideAnalysis.warning}
+                      </p>
+                    )}
                     {slideAnalysis.keyPoints && slideAnalysis.keyPoints.length > 0 && (
                       <div className="text-xs text-emerald-600">
                         <p className="font-medium">Key points detected:</p>
                         <ul className="list-disc list-inside mt-1">
                           {slideAnalysis.keyPoints.slice(0, 3).map((point, i) => (
                             <li key={i} className="truncate">{point}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {slideAnalysis.visualElements && slideAnalysis.visualElements.length > 0 && (
+                      <div className="text-xs text-emerald-600 mt-2">
+                        <p className="font-medium">Visual content detected:</p>
+                        <ul className="list-disc list-inside mt-1">
+                          {slideAnalysis.visualElements.slice(0, 2).map((elem, i) => (
+                            <li key={i} className="truncate">{elem}</li>
                           ))}
                         </ul>
                       </div>
