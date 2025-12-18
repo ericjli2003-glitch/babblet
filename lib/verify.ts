@@ -28,8 +28,8 @@ export async function verifyWithClaude(transcript: string, claims?: string[]): P
   const c = getClient();
 
   // Keep prompt bounded using config
-  const transcriptTrimmed = transcript.length > config.api.maxTranscriptForLLM 
-    ? transcript.slice(-config.api.maxTranscriptForLLM) 
+  const transcriptTrimmed = transcript.length > config.api.maxTranscriptForLLM
+    ? transcript.slice(-config.api.maxTranscriptForLLM)
     : transcript;
   const claimsTrimmed = (claims || []).slice(0, config.limits.maxClaimsForVerification);
 

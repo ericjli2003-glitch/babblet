@@ -12,6 +12,9 @@ import {
   FileText,
   Sliders,
   Check,
+  Upload,
+  File,
+  Trash2,
 } from 'lucide-react';
 
 interface QuestionSettingsProps {
@@ -195,14 +198,77 @@ export default function QuestionSettings({
                 <label className="flex items-center gap-2 text-sm font-medium text-surface-700 mb-2">
                   <Target className="w-4 h-4" />
                   Grading Rubric / Criteria
-                  <span className="text-xs text-surface-400 font-normal">(optional)</span>
+                  <span className="text-xs text-surface-400 font-normal">(paste or upload)</span>
                 </label>
-                <textarea
-                  value={localSettings.rubricCriteria}
-                  onChange={(e) => setLocalSettings({ ...localSettings, rubricCriteria: e.target.value })}
-                  placeholder="What makes a good presentation? E.g., 'Clear thesis, supporting evidence, addresses counterarguments...'"
-                  className="w-full h-24 px-4 py-3 bg-surface-50 border border-surface-200 rounded-xl text-sm text-surface-700 placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 resize-none"
-                />
+                
+                {/* Upload rubric file */}
+                <div className="mb-3">
+                  <label className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-surface-300 rounded-xl cursor-pointer hover:border-primary-400 hover:bg-primary-50/50 transition-colors">
+                    <Upload className="w-4 h-4 text-surface-500" />
+                    <span className="text-sm text-surface-600">Upload rubric file (TXT, PDF, DOCX)</span>
+                    <input
+                      type="file"
+                      accept=".txt,.pdf,.docx,.doc"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          try {
+                            // For TXT files, read directly
+                            if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+                              const text = await file.text();
+                              setLocalSettings({ ...localSettings, rubricCriteria: text });
+                            } else {
+                              // For other files, just note the filename (would need server-side parsing for PDF/DOCX)
+                              const text = await file.text();
+                              setLocalSettings({
+                                ...localSettings,
+                                rubricCriteria: `[Uploaded: ${file.name}]\n\n${text.slice(0, 5000)}`,
+                              });
+                            }
+                          } catch (err) {
+                            console.error('Error reading file:', err);
+                            alert('Could not read file. Please try pasting the text directly.');
+                          }
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+
+                {/* Show uploaded rubric preview or text area */}
+                {localSettings.rubricCriteria && localSettings.rubricCriteria.startsWith('[Uploaded:') ? (
+                  <div className="p-4 bg-surface-50 border border-surface-200 rounded-xl">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <File className="w-4 h-4 text-primary-500" />
+                        <span className="text-sm font-medium text-surface-700">
+                          {localSettings.rubricCriteria.match(/\[Uploaded: (.+?)\]/)?.[1] || 'Rubric file'}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setLocalSettings({ ...localSettings, rubricCriteria: '' })}
+                        className="p-1 text-surface-400 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <p className="text-xs text-surface-500">
+                      {localSettings.rubricCriteria.length} characters loaded
+                    </p>
+                  </div>
+                ) : (
+                  <textarea
+                    value={localSettings.rubricCriteria}
+                    onChange={(e) => setLocalSettings({ ...localSettings, rubricCriteria: e.target.value })}
+                    placeholder="Paste your grading rubric here. E.g.:&#10;&#10;Content (40%): Clear thesis, accurate information, logical organization&#10;Delivery (30%): Clear speaking, appropriate pacing, eye contact&#10;Evidence (30%): Credible sources, relevant examples, proper citations"
+                    className="w-full h-32 px-4 py-3 bg-surface-50 border border-surface-200 rounded-xl text-sm text-surface-700 placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 resize-none"
+                  />
+                )}
+                
+                <p className="text-xs text-surface-400 mt-2">
+                  This rubric will be used to evaluate the presentation and generate targeted questions
+                </p>
               </div>
               
               {/* Focus Areas */}

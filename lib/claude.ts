@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { v4 as uuidv4 } from 'uuid';
-import type { GeneratedQuestion, AnalysisSummary, KeyClaim, LogicalGap, MissingEvidence } from './types';
+import type { GeneratedQuestion, AnalysisSummary, KeyClaim, LogicalGap, MissingEvidence, RubricEvaluation, RubricScore } from './types';
 import { config } from './config';
 
 // Lazy-load Claude client to avoid build-time errors
@@ -319,6 +319,164 @@ Respond ONLY with the JSON.`;
     return analysis;
   } catch (error) {
     console.error('[Claude] Analysis error:', error);
+    throw error;
+  }
+}
+
+// Custom rubric criteria from user
+interface CustomRubricCriteria {
+  name: string;
+  description: string;
+  weight?: number; // 1-5, default 1
+}
+
+// Evaluate presentation using Claude with optional custom rubric
+export async function evaluateWithClaude(
+  transcript: string,
+  customRubric?: string,
+  customCriteria?: CustomRubricCriteria[],
+  analysis?: AnalysisSummary | null
+): Promise<RubricEvaluation> {
+  const client = getAnthropicClient();
+
+  // Build rubric context based on user input
+  let rubricContext = '';
+  
+  if (customRubric && customRubric.trim()) {
+    rubricContext = `
+CUSTOM RUBRIC (use this as the evaluation framework):
+${customRubric}
+
+Map your evaluation to these three categories, interpreting the custom rubric criteria:
+- contentQuality: How well does the content meet the rubric's content-related criteria?
+- delivery: How well does the presentation meet delivery/communication criteria?
+- evidenceStrength: How well does it meet evidence/support/research criteria?`;
+  } else if (customCriteria && customCriteria.length > 0) {
+    rubricContext = `
+CUSTOM EVALUATION CRITERIA:
+${customCriteria.map((c, i) => `${i + 1}. ${c.name}: ${c.description}${c.weight ? ` (weight: ${c.weight}/5)` : ''}`).join('\n')}
+
+Evaluate based on these specific criteria, mapping to:
+- contentQuality: Criteria related to content, organization, accuracy
+- delivery: Criteria related to presentation, clarity, engagement
+- evidenceStrength: Criteria related to evidence, sources, support`;
+  } else {
+    rubricContext = `
+Use standard academic presentation criteria:
+- contentQuality: Organization, depth of content, accuracy, completeness
+- delivery: Clarity of explanation, engagement, pacing, transitions
+- evidenceStrength: Quality of evidence, proper citations, logical support`;
+  }
+
+  const systemPrompt = `You are an expert at evaluating academic presentations against rubrics.
+${rubricContext}
+
+Score each category from 1-5:
+1 = Poor/Missing
+2 = Below expectations
+3 = Meets expectations
+4 = Exceeds expectations  
+5 = Exceptional
+
+Provide specific, actionable feedback tied to what the presenter actually said.`;
+
+  const analysisContext = analysis ? `
+ANALYSIS CONTEXT:
+- Key Claims Made: ${analysis.keyClaims.map(c => c.claim).join('; ')}
+- Identified Gaps: ${analysis.logicalGaps.map(g => g.description).join('; ')}
+- Missing Evidence: ${analysis.missingEvidence.map(e => e.description).join('; ')}
+- Overall Argument Strength: ${analysis.overallStrength}/5` : '';
+
+  const userPrompt = `Evaluate this presentation:
+
+TRANSCRIPT:
+${transcript.slice(0, config.api.maxTranscriptForQuestions)}
+${analysisContext}
+
+Provide a detailed rubric evaluation. Be specific about what was done well and what could improve.
+
+JSON format:
+{
+  "contentQuality": {
+    "score": number,
+    "feedback": "Specific feedback about content",
+    "strengths": ["Strength 1", "Strength 2"],
+    "improvements": ["Improvement 1", "Improvement 2"]
+  },
+  "delivery": {
+    "score": number,
+    "feedback": "Specific feedback about delivery",
+    "strengths": ["Strength 1", "Strength 2"],
+    "improvements": ["Improvement 1", "Improvement 2"]
+  },
+  "evidenceStrength": {
+    "score": number,
+    "feedback": "Specific feedback about evidence",
+    "strengths": ["Strength 1", "Strength 2"],
+    "improvements": ["Improvement 1", "Improvement 2"]
+  },
+  "overallScore": number,
+  "overallFeedback": "Summary evaluation"
+}
+
+Respond ONLY with valid JSON.`;
+
+  try {
+    console.log('[Claude] Evaluating presentation with rubric...');
+
+    const response = await client.messages.create({
+      model: config.models.claude,
+      max_tokens: config.api.evaluationMaxTokens,
+      messages: [
+        {
+          role: 'user',
+          content: userPrompt,
+        },
+      ],
+      system: systemPrompt,
+    });
+
+    const textContent = response.content.find(c => c.type === 'text');
+    if (!textContent || textContent.type !== 'text') {
+      throw new Error('No text content in response');
+    }
+
+    const responseText = textContent.text.trim();
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('No JSON found in response');
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    const rubric: RubricEvaluation = {
+      contentQuality: {
+        score: parsed.contentQuality?.score || 3,
+        feedback: parsed.contentQuality?.feedback || 'Content evaluation',
+        strengths: parsed.contentQuality?.strengths || [],
+        improvements: parsed.contentQuality?.improvements || [],
+      },
+      delivery: {
+        score: parsed.delivery?.score || 3,
+        feedback: parsed.delivery?.feedback || 'Delivery evaluation',
+        strengths: parsed.delivery?.strengths || [],
+        improvements: parsed.delivery?.improvements || [],
+      },
+      evidenceStrength: {
+        score: parsed.evidenceStrength?.score || 3,
+        feedback: parsed.evidenceStrength?.feedback || 'Evidence evaluation',
+        strengths: parsed.evidenceStrength?.strengths || [],
+        improvements: parsed.evidenceStrength?.improvements || [],
+      },
+      overallScore: parsed.overallScore || 3,
+      overallFeedback: parsed.overallFeedback || 'Evaluation complete',
+      timestamp: Date.now(),
+    };
+
+    console.log('[Claude] Rubric evaluation complete, overall:', rubric.overallScore);
+    return rubric;
+  } catch (error) {
+    console.error('[Claude] Rubric evaluation error:', error);
     throw error;
   }
 }

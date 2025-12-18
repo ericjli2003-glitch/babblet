@@ -1350,7 +1350,7 @@ function LiveDashboardContent() {
     }
   };
 
-  // Generate rubric
+  // Generate rubric using custom rubric criteria if provided
   const generateRubric = async () => {
     if (transcript.length === 0) return;
 
@@ -1362,6 +1362,8 @@ function LiveDashboardContent() {
         body: JSON.stringify({
           sessionId,
           transcript: fullTranscript,
+          // Pass the custom rubric from settings (if user provided one)
+          customRubric: questionSettings.rubricCriteria || undefined,
         }),
       });
       const data = await response.json();

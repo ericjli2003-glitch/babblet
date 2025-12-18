@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, getFullTranscript, setRubric, broadcastToSession } from '@/lib/session-store';
 import { generateRubricEvaluation, isOpenAIConfigured } from '@/lib/openai-questions';
+import { evaluateWithClaude, isClaudeConfigured } from '@/lib/claude';
 import { broadcastRubric } from '@/lib/pusher';
 import type { RubricEvaluation } from '@/lib/types';
 
 export async function POST(request: NextRequest) {
   try {
-    const { sessionId, transcript: providedTranscript } = await request.json();
+    const { sessionId, transcript: providedTranscript, customRubric } = await request.json();
 
     if (!sessionId) {
       return NextResponse.json(
@@ -34,17 +35,26 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[Evaluate] Processing transcript: ${transcript.slice(0, 100)}...`);
+    if (customRubric) {
+      console.log(`[Evaluate] Using custom rubric: ${customRubric.slice(0, 100)}...`);
+    }
 
     let rubric: RubricEvaluation;
 
-    if (isOpenAIConfigured()) {
+    // Try Claude first (preferred), then OpenAI, then mock
+    if (isClaudeConfigured()) {
+      console.log('[Evaluate] Using Claude for rubric evaluation');
+      rubric = await evaluateWithClaude(transcript, customRubric, undefined, analysis);
+    } else if (isOpenAIConfigured()) {
+      console.log('[Evaluate] Using OpenAI for rubric evaluation');
       rubric = await generateRubricEvaluation(transcript, analysis);
     } else {
-      // Mock rubric if OpenAI not configured
+      // Mock rubric if no API configured
+      console.log('[Evaluate] No API configured, using mock rubric');
       rubric = {
         contentQuality: {
           score: 3,
-          feedback: 'Configure OPENAI_API_KEY for real evaluation',
+          feedback: 'Configure ANTHROPIC_API_KEY or OPENAI_API_KEY for real evaluation',
           strengths: ['Content present'],
           improvements: ['Add API key for detailed feedback'],
         },
@@ -61,7 +71,7 @@ export async function POST(request: NextRequest) {
           improvements: ['Add supporting evidence'],
         },
         overallScore: 2.8,
-        overallFeedback: 'Add OPENAI_API_KEY to environment variables for complete rubric evaluation.',
+        overallFeedback: 'Add ANTHROPIC_API_KEY or OPENAI_API_KEY to environment variables for complete rubric evaluation.',
         timestamp: Date.now(),
       };
     }
