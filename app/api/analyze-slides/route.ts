@@ -31,29 +31,41 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
   }
 }
 
-// Extract text from PPTX using JSZip (PPTX is a ZIP of XML files)
-async function extractPptxText(buffer: Buffer): Promise<{ text: string; slideCount: number }> {
+// Image info extracted from PPTX
+interface ExtractedImage {
+  name: string;
+  data: Buffer;
+  mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+}
+
+// Extract text AND images from PPTX using JSZip
+async function extractPptxContent(buffer: Buffer): Promise<{ 
+  text: string; 
+  slideCount: number;
+  images: ExtractedImage[];
+}> {
   try {
     const JSZip = (await import('jszip')).default;
     const zip = await JSZip.loadAsync(buffer);
-    
+
     const slideTexts: string[] = [];
     const slideFiles: string[] = [];
-    
+    const images: ExtractedImage[] = [];
+
     // Find all slide XML files
     zip.forEach((relativePath) => {
       if (relativePath.match(/ppt\/slides\/slide\d+\.xml$/)) {
         slideFiles.push(relativePath);
       }
     });
-    
+
     // Sort slides by number
     slideFiles.sort((a, b) => {
       const numA = parseInt(a.match(/slide(\d+)\.xml/)?.[1] || '0');
       const numB = parseInt(b.match(/slide(\d+)\.xml/)?.[1] || '0');
       return numA - numB;
     });
-    
+
     // Extract text from each slide
     for (const slidePath of slideFiles) {
       const slideFile = zip.file(slidePath);
@@ -66,13 +78,13 @@ async function extractPptxText(buffer: Buffer): Promise<{ text: string; slideCou
           .map(match => match.replace(/<\/?a:t>/g, ''))
           .filter(text => text.trim().length > 0)
           .join(' ');
-        
+
         if (slideText.trim()) {
           slideTexts.push(`[Slide ${slideTexts.length + 1}] ${slideText}`);
         }
       }
     }
-    
+
     // Also try to extract from notes if available
     const notesFiles: string[] = [];
     zip.forEach((relativePath) => {
@@ -80,7 +92,7 @@ async function extractPptxText(buffer: Buffer): Promise<{ text: string; slideCou
         notesFiles.push(relativePath);
       }
     });
-    
+
     for (const notesPath of notesFiles) {
       const notesFile = zip.file(notesPath);
       if (notesFile) {
@@ -90,21 +102,116 @@ async function extractPptxText(buffer: Buffer): Promise<{ text: string; slideCou
           .map(match => match.replace(/<\/?a:t>/g, ''))
           .filter(text => text.trim().length > 0)
           .join(' ');
-        
+
         if (notesText.trim() && notesText.length > 20) {
           slideTexts.push(`[Speaker Notes] ${notesText}`);
         }
       }
     }
-    
+
+    // Extract images from ppt/media folder
+    const mediaFiles: string[] = [];
+    zip.forEach((relativePath) => {
+      if (relativePath.match(/ppt\/media\/(image|picture)\d+\.(png|jpg|jpeg|gif|webp)$/i)) {
+        mediaFiles.push(relativePath);
+      }
+    });
+
+    // Sort and limit to first 10 images to avoid excessive API calls
+    mediaFiles.sort();
+    const limitedMediaFiles = mediaFiles.slice(0, 10);
+
+    for (const mediaPath of limitedMediaFiles) {
+      const mediaFile = zip.file(mediaPath);
+      if (mediaFile) {
+        const imageData = await mediaFile.async('nodebuffer');
+        const ext = mediaPath.split('.').pop()?.toLowerCase() || 'png';
+        let mediaType: ExtractedImage['mediaType'] = 'image/png';
+        
+        if (ext === 'jpg' || ext === 'jpeg') mediaType = 'image/jpeg';
+        else if (ext === 'gif') mediaType = 'image/gif';
+        else if (ext === 'webp') mediaType = 'image/webp';
+
+        images.push({
+          name: mediaPath.split('/').pop() || 'image',
+          data: imageData,
+          mediaType,
+        });
+      }
+    }
+
+    console.log(`[PPTX] Extracted ${slideFiles.length} slides, ${images.length} images`);
+
     return {
       text: slideTexts.join('\n\n'),
       slideCount: slideFiles.length,
+      images,
     };
   } catch (error) {
     console.error('[PPTX] Extraction error:', error);
-    throw new Error('Failed to extract PPTX text');
+    throw new Error('Failed to extract PPTX content');
   }
+}
+
+// Analyze images with Claude Vision (batch up to 5 at a time)
+async function analyzeImagesWithClaude(
+  client: Anthropic,
+  images: ExtractedImage[]
+): Promise<string[]> {
+  if (images.length === 0) return [];
+
+  const descriptions: string[] = [];
+
+  // Process images in batches of 3 to stay within limits
+  const batchSize = 3;
+  for (let i = 0; i < images.length; i += batchSize) {
+    const batch = images.slice(i, i + batchSize);
+    
+    try {
+      const imageContents: Anthropic.Messages.ImageBlockParam[] = batch.map(img => ({
+        type: 'image' as const,
+        source: {
+          type: 'base64' as const,
+          media_type: img.mediaType,
+          data: img.data.toString('base64'),
+        },
+      }));
+
+      const response = await client.messages.create({
+        model: config.models.claude,
+        max_tokens: 1024,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              ...imageContents,
+              {
+                type: 'text',
+                text: `Analyze these ${batch.length} image(s) from a presentation. For each image, describe:
+1. What type of visual it is (chart, diagram, photo, graph, table, etc.)
+2. What data or information it shows
+3. Key insights or takeaways
+
+Be concise but informative. Format as:
+[Image 1: brief type] Description...
+[Image 2: brief type] Description...`,
+              },
+            ],
+          },
+        ],
+      });
+
+      const textContent = response.content.find(c => c.type === 'text');
+      if (textContent && textContent.type === 'text') {
+        descriptions.push(textContent.text);
+      }
+    } catch (error) {
+      console.error('[PPTX] Image analysis error for batch:', error);
+      descriptions.push(`[Image analysis failed for ${batch.length} image(s)]`);
+    }
+  }
+
+  return descriptions;
 }
 
 // Analyze extracted text with Claude to get structured data
@@ -317,39 +424,61 @@ Format your response as JSON:
       });
     }
 
-    // For PPTX files - extract text directly
-    if (slidesFile.name.endsWith('.pptx') || 
-        slidesFile.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
-      console.log('[Analyze Slides] Processing PPTX file');
-      
+    // For PPTX files - extract text AND images
+    if (slidesFile.name.endsWith('.pptx') ||
+      slidesFile.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
+      console.log('[Analyze Slides] Processing PPTX file with image analysis');
+
       try {
         const arrayBuffer = await slidesFile.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
-        const { text: pptxText, slideCount } = await extractPptxText(buffer);
+        const { text: pptxText, slideCount, images } = await extractPptxContent(buffer);
+
+        console.log('[Analyze Slides] Extracted', pptxText.length, 'chars from', slideCount, 'slides,', images.length, 'images');
+
+        // Analyze images with Claude Vision
+        let imageDescriptions: string[] = [];
+        let visualElements: string[] = [];
         
-        console.log('[Analyze Slides] Extracted', pptxText.length, 'characters from', slideCount, 'slides');
-        
-        if (pptxText.length < 50) {
+        if (images.length > 0) {
+          console.log('[Analyze Slides] Analyzing', images.length, 'images with Claude Vision...');
+          imageDescriptions = await analyzeImagesWithClaude(client, images);
+          visualElements = imageDescriptions.flatMap(desc => {
+            // Extract key visual descriptions
+            const lines = desc.split('\n').filter(line => line.trim().length > 0);
+            return lines.slice(0, 5); // Keep first 5 lines per batch
+          });
+        }
+
+        // Combine text and image descriptions
+        const combinedContent = [
+          pptxText,
+          images.length > 0 ? '\n\n[VISUAL CONTENT ANALYSIS]\n' + imageDescriptions.join('\n\n') : '',
+        ].filter(Boolean).join('\n');
+
+        if (combinedContent.length < 50 && images.length === 0) {
           return NextResponse.json({
             success: true,
             analysis: {
               slideCount,
-              extractedText: 'PowerPoint appears to contain mostly images or shapes without text',
-              keyPoints: ['Consider adding text descriptions or exporting as images for visual analysis'],
+              extractedText: 'PowerPoint appears to be empty or contains unsupported content',
+              keyPoints: ['No text or images could be extracted'],
               topics: [],
-              note: 'Extracted limited text. For image-heavy presentations, export slides as PNG/JPG for visual analysis.',
+              visualElements: [],
             },
           });
         }
-        
-        // Analyze the extracted text with Claude
-        const analysis = await analyzeTextWithClaude(client, pptxText, slidesFile.name);
-        
+
+        // Analyze the combined content with Claude
+        const analysis = await analyzeTextWithClaude(client, combinedContent, slidesFile.name);
+
         return NextResponse.json({
           success: true,
           analysis: {
             slideCount,
             ...analysis,
+            visualElements: visualElements.length > 0 ? visualElements : undefined,
+            imageCount: images.length,
           },
         });
       } catch (pptxError) {
@@ -358,7 +487,7 @@ Format your response as JSON:
           success: true,
           analysis: {
             slideCount: 1,
-            extractedText: `Could not extract text from ${slidesFile.name}`,
+            extractedText: `Could not extract content from ${slidesFile.name}`,
             keyPoints: ['PPTX extraction failed - try exporting as PDF or images'],
             topics: [],
             error: 'PPTX processing error',
@@ -368,8 +497,8 @@ Format your response as JSON:
     }
 
     // For old PPT files (not PPTX) - provide guidance
-    if (slidesFile.name.endsWith('.ppt') || 
-        slidesFile.type === 'application/vnd.ms-powerpoint') {
+    if (slidesFile.name.endsWith('.ppt') ||
+      slidesFile.type === 'application/vnd.ms-powerpoint') {
       return NextResponse.json({
         success: true,
         analysis: {
