@@ -31,6 +31,82 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
   }
 }
 
+// Extract text from PPTX using JSZip (PPTX is a ZIP of XML files)
+async function extractPptxText(buffer: Buffer): Promise<{ text: string; slideCount: number }> {
+  try {
+    const JSZip = (await import('jszip')).default;
+    const zip = await JSZip.loadAsync(buffer);
+    
+    const slideTexts: string[] = [];
+    const slideFiles: string[] = [];
+    
+    // Find all slide XML files
+    zip.forEach((relativePath) => {
+      if (relativePath.match(/ppt\/slides\/slide\d+\.xml$/)) {
+        slideFiles.push(relativePath);
+      }
+    });
+    
+    // Sort slides by number
+    slideFiles.sort((a, b) => {
+      const numA = parseInt(a.match(/slide(\d+)\.xml/)?.[1] || '0');
+      const numB = parseInt(b.match(/slide(\d+)\.xml/)?.[1] || '0');
+      return numA - numB;
+    });
+    
+    // Extract text from each slide
+    for (const slidePath of slideFiles) {
+      const slideFile = zip.file(slidePath);
+      if (slideFile) {
+        const xmlContent = await slideFile.async('text');
+        // Extract text from XML tags (simplified parsing)
+        // PPTX uses <a:t> tags for text content
+        const textMatches = xmlContent.match(/<a:t>([^<]*)<\/a:t>/g) || [];
+        const slideText = textMatches
+          .map(match => match.replace(/<\/?a:t>/g, ''))
+          .filter(text => text.trim().length > 0)
+          .join(' ');
+        
+        if (slideText.trim()) {
+          slideTexts.push(`[Slide ${slideTexts.length + 1}] ${slideText}`);
+        }
+      }
+    }
+    
+    // Also try to extract from notes if available
+    const notesFiles: string[] = [];
+    zip.forEach((relativePath) => {
+      if (relativePath.match(/ppt\/notesSlides\/notesSlide\d+\.xml$/)) {
+        notesFiles.push(relativePath);
+      }
+    });
+    
+    for (const notesPath of notesFiles) {
+      const notesFile = zip.file(notesPath);
+      if (notesFile) {
+        const xmlContent = await notesFile.async('text');
+        const textMatches = xmlContent.match(/<a:t>([^<]*)<\/a:t>/g) || [];
+        const notesText = textMatches
+          .map(match => match.replace(/<\/?a:t>/g, ''))
+          .filter(text => text.trim().length > 0)
+          .join(' ');
+        
+        if (notesText.trim() && notesText.length > 20) {
+          slideTexts.push(`[Speaker Notes] ${notesText}`);
+        }
+      }
+    }
+    
+    return {
+      text: slideTexts.join('\n\n'),
+      slideCount: slideFiles.length,
+    };
+  } catch (error) {
+    console.error('[PPTX] Extraction error:', error);
+    throw new Error('Failed to extract PPTX text');
+  }
+}
+
 // Analyze extracted text with Claude to get structured data
 async function analyzeTextWithClaude(
   client: Anthropic,
@@ -104,7 +180,7 @@ export async function POST(request: NextRequest) {
     console.log('[Analyze Slides] Received file:', slidesFile.name, 'size:', slidesFile.size);
 
     const client = getAnthropicClient();
-    
+
     if (!client) {
       // Return mock data if Claude not configured
       console.log('[Analyze Slides] Claude not configured, returning mock data');
@@ -122,14 +198,14 @@ export async function POST(request: NextRequest) {
     // For PDFs - extract text and analyze
     if (slidesFile.type === 'application/pdf' || slidesFile.name.endsWith('.pdf')) {
       console.log('[Analyze Slides] Processing PDF file');
-      
+
       try {
         const arrayBuffer = await slidesFile.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
         const pdfText = await extractPdfText(buffer);
-        
+
         console.log('[Analyze Slides] Extracted', pdfText.length, 'characters from PDF');
-        
+
         if (pdfText.length < 50) {
           return NextResponse.json({
             success: true,
@@ -142,10 +218,10 @@ export async function POST(request: NextRequest) {
             },
           });
         }
-        
+
         // Analyze the extracted text with Claude
         const analysis = await analyzeTextWithClaude(client, pdfText, slidesFile.name);
-        
+
         return NextResponse.json({
           success: true,
           analysis: {
@@ -241,20 +317,72 @@ Format your response as JSON:
       });
     }
 
-    // For PPT/PPTX files - provide guidance
-    if (slidesFile.name.endsWith('.ppt') || slidesFile.name.endsWith('.pptx')) {
+    // For PPTX files - extract text directly
+    if (slidesFile.name.endsWith('.pptx') || 
+        slidesFile.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
+      console.log('[Analyze Slides] Processing PPTX file');
+      
+      try {
+        const arrayBuffer = await slidesFile.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const { text: pptxText, slideCount } = await extractPptxText(buffer);
+        
+        console.log('[Analyze Slides] Extracted', pptxText.length, 'characters from', slideCount, 'slides');
+        
+        if (pptxText.length < 50) {
+          return NextResponse.json({
+            success: true,
+            analysis: {
+              slideCount,
+              extractedText: 'PowerPoint appears to contain mostly images or shapes without text',
+              keyPoints: ['Consider adding text descriptions or exporting as images for visual analysis'],
+              topics: [],
+              note: 'Extracted limited text. For image-heavy presentations, export slides as PNG/JPG for visual analysis.',
+            },
+          });
+        }
+        
+        // Analyze the extracted text with Claude
+        const analysis = await analyzeTextWithClaude(client, pptxText, slidesFile.name);
+        
+        return NextResponse.json({
+          success: true,
+          analysis: {
+            slideCount,
+            ...analysis,
+          },
+        });
+      } catch (pptxError) {
+        console.error('[Analyze Slides] PPTX processing error:', pptxError);
+        return NextResponse.json({
+          success: true,
+          analysis: {
+            slideCount: 1,
+            extractedText: `Could not extract text from ${slidesFile.name}`,
+            keyPoints: ['PPTX extraction failed - try exporting as PDF or images'],
+            topics: [],
+            error: 'PPTX processing error',
+          },
+        });
+      }
+    }
+
+    // For old PPT files (not PPTX) - provide guidance
+    if (slidesFile.name.endsWith('.ppt') || 
+        slidesFile.type === 'application/vnd.ms-powerpoint') {
       return NextResponse.json({
         success: true,
         analysis: {
           slideCount: 1,
-          extractedText: `PowerPoint file: ${slidesFile.name}`,
+          extractedText: `Legacy PowerPoint file: ${slidesFile.name}`,
           keyPoints: [
-            'For best results with PowerPoint files:',
-            '1. Export as PDF (File → Save As → PDF)',
-            '2. Or export slides as images (File → Export → Change File Type → PNG)',
+            'This is an older .ppt format. For best results:',
+            '1. Open in PowerPoint and save as .pptx',
+            '2. Or export as PDF (File → Save As → PDF)',
+            '3. Or export slides as images',
           ],
           topics: [],
-          note: 'Direct PPT/PPTX parsing is not yet supported. Please export to PDF or images.',
+          note: 'Legacy .ppt format is not supported. Please save as .pptx or export to PDF.',
         },
       });
     }
