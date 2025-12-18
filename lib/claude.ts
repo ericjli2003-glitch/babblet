@@ -341,7 +341,7 @@ export async function evaluateWithClaude(
 
   // Build rubric context based on user input
   let rubricContext = '';
-  
+
   if (customRubric && customRubric.trim()) {
     rubricContext = `
 CUSTOM RUBRIC (use this as the evaluation framework):
