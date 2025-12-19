@@ -14,6 +14,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import type { GeneratedQuestion, QuestionCategory, QuestionDifficulty } from '@/lib/types';
+import { config as appConfig } from '@/lib/config';
 
 interface QuestionBankProps {
   questions: {
@@ -21,6 +22,8 @@ interface QuestionBankProps {
     criticalThinking: GeneratedQuestion[];
     expansion: GeneratedQuestion[];
   };
+  /** Used for export sizing (best set is clamped to 8–12 by config) */
+  maxQuestions?: number;
   isLoading?: boolean;
   onSelectMarker?: (markerId: string) => void;
 }
@@ -84,6 +87,11 @@ function QuestionCard({ question, onSelect }: { question: GeneratedQuestion; onS
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
+            {question.rubricCriterion && (
+              <span className="badge bg-amber-50 text-amber-700 border border-amber-200">
+                {question.rubricCriterion}
+              </span>
+            )}
             <span className={`badge ${difficultyColors[question.difficulty]}`}>
               {question.difficulty}
             </span>
@@ -125,6 +133,27 @@ function QuestionCard({ question, onSelect }: { question: GeneratedQuestion; onS
                   <div className="mt-2 p-3 bg-surface-50 rounded-xl text-xs text-surface-600 leading-relaxed">
                     <Star className="w-3 h-3 inline mr-1 text-amber-500" />
                     {question.rationale}
+                    {(question.rubricJustification || question.expectedEvidenceType || question.bloomLevel) && (
+                      <div className="mt-2 space-y-1 text-xs text-surface-600">
+                        {question.rubricJustification && (
+                          <div>
+                            <span className="font-medium text-surface-700">Rubric fit:</span>{' '}
+                            {question.rubricJustification}
+                          </div>
+                        )}
+                        {question.expectedEvidenceType && (
+                          <div>
+                            <span className="font-medium text-surface-700">Evidence to ask for:</span>{' '}
+                            {question.expectedEvidenceType}
+                          </div>
+                        )}
+                        {question.bloomLevel && (
+                          <div>
+                            <span className="font-medium text-surface-700">Bloom:</span> {question.bloomLevel}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               )}
@@ -200,11 +229,18 @@ function CategorySection({
   );
 }
 
-export default function QuestionBank({ questions, isLoading, onSelectMarker }: QuestionBankProps) {
+export default function QuestionBank({ questions, maxQuestions, isLoading, onSelectMarker }: QuestionBankProps) {
+  const [isExported, setIsExported] = useState(false);
   const totalQuestions =
     questions.clarifying.length +
     questions.criticalThinking.length +
     questions.expansion.length;
+
+  const flattened: GeneratedQuestion[] = [
+    ...questions.clarifying,
+    ...questions.criticalThinking,
+    ...questions.expansion,
+  ];
 
   return (
     <div className="h-full flex flex-col">
@@ -220,7 +256,45 @@ export default function QuestionBank({ questions, isLoading, onSelectMarker }: Q
               </div>
             )}
           </div>
-          <span className="text-sm text-surface-500">{totalQuestions} questions</span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={async () => {
+                const minN = appConfig.ui.exportBestSetMin;
+                const maxN = appConfig.ui.exportBestSetMax;
+                const n = Math.min(
+                  maxN,
+                  Math.max(1, Math.max(minN, maxQuestions ?? maxN))
+                );
+
+                const best = [...flattened].sort((a, b) => {
+                  const sa = a.score ?? 0;
+                  const sb = b.score ?? 0;
+                  if (sb !== sa) return sb - sa;
+                  return a.timestamp - b.timestamp;
+                }).slice(0, Math.min(n, flattened.length));
+
+                const lines = best.map((q, i) => {
+                  const meta: string[] = [];
+                  if (q.rubricCriterion) meta.push(`criterion: ${q.rubricCriterion}`);
+                  meta.push(`type: ${q.category}`);
+                  meta.push(`difficulty: ${q.difficulty}`);
+                  return `${i + 1}. ${q.question}${meta.length ? ` (${meta.join(', ')})` : ''}`;
+                });
+
+                const text = `Best Questions (${best.length})\n\n${lines.join('\n')}\n`;
+                await navigator.clipboard.writeText(text);
+                setIsExported(true);
+                setTimeout(() => setIsExported(false), 2000);
+              }}
+              disabled={flattened.length === 0}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium border border-surface-200 bg-white hover:bg-surface-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Copy the best 8–12 questions to clipboard"
+            >
+              {isExported ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+              {isExported ? 'Copied' : 'Export best set'}
+            </button>
+            <span className="text-sm text-surface-500">{totalQuestions} questions</span>
+          </div>
         </div>
       </div>
 

@@ -24,6 +24,9 @@ interface QuestionSettingsProps {
     maxQuestions: number;
     assignmentContext: string;
     rubricCriteria: string;
+    rubricTemplateId?: string;
+    targetDifficulty?: 'mixed' | 'easy' | 'medium' | 'hard';
+    bloomFocus?: 'mixed' | 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
     priorities: {
       clarifying: number;
       criticalThinking: number;
@@ -35,6 +38,51 @@ interface QuestionSettingsProps {
 }
 
 const priorityLabels = ['None', 'Some', 'Focus'];
+
+const RUBRIC_TEMPLATES: Array<{ id: string; label: string; text: string }> = [
+  {
+    id: 'presentation-general',
+    label: 'Presentation (General)',
+    text: `Content & Accuracy (30%): clear thesis, accurate information, logical organization
+Evidence & Support (30%): credible sources, specific examples, citations
+Critical Thinking (20%): addresses limitations, assumptions, counterarguments
+Delivery (20%): clarity, pacing, engagement, structure`,
+  },
+  {
+    id: 'argument-essay',
+    label: 'Argument / Persuasive',
+    text: `Thesis & Claim (25%): clear, specific claim; scope is appropriate
+Evidence & Sources (30%): uses credible sources; evidence is relevant and cited
+Reasoning (25%): warrants connect evidence to claim; addresses counterarguments
+Organization & Clarity (20%): coherent structure; precise language`,
+  },
+  {
+    id: 'lab-report',
+    label: 'Lab Report / Experiment',
+    text: `Research Question & Hypothesis (20%): testable, well-motivated
+Methods (25%): appropriate design, controls, variables, reproducibility
+Results (25%): clear data/figures; correct interpretation; uncertainty/error
+Discussion (20%): limitations, alternative explanations, implications
+Citations (10%): proper references to prior work`,
+  },
+  {
+    id: 'debate',
+    label: 'Debate / Discussion',
+    text: `Claim & Framing (20%): clear position; defines terms and scope
+Evidence (30%): uses credible facts/examples; distinguishes claims vs evidence
+Counterarguments (25%): anticipates and responds fairly; avoids strawman
+Logic & Rhetoric (15%): sound reasoning; avoids fallacies
+Delivery (10%): clarity, structure, time management`,
+  },
+  {
+    id: 'stem-proof',
+    label: 'STEM Proof / Derivation',
+    text: `Definitions & Setup (20%): states assumptions, symbols, and givens
+Logical Steps (35%): each step justified; no leaps; correct transformations
+Rigor (25%): addresses edge cases; correctness conditions; error checking
+Clarity (20%): readable structure; explains intuition alongside formal steps`,
+  },
+];
 
 export default function QuestionSettings({
   isOpen,
@@ -108,6 +156,99 @@ export default function QuestionSettings({
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Rubric Template */}
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-surface-700 mb-2">
+                  <FileText className="w-4 h-4" />
+                  Quick Rubric Template
+                  <span className="text-xs text-surface-400 font-normal">(optional)</span>
+                </label>
+                <select
+                  value={localSettings.rubricTemplateId || 'custom'}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (id === 'custom') {
+                      setLocalSettings({ ...localSettings, rubricTemplateId: 'custom' });
+                      return;
+                    }
+                    const template = RUBRIC_TEMPLATES.find((t) => t.id === id);
+                    setLocalSettings({
+                      ...localSettings,
+                      rubricTemplateId: id,
+                      rubricCriteria: template?.text || localSettings.rubricCriteria,
+                    });
+                  }}
+                  className="w-full px-4 py-3 bg-surface-50 border border-surface-200 rounded-xl text-sm text-surface-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                >
+                  <option value="custom">Custom (write/paste your own)</option>
+                  {RUBRIC_TEMPLATES.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-surface-400 mt-2">
+                  Selecting a template will prefill the rubric text (you can edit it).
+                </p>
+              </div>
+
+              {/* Difficulty Controls */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium text-surface-700 mb-2">
+                    <Sliders className="w-4 h-4" />
+                    Difficulty Target
+                  </label>
+                  <select
+                    value={localSettings.targetDifficulty || 'mixed'}
+                    onChange={(e) =>
+                      setLocalSettings({
+                        ...localSettings,
+                        targetDifficulty: e.target.value as QuestionSettingsProps['settings']['targetDifficulty'],
+                      })
+                    }
+                    className="w-full px-4 py-3 bg-surface-50 border border-surface-200 rounded-xl text-sm text-surface-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                  >
+                    <option value="mixed">Mixed</option>
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                  </select>
+                  <p className="text-xs text-surface-400 mt-2">
+                    Helps the AI tune complexity and expectations.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium text-surface-700 mb-2">
+                    <Brain className="w-4 h-4" />
+                    Bloom Focus
+                    <span className="text-xs text-surface-400 font-normal">(optional)</span>
+                  </label>
+                  <select
+                    value={localSettings.bloomFocus || 'mixed'}
+                    onChange={(e) =>
+                      setLocalSettings({
+                        ...localSettings,
+                        bloomFocus: e.target.value as QuestionSettingsProps['settings']['bloomFocus'],
+                      })
+                    }
+                    className="w-full px-4 py-3 bg-surface-50 border border-surface-200 rounded-xl text-sm text-surface-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                  >
+                    <option value="mixed">Mixed</option>
+                    <option value="remember">Remember</option>
+                    <option value="understand">Understand</option>
+                    <option value="apply">Apply</option>
+                    <option value="analyze">Analyze</option>
+                    <option value="evaluate">Evaluate</option>
+                    <option value="create">Create</option>
+                  </select>
+                  <p className="text-xs text-surface-400 mt-2">
+                    Useful if you want questions to skew toward higher-order thinking.
+                  </p>
+                </div>
+              </div>
+
               {/* Max Questions */}
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-surface-700 mb-3">

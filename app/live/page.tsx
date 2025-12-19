@@ -173,11 +173,28 @@ function LiveDashboardContent() {
   const lastQuestionGenTimeRef = useRef<number>(0);
 
   // Question generation settings
+  type QuestionSettingsState = {
+    maxQuestions: number;
+    assignmentContext: string;
+    rubricCriteria: string;
+    rubricTemplateId?: string;
+    targetDifficulty?: 'mixed' | 'easy' | 'medium' | 'hard';
+    bloomFocus?: 'mixed' | 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
+    priorities: {
+      clarifying: number; // 0 = none, 1 = some, 2 = focus
+      criticalThinking: number;
+      expansion: number;
+    };
+    focusAreas: string[];
+  };
   const [showQuestionSettings, setShowQuestionSettings] = useState(false);
-  const [questionSettings, setQuestionSettings] = useState({
+  const [questionSettings, setQuestionSettings] = useState<QuestionSettingsState>({
     maxQuestions: 10, // Hard cap
     assignmentContext: '', // Assignment prompt/description
     rubricCriteria: '', // Grading rubric/criteria
+    rubricTemplateId: 'custom',
+    targetDifficulty: 'mixed',
+    bloomFocus: 'mixed',
     priorities: {
       clarifying: 1, // 0 = none, 1 = some, 2 = focus
       criticalThinking: 2,
@@ -389,8 +406,17 @@ function LiveDashboardContent() {
               } : undefined,
             },
             settings: {
+              maxQuestions: questionSettings.maxQuestions,
+              remainingQuestions: Math.max(
+                0,
+                questionSettings.maxQuestions -
+                  (questions.clarifying.length + questions.criticalThinking.length + questions.expansion.length)
+              ),
               assignmentContext: questionSettings.assignmentContext,
               rubricCriteria: questionSettings.rubricCriteria,
+              rubricTemplateId: questionSettings.rubricTemplateId,
+              targetDifficulty: questionSettings.targetDifficulty,
+              bloomFocus: questionSettings.bloomFocus,
               priorities: questionSettings.priorities,
               focusAreas: questionSettings.focusAreas,
               existingQuestions: [
@@ -2238,6 +2264,7 @@ function LiveDashboardContent() {
               <div className="h-full bg-white m-4 rounded-3xl shadow-soft overflow-hidden">
                 <QuestionBank
                   questions={questions}
+                  maxQuestions={questionSettings.maxQuestions}
                   isLoading={isGeneratingQuestions}
                   onSelectMarker={handleSelectMarker}
                 />

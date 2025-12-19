@@ -50,6 +50,8 @@ export const config = {
         truncatedSnippetWords: 12,
         /** Min snippet length to be valid */
         minSnippetLength: 5,
+        /** Max candidates to request from the LLM before ranking/selection */
+        maxQuestionCandidates: 24,
     },
 
     // ==========================================
@@ -112,6 +114,9 @@ export const config = {
         rubricItemsPerCategory: 2,
         /** Existing questions to include in context (avoid repeats) */
         existingQuestionsContext: 15,
+        /** Export “best set” min/max size */
+        exportBestSetMin: 8,
+        exportBestSetMax: 12,
     },
 } as const;
 

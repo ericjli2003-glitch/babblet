@@ -76,6 +76,18 @@ export interface GeneratedQuestion {
   category: QuestionCategory;
   difficulty: QuestionDifficulty;
   rationale?: string;
+  /** Which rubric criterion (or goal) this question targets */
+  rubricCriterion?: string;
+  /** Short justification for how it matches the rubric/assignment */
+  rubricJustification?: string;
+  /** Bloom level / cognitive skill tag (optional) */
+  bloomLevel?: string;
+  /** If the question should request evidence, what kind? (e.g., "peer-reviewed study", "dataset", "primary source") */
+  expectedEvidenceType?: string;
+  /** Model-provided ranking score (0-100) for selecting the “best set” */
+  score?: number;
+  /** Optional tags to help diversify (e.g., "evidence", "counterargument", "assumption") */
+  tags?: string[];
   relatedClaim?: string;
   relevantSnippet?: string; // Quote from transcript this question relates to
   timestamp: number;
@@ -122,6 +134,15 @@ export interface RubricEvaluation {
   evidenceStrength: RubricScore;
   overallScore: number;
   overallFeedback: string;
+  /** Optional custom-criteria breakdown when a rubric is provided */
+  criteriaBreakdown?: Array<{
+    criterion: string;
+    score: number; // 1-5
+    feedback: string;
+    strengths?: string[];
+    improvements?: string[];
+    missingEvidence?: string[];
+  }>;
   timestamp: number;
 }
 

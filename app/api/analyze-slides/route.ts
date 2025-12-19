@@ -22,7 +22,9 @@ function getAnthropicClient(): Anthropic | null {
 async function extractPdfText(buffer: Buffer): Promise<string> {
   try {
     // Dynamic import to avoid build issues
-    const pdfParse = (await import('pdf-parse')).default;
+    const pdfParseModule = await import('pdf-parse');
+    // pdf-parse export shape differs between CJS/ESM; handle both safely
+    const pdfParse: any = (pdfParseModule as any).default ?? (pdfParseModule as any);
     const data = await pdfParse(buffer);
     return data.text;
   } catch (error) {

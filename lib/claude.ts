@@ -30,8 +30,13 @@ interface SlideContent {
 
 // Question generation settings from user
 interface QuestionGenSettings {
+  maxQuestions?: number;
+  remainingQuestions?: number;
   assignmentContext?: string;
   rubricCriteria?: string;
+  rubricTemplateId?: string;
+  targetDifficulty?: 'mixed' | 'easy' | 'medium' | 'hard';
+  bloomFocus?: 'mixed' | 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
   priorities?: {
     clarifying: number; // 0=none, 1=some, 2=focus
     criticalThinking: number;
@@ -39,6 +44,143 @@ interface QuestionGenSettings {
   };
   focusAreas?: string[];
   existingQuestions?: string[];
+}
+
+function normalizeDifficulty(value: unknown): GeneratedQuestion['difficulty'] {
+  if (value === 'easy' || value === 'medium' || value === 'hard') return value;
+  return 'medium';
+}
+
+function normalizeCategory(value: unknown): GeneratedQuestion['category'] {
+  if (value === 'clarifying' || value === 'expansion' || value === 'critical-thinking') return value;
+  // Back-compat for older prompts
+  if (value === 'criticalThinking') return 'critical-thinking';
+  return 'clarifying';
+}
+
+function normalizeText(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/['"]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function diceCoefficient(a: string, b: string): number {
+  const aa = normalizeText(a);
+  const bb = normalizeText(b);
+  if (!aa || !bb) return 0;
+  if (aa === bb) return 1;
+  const bigrams = (t: string) => {
+    const set = new Map<string, number>();
+    for (let i = 0; i < t.length - 1; i++) {
+      const bg = t.slice(i, i + 2);
+      set.set(bg, (set.get(bg) || 0) + 1);
+    }
+    return set;
+  };
+  const A = bigrams(aa);
+  const B = bigrams(bb);
+  let overlap = 0;
+  A.forEach((cA, bg) => {
+    const cB = B.get(bg);
+    if (cB) overlap += Math.min(cA, cB);
+  });
+  const sizeA = Array.from(A.values()).reduce((s, n) => s + n, 0);
+  const sizeB = Array.from(B.values()).reduce((s, n) => s + n, 0);
+  return (2 * overlap) / (sizeA + sizeB);
+}
+
+function dedupeQuestions(
+  candidates: GeneratedQuestion[],
+  existing: string[] = [],
+  threshold = 0.88
+): GeneratedQuestion[] {
+  const kept: GeneratedQuestion[] = [];
+  for (const q of candidates) {
+    const tooCloseToExisting = existing.some((e) => diceCoefficient(q.question, e) >= threshold);
+    if (tooCloseToExisting) continue;
+    const tooCloseToKept = kept.some((k) => diceCoefficient(q.question, k.question) >= threshold);
+    if (tooCloseToKept) continue;
+    kept.push(q);
+  }
+  return kept;
+}
+
+function selectDiverseTop(
+  candidates: GeneratedQuestion[],
+  count: number,
+  priorities?: QuestionGenSettings['priorities'],
+  wantsEvidenceMix?: boolean
+): GeneratedQuestion[] {
+  if (count <= 0) return [];
+  if (candidates.length <= count) return candidates.slice(0, count);
+
+  const sorted = [...candidates].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const byCategory: Record<GeneratedQuestion['category'], GeneratedQuestion[]> = {
+    clarifying: [],
+    'critical-thinking': [],
+    expansion: [],
+  };
+  for (const q of sorted) byCategory[q.category].push(q);
+
+  const weight = (k: keyof NonNullable<QuestionGenSettings['priorities']>) => {
+    const p = priorities?.[k];
+    if (p === 0) return 0;
+    if (p === 2) return 3;
+    return 1;
+  };
+
+  const categoryOrder: Array<GeneratedQuestion['category']> = [];
+  const wClar = weight('clarifying');
+  const wCrit = weight('criticalThinking');
+  const wExp = weight('expansion');
+  // Build a small repeating schedule (max 7 slots) to enforce mix
+  for (let i = 0; i < wCrit; i++) categoryOrder.push('critical-thinking');
+  for (let i = 0; i < wExp; i++) categoryOrder.push('expansion');
+  for (let i = 0; i < wClar; i++) categoryOrder.push('clarifying');
+  if (categoryOrder.length === 0) categoryOrder.push('critical-thinking', 'expansion', 'clarifying');
+
+  const picked: GeneratedQuestion[] = [];
+  const pickOne = (pool: GeneratedQuestion[]) => {
+    const next = pool.shift();
+    if (next) picked.push(next);
+  };
+
+  // Evidence guard: if requested, try to pick one evidence-tagged question early (when possible)
+  if (wantsEvidenceMix && count >= 2) {
+    const evidenceIdx = sorted.findIndex(
+      (q) => (q.tags || []).includes('evidence') || !!q.expectedEvidenceType
+    );
+    if (evidenceIdx >= 0) {
+      const q = sorted[evidenceIdx];
+      // remove from its category pool
+      const pool = byCategory[q.category];
+      const j = pool.findIndex((x) => x.id === q.id);
+      if (j >= 0) pool.splice(j, 1);
+      picked.push(q);
+    }
+  }
+
+  let i = 0;
+  while (picked.length < count) {
+    const cat = categoryOrder[i % categoryOrder.length];
+    const pool = byCategory[cat];
+    if (pool.length > 0) {
+      pickOne(pool);
+    } else {
+      // fallback: first non-empty pool
+      const fallbackCat = (Object.keys(byCategory) as Array<GeneratedQuestion['category']>).find(
+        (c) => byCategory[c].length > 0
+      );
+      if (!fallbackCat) break;
+      pickOne(byCategory[fallbackCat]);
+    }
+    i++;
+  }
+
+  return picked.slice(0, count);
 }
 
 // Generate questions using Claude Sonnet 4
@@ -60,14 +202,15 @@ Question Type Priorities (follow these closely):
 - Expansion questions: ${priorityLabels[settings.priorities.expansion]}`
     : '';
 
-  const systemPrompt = `You are an expert educational AI assistant helping professors generate insightful questions during student presentations.
+  const systemPrompt = `You are an expert educational AI assistant helping professors generate high-signal, rubric-aligned questions during student presentations.
 
 Your goals:
-1. Generate ONLY the most valuable, high-signal questions
+1. Generate ONLY the most valuable, high-signal questions (top-ranked)
 2. Avoid generic or low-value clarifications
 3. Prioritize questions about evidence, assumptions, counterarguments, and limitations
 4. Questions should help students demonstrate deeper understanding
 5. Never repeat or closely paraphrase existing questions
+6. Do NOT invent facts; anchor questions to the transcript and request specific evidence when appropriate
 ${priorityGuidance}
 
 ${settings?.assignmentContext ? `
@@ -102,7 +245,31 @@ ${settings.existingQuestions.slice(-config.ui.existingQuestionsContext).map((q, 
 `;
   }
 
-  const userPrompt = `Based on this presentation, generate 2-3 high-value questions only. Quality over quantity.
+  const wantsEvidence = !!settings?.rubricCriteria?.match(/evidence|source|citation|cite|references|data|study|studies|research/i);
+  const remaining = Math.max(0, settings?.remainingQuestions ?? settings?.maxQuestions ?? 10);
+  const returnCount = Math.max(0, Math.min(3, remaining));
+  const candidateCount = Math.max(
+    6,
+    Math.min(config.limits.maxQuestionCandidates, Math.max(returnCount * 3, 12))
+  );
+
+  const difficultyGuidance =
+    settings?.targetDifficulty && settings.targetDifficulty !== 'mixed'
+      ? `Aim for overall difficulty: ${settings.targetDifficulty}.`
+      : 'Use a mix of easy/medium/hard as appropriate.';
+
+  const bloomGuidance =
+    settings?.bloomFocus && settings.bloomFocus !== 'mixed'
+      ? `Prefer Bloom level: ${settings.bloomFocus}.`
+      : 'Use a mix of Bloom levels (remember/understand/apply/analyze/evaluate/create).';
+
+  const userPrompt = `Based on this presentation, generate a larger candidate set internally, then return ONLY the top ${returnCount} questions.
+Quality over quantity.
+
+Step 1: Generate ${candidateCount} candidate questions.
+Step 2: Rank them by rubric alignment + assignment relevance + novelty (not repeating existing questions).
+Step 3: Deduplicate near-duplicates and ensure diversity across question types.
+Step 4: Return ONLY the best ${returnCount} in the final "questions" list.
 
 TRANSCRIPT:
 ${transcript}
@@ -117,6 +284,15 @@ ${slideContextSection}
 ${existingQuestionsSection}
 
 Return ONLY questions that are genuinely valuable. If nothing new warrants a question, return an empty array.
+
+DIFFICULTY / COGNITIVE SKILL:
+- ${difficultyGuidance}
+- ${bloomGuidance}
+
+HALLUCINATION + EVIDENCE GUARD:
+- Do NOT invent facts not present in the transcript.
+- If a question asks for support, it MUST request a SPECIFIC evidence type (e.g., dataset, peer-reviewed study, primary source, citation, calculation, measurement).
+- ${wantsEvidence ? 'The rubric strongly suggests evidence matters: ensure at least one returned question asks for specific evidence.' : 'Only request evidence when it would materially strengthen a claim.'}
 
 CRITICAL: For each question, include a "relevantSnippet" field. This MUST be:
 - A SHORT, PRECISE quote: exactly 5-15 words maximum
@@ -140,7 +316,13 @@ JSON format:
       "question": "The question text",
       "category": "clarifying" | "critical-thinking" | "expansion",
       "difficulty": "easy" | "medium" | "hard",
-      "rationale": "Why this question is valuable",
+      "bloomLevel": "remember" | "understand" | "apply" | "analyze" | "evaluate" | "create",
+      "rationale": "Why this question is valuable (1-2 sentences)",
+      "rubricCriterion": "Which rubric criterion this targets (short label)",
+      "rubricJustification": "Why it matches the rubric/assignment (1 sentence)",
+      "expectedEvidenceType": "If applicable: specific evidence type to request (short)",
+      "tags": ["evidence" | "assumption" | "counterargument" | "definition" | "mechanism" | "limitations" | "methods" | "clarity"],
+      "score": 0-100,
       "relevantSnippet": "5-15 word EXACT quote - be precise!"
     }
   ]
@@ -179,18 +361,29 @@ Respond ONLY with JSON.`;
 
     const parsed = JSON.parse(jsonMatch[0]);
 
-    const questions: GeneratedQuestion[] = (parsed.questions || []).map((q: any) => ({
+    const rawQuestions: GeneratedQuestion[] = (parsed.questions || []).map((q: any) => ({
       id: uuidv4(),
-      question: q.question,
-      category: q.category || 'clarifying',
-      difficulty: q.difficulty || 'medium',
-      rationale: q.rationale || '',
-      relevantSnippet: q.relevantSnippet || '',
+      question: String(q.question || '').trim(),
+      category: normalizeCategory(q.category),
+      difficulty: normalizeDifficulty(q.difficulty),
+      rationale: typeof q.rationale === 'string' ? q.rationale : '',
+      rubricCriterion: typeof q.rubricCriterion === 'string' ? q.rubricCriterion : undefined,
+      rubricJustification: typeof q.rubricJustification === 'string' ? q.rubricJustification : undefined,
+      bloomLevel: typeof q.bloomLevel === 'string' ? q.bloomLevel : undefined,
+      expectedEvidenceType: typeof q.expectedEvidenceType === 'string' ? q.expectedEvidenceType : undefined,
+      score: typeof q.score === 'number' ? q.score : undefined,
+      tags: Array.isArray(q.tags) ? q.tags.map((t: any) => String(t)) : undefined,
+      relevantSnippet: typeof q.relevantSnippet === 'string' ? q.relevantSnippet : '',
       timestamp: Date.now(),
-    }));
+    })).filter((q: GeneratedQuestion) => q.question.length > 0);
 
-    console.log('[Claude] Generated', questions.length, 'questions');
-    return questions;
+    // Enforce novelty + dedupe + diversity on our side too (belt-and-suspenders)
+    const existing = settings?.existingQuestions || [];
+    const deduped = dedupeQuestions(rawQuestions, existing);
+    const selected = selectDiverseTop(deduped, returnCount, settings?.priorities, wantsEvidence);
+
+    console.log('[Claude] Generated', selected.length, 'questions');
+    return selected;
   } catch (error) {
     console.error('[Claude] Question generation error:', error);
     throw error;
@@ -378,7 +571,12 @@ Score each category from 1-5:
 4 = Exceeds expectations  
 5 = Exceptional
 
-Provide specific, actionable feedback tied to what the presenter actually said.`;
+Provide specific, actionable feedback tied to what the presenter actually said.
+
+When a CUSTOM RUBRIC is provided:
+- Extract the rubric into 4-8 concrete criteria (short labels)
+- Provide a criterion-level score and feedback
+- Identify missing evidence per criterion (only if evidence is clearly expected by the rubric)`;
 
   const analysisContext = analysis ? `
 ANALYSIS CONTEXT:
@@ -394,6 +592,13 @@ ${transcript.slice(0, config.api.maxTranscriptForQuestions)}
 ${analysisContext}
 
 Provide a detailed rubric evaluation. Be specific about what was done well and what could improve.
+${customRubric && customRubric.trim()
+    ? `
+CUSTOM RUBRIC MODE:
+- You MUST output "criteriaBreakdown" with 4-8 criteria derived from the rubric.
+- For each criterion, include any missing evidence needed to satisfy that criterion (if applicable).
+`
+    : ''}
 
 JSON format:
 {
@@ -416,7 +621,17 @@ JSON format:
     "improvements": ["Improvement 1", "Improvement 2"]
   },
   "overallScore": number,
-  "overallFeedback": "Summary evaluation"
+  "overallFeedback": "Summary evaluation",
+  "criteriaBreakdown": [
+    {
+      "criterion": "Short label from rubric",
+      "score": number,
+      "feedback": "Specific feedback tied to transcript",
+      "strengths": ["Strength 1"],
+      "improvements": ["Improvement 1"],
+      "missingEvidence": ["Specific evidence missing (if any)"]
+    }
+  ]
 }
 
 Respond ONLY with valid JSON.`;
@@ -470,6 +685,18 @@ Respond ONLY with valid JSON.`;
       },
       overallScore: parsed.overallScore || 3,
       overallFeedback: parsed.overallFeedback || 'Evaluation complete',
+      criteriaBreakdown: Array.isArray(parsed.criteriaBreakdown)
+        ? parsed.criteriaBreakdown
+            .map((c: any) => ({
+              criterion: typeof c.criterion === 'string' ? c.criterion : 'Criterion',
+              score: typeof c.score === 'number' ? c.score : 3,
+              feedback: typeof c.feedback === 'string' ? c.feedback : '',
+              strengths: Array.isArray(c.strengths) ? c.strengths.map((s: any) => String(s)) : [],
+              improvements: Array.isArray(c.improvements) ? c.improvements.map((s: any) => String(s)) : [],
+              missingEvidence: Array.isArray(c.missingEvidence) ? c.missingEvidence.map((s: any) => String(s)) : [],
+            }))
+            .filter((c: any) => c.criterion && c.feedback !== '')
+        : undefined,
       timestamp: Date.now(),
     };
 

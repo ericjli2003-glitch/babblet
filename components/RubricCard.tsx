@@ -262,6 +262,64 @@ export default function RubricCard({ rubric, isLoading }: RubricCardProps) {
           score={rubric.evidenceStrength}
           delay={0.3}
         />
+
+        {rubric.criteriaBreakdown && rubric.criteriaBreakdown.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35, duration: 0.4 }}
+            className="p-4 rounded-2xl bg-white border border-surface-100 shadow-soft"
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <FileCheck className="w-5 h-5 text-primary-600" />
+              <h4 className="font-medium text-surface-800">Criteria Breakdown</h4>
+              <span className="text-xs text-surface-400 bg-surface-100 px-2 py-0.5 rounded-full">
+                {rubric.criteriaBreakdown.length}
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {rubric.criteriaBreakdown.slice(0, 8).map((c, idx) => (
+                <div key={`${c.criterion}-${idx}`} className="p-3 rounded-xl bg-surface-50 border border-surface-100">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-surface-800">{c.criterion}</p>
+                      <div className="mt-1">
+                        <ScoreStars score={Math.round(c.score)} />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-lg font-bold text-surface-800">{c.score}</span>
+                      <span className="text-surface-400">/5</span>
+                    </div>
+                  </div>
+
+                  {c.feedback && (
+                    <p className="mt-2 text-xs text-surface-600 leading-relaxed">
+                      {c.feedback}
+                    </p>
+                  )}
+
+                  {c.missingEvidence && c.missingEvidence.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-xs font-medium text-amber-700 flex items-center gap-1">
+                        <ChevronRight className="w-3 h-3" />
+                        Missing evidence (mapped to rubric)
+                      </p>
+                      <ul className="mt-1 space-y-1">
+                        {c.missingEvidence.slice(0, 3).map((e, i) => (
+                          <li key={i} className="text-xs text-surface-600 pl-3">
+                            {e}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
       </div>
 
       {/* Footer */}
