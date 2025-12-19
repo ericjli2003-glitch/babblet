@@ -25,11 +25,10 @@ function ScoreStars({ score }: { score: number }) {
       {[1, 2, 3, 4, 5].map((i) => (
         <Star
           key={i}
-          className={`w-4 h-4 ${
-            i <= score
+          className={`w-4 h-4 ${i <= score
               ? 'text-amber-400 fill-amber-400'
               : 'text-surface-300'
-          }`}
+            }`}
         />
       ))}
     </div>

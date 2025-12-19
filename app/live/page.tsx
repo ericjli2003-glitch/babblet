@@ -35,6 +35,7 @@ import RubricCard from '@/components/RubricCard';
 import SlideUpload from '@/components/SlideUpload';
 import VideoTimeline, { type TimelineMarker } from '@/components/VideoTimeline';
 import QuestionSettings from '@/components/QuestionSettings';
+import AudioPlayerBar from '@/components/AudioPlayerBar';
 import { usePusher } from '@/lib/hooks/usePusher';
 import { useDeepgramStream } from '@/lib/hooks/useDeepgramStream';
 import type {
@@ -167,6 +168,14 @@ function LiveDashboardContent() {
   const cameraPreviewRef = useRef<HTMLVideoElement | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const videoRecorderRef = useRef<MediaRecorder | null>(null);
+
+  // Audio-only recording playback (for live mode without camera)
+  const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
+  const [recordedAudioDuration, setRecordedAudioDuration] = useState(0);
+  const [recordedAudioTime, setRecordedAudioTime] = useState(0);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const recordedAudioRef = useRef<HTMLAudioElement | null>(null);
+  const fullAudioChunksRef = useRef<Blob[]>([]);
 
   const lastWordCountRef = useRef<number>(0);
   const pendingQuestionGenRef = useRef<boolean>(false);
@@ -410,7 +419,7 @@ function LiveDashboardContent() {
               remainingQuestions: Math.max(
                 0,
                 questionSettings.maxQuestions -
-                  (questions.clarifying.length + questions.criticalThinking.length + questions.expansion.length)
+                (questions.clarifying.length + questions.criticalThinking.length + questions.expansion.length)
               ),
               assignmentContext: questionSettings.assignmentContext,
               rubricCriteria: questionSettings.rubricCriteria,
@@ -1127,6 +1136,8 @@ function LiveDashboardContent() {
         console.log(`[Live] ondataavailable fired, size: ${event.data.size} bytes`);
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
+          // Also save to full recording for playback
+          fullAudioChunksRef.current.push(event.data);
           console.log(`[Live] Audio chunk added: ${event.data.size} bytes, type: ${event.data.type}, total chunks: ${audioChunksRef.current.length}`);
         }
       };
@@ -1230,6 +1241,16 @@ function LiveDashboardContent() {
       console.log('[Live] Stopping video recorder...');
       videoRecorderRef.current.stop();
     }
+
+    // Create audio-only recording URL for playback (when camera is off)
+    if (fullAudioChunksRef.current.length > 0 && !includeCamera) {
+      const audioMime = fullAudioChunksRef.current[0]?.type || 'audio/webm';
+      const audioBlob = new Blob(fullAudioChunksRef.current, { type: audioMime });
+      const audioUrl = URL.createObjectURL(audioBlob);
+      setRecordedAudioUrl(audioUrl);
+      console.log('[Live] Audio recording saved for playback:', audioBlob.size, 'bytes');
+    }
+    fullAudioChunksRef.current = [];
 
     // Stop camera stream
     if (cameraStreamRef.current) {
@@ -1975,7 +1996,7 @@ function LiveDashboardContent() {
             </div>
           )}
 
-          {/* Recording playback for live mode (after recording ends) */}
+          {/* Recording playback for live mode (after recording ends) - VIDEO */}
           {mode === 'live' && status === 'completed' && recordedVideoUrl && (
             <div className="bg-surface-900 p-4">
               <div className="space-y-3">
@@ -1986,51 +2007,116 @@ function LiveDashboardContent() {
                     className="w-full max-h-72"
                     onLoadedMetadata={(e) => setRecordedVideoDuration(e.currentTarget.duration)}
                     onTimeUpdate={(e) => setRecordedVideoTime(e.currentTarget.currentTime * 1000)}
+                    onPlay={() => setIsPlayingRecording(true)}
+                    onPause={() => setIsPlayingRecording(false)}
                   />
                 </div>
 
-                {/* Recorded Video Controls */}
-                <div className="flex items-center gap-4 px-2">
-                  <button
-                    onClick={() => {
-                      if (recordedVideoRef.current) {
-                        if (isPlayingRecording) {
-                          recordedVideoRef.current.pause();
-                        } else {
-                          recordedVideoRef.current.play();
-                        }
-                        setIsPlayingRecording(!isPlayingRecording);
+                {/* Audio Player Bar for recorded video */}
+                <AudioPlayerBar
+                  isPlaying={isPlayingRecording}
+                  currentTimeMs={recordedVideoTime}
+                  durationMs={recordedVideoDuration * 1000}
+                  onPlayPause={() => {
+                    if (recordedVideoRef.current) {
+                      if (isPlayingRecording) {
+                        recordedVideoRef.current.pause();
+                      } else {
+                        recordedVideoRef.current.play();
                       }
-                    }}
-                    className="p-2 rounded-lg bg-surface-800 text-white hover:bg-surface-700 transition-colors"
-                  >
-                    {isPlayingRecording ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-                  </button>
+                    }
+                  }}
+                  onSeek={(timeMs) => {
+                    if (recordedVideoRef.current) {
+                      recordedVideoRef.current.currentTime = timeMs / 1000;
+                      setRecordedVideoTime(timeMs);
+                    }
+                  }}
+                  audioRef={recordedVideoRef}
+                  markers={timelineMarkers.map(m => ({ timestamp: m.timestamp, type: m.type }))}
+                  showDownload
+                  onDownload={() => {
+                    if (recordedVideoUrl) {
+                      const a = document.createElement('a');
+                      a.href = recordedVideoUrl;
+                      a.download = `babblet-recording-${new Date().toISOString().slice(0, 10)}.webm`;
+                      a.click();
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          )}
 
-                  <div className="flex-1">
-                    <VideoTimeline
-                      currentTime={recordedVideoTime}
-                      duration={recordedVideoDuration}
-                      markers={timelineMarkers}
-                      activeMarkerId={selectedMarkerId}
-                      onSeek={(timeMs) => {
-                        if (recordedVideoRef.current) {
-                          recordedVideoRef.current.currentTime = timeMs / 1000;
-                          setRecordedVideoTime(timeMs);
-                        }
-                      }}
-                      onMarkerClick={(marker) => {
-                        setSelectedMarkerId(marker.id);
-                        setTimeout(() => setSelectedMarkerId(null), 3000);
-                      }}
-                      onMarkerHover={(marker) => setHoveredMarkerId(marker?.id || null)}
-                    />
+          {/* Audio-only playback for live mode (when no camera) */}
+          {mode === 'live' && status === 'completed' && recordedAudioUrl && !recordedVideoUrl && (
+            <div className="bg-surface-900 p-4">
+              <div className="space-y-3">
+                {/* Hidden audio element */}
+                <audio
+                  ref={recordedAudioRef}
+                  src={recordedAudioUrl}
+                  onLoadedMetadata={(e) => setRecordedAudioDuration(e.currentTarget.duration)}
+                  onTimeUpdate={(e) => setRecordedAudioTime(e.currentTarget.currentTime * 1000)}
+                  onPlay={() => setIsPlayingAudio(true)}
+                  onPause={() => setIsPlayingAudio(false)}
+                />
+
+                {/* Visual waveform placeholder */}
+                <div className="relative rounded-xl overflow-hidden bg-gradient-to-r from-surface-800 to-surface-900 h-24 flex items-center justify-center">
+                  <div className="flex items-end gap-1 h-16">
+                    {[...Array(40)].map((_, i) => (
+                      <motion.div
+                        key={i}
+                        className="w-1.5 bg-gradient-to-t from-primary-500 to-accent-500 rounded-full"
+                        animate={{
+                          height: isPlayingAudio
+                            ? `${20 + Math.sin((recordedAudioTime / 100) + i * 0.3) * 30 + Math.random() * 20}%`
+                            : '30%',
+                        }}
+                        transition={{ duration: 0.1 }}
+                      />
+                    ))}
                   </div>
-
-                  <span className="text-white text-sm font-mono min-w-[100px] text-right">
-                    {formatTime(recordedVideoTime)} / {formatTime(recordedVideoDuration * 1000)}
-                  </span>
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <span className="text-surface-400 text-sm font-medium">
+                      {isPlayingAudio ? 'Playing...' : 'Audio Recording'}
+                    </span>
+                  </div>
                 </div>
+
+                {/* Audio Player Bar */}
+                <AudioPlayerBar
+                  isPlaying={isPlayingAudio}
+                  currentTimeMs={recordedAudioTime}
+                  durationMs={recordedAudioDuration * 1000}
+                  onPlayPause={() => {
+                    if (recordedAudioRef.current) {
+                      if (isPlayingAudio) {
+                        recordedAudioRef.current.pause();
+                      } else {
+                        recordedAudioRef.current.play();
+                      }
+                    }
+                  }}
+                  onSeek={(timeMs) => {
+                    if (recordedAudioRef.current) {
+                      recordedAudioRef.current.currentTime = timeMs / 1000;
+                      setRecordedAudioTime(timeMs);
+                    }
+                  }}
+                  audioRef={recordedAudioRef}
+                  markers={timelineMarkers.map(m => ({ timestamp: m.timestamp, type: m.type }))}
+                  showDownload
+                  onDownload={() => {
+                    if (recordedAudioUrl) {
+                      const a = document.createElement('a');
+                      a.href = recordedAudioUrl;
+                      a.download = `babblet-recording-${new Date().toISOString().slice(0, 10)}.webm`;
+                      a.click();
+                    }
+                  }}
+                />
               </div>
             </div>
           )}
@@ -2141,6 +2227,23 @@ function LiveDashboardContent() {
                       />
                     </label>
                   </div>
+
+                  {/* Audio Player Bar - sleek controls with speed/volume */}
+                  <AudioPlayerBar
+                    isPlaying={isPlaying}
+                    currentTimeMs={currentTime}
+                    durationMs={videoDuration * 1000}
+                    onPlayPause={togglePlayPause}
+                    onSeek={(timeMs) => {
+                      if (videoRef.current) {
+                        videoRef.current.currentTime = timeMs / 1000;
+                        setCurrentTime(timeMs);
+                      }
+                    }}
+                    audioRef={videoRef}
+                    markers={timelineMarkers.map(m => ({ timestamp: m.timestamp, type: m.type }))}
+                    compact
+                  />
                 </div>
               )}
             </div>

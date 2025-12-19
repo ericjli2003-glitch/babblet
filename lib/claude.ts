@@ -593,12 +593,12 @@ ${analysisContext}
 
 Provide a detailed rubric evaluation. Be specific about what was done well and what could improve.
 ${customRubric && customRubric.trim()
-    ? `
+      ? `
 CUSTOM RUBRIC MODE:
 - You MUST output "criteriaBreakdown" with 4-8 criteria derived from the rubric.
 - For each criterion, include any missing evidence needed to satisfy that criterion (if applicable).
 `
-    : ''}
+      : ''}
 
 JSON format:
 {
@@ -687,15 +687,15 @@ Respond ONLY with valid JSON.`;
       overallFeedback: parsed.overallFeedback || 'Evaluation complete',
       criteriaBreakdown: Array.isArray(parsed.criteriaBreakdown)
         ? parsed.criteriaBreakdown
-            .map((c: any) => ({
-              criterion: typeof c.criterion === 'string' ? c.criterion : 'Criterion',
-              score: typeof c.score === 'number' ? c.score : 3,
-              feedback: typeof c.feedback === 'string' ? c.feedback : '',
-              strengths: Array.isArray(c.strengths) ? c.strengths.map((s: any) => String(s)) : [],
-              improvements: Array.isArray(c.improvements) ? c.improvements.map((s: any) => String(s)) : [],
-              missingEvidence: Array.isArray(c.missingEvidence) ? c.missingEvidence.map((s: any) => String(s)) : [],
-            }))
-            .filter((c: any) => c.criterion && c.feedback !== '')
+          .map((c: any) => ({
+            criterion: typeof c.criterion === 'string' ? c.criterion : 'Criterion',
+            score: typeof c.score === 'number' ? c.score : 3,
+            feedback: typeof c.feedback === 'string' ? c.feedback : '',
+            strengths: Array.isArray(c.strengths) ? c.strengths.map((s: any) => String(s)) : [],
+            improvements: Array.isArray(c.improvements) ? c.improvements.map((s: any) => String(s)) : [],
+            missingEvidence: Array.isArray(c.missingEvidence) ? c.missingEvidence.map((s: any) => String(s)) : [],
+          }))
+          .filter((c: any) => c.criterion && c.feedback !== '')
         : undefined,
       timestamp: Date.now(),
     };

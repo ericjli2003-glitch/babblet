@@ -70,7 +70,7 @@ function buildFuzzySnippetRegex(snippet: string): RegExp | null {
 
   // Allow punctuation/whitespace differences between words
   // Use word boundaries (\b) to ensure we only match complete words
-  const sep = `[\\s\\.,;:!\\?\\\"\\'\\(\\)\\[\\]\\-]+`;
+  const sep = `[\\s\\.,;:!\\?\\\"\\'\\(\\)\\[\\]\\-]*`;
   // Add word boundary at start and end to prevent matching inside words
   const pattern = `\\b(${words.map(escapeRegex).join(sep)})\\b`;
   try {
@@ -78,6 +78,23 @@ function buildFuzzySnippetRegex(snippet: string): RegExp | null {
   } catch {
     return null;
   }
+}
+
+// Expand a position in text to the nearest word boundary
+function expandToWordBoundary(text: string, start: number, end: number): { start: number; end: number } {
+  // Expand start backwards to beginning of word
+  let newStart = start;
+  while (newStart > 0 && /\w/.test(text[newStart - 1])) {
+    newStart--;
+  }
+  
+  // Expand end forwards to end of word
+  let newEnd = end;
+  while (newEnd < text.length && /\w/.test(text[newEnd])) {
+    newEnd++;
+  }
+  
+  return { start: newStart, end: newEnd };
 }
 
 // Speaker colors for differentiation
@@ -257,8 +274,14 @@ export default function TranscriptFeed({
     normalizedToOriginal[ni] = text.length; // End marker
 
     for (const m of matches) {
-      const origStart = normalizedToOriginal[m.start] ?? 0;
-      const origEnd = normalizedToOriginal[m.end] ?? text.length;
+      const rawOrigStart = normalizedToOriginal[m.start] ?? 0;
+      const rawOrigEnd = normalizedToOriginal[m.end] ?? text.length;
+      
+      // Expand to full word boundaries to avoid cutting words in half
+      const { start: origStart, end: origEnd } = expandToWordBoundary(text, rawOrigStart, rawOrigEnd);
+
+      // Skip if this would overlap with what we've already processed
+      if (origStart < lastEnd) continue;
 
       // Add text before this match
       if (origStart > lastEnd) {

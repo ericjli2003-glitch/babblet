@@ -261,8 +261,8 @@ export default function QuestionSettings({
                       key={num}
                       onClick={() => setLocalSettings({ ...localSettings, maxQuestions: num })}
                       className={`px-4 py-2 rounded-xl font-medium transition-all ${localSettings.maxQuestions === num
-                          ? 'bg-primary-500 text-white shadow-md'
-                          : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
+                        ? 'bg-primary-500 text-white shadow-md'
+                        : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
                         }`}
                     >
                       {num}
@@ -300,12 +300,12 @@ export default function QuestionSettings({
                               priorities: { ...localSettings.priorities, [key]: priority },
                             })}
                             className={`px-3 py-1 text-xs rounded-lg transition-all ${localSettings.priorities[key] === priority
-                                ? priority === 0
-                                  ? 'bg-surface-400 text-white'
-                                  : priority === 1
-                                    ? 'bg-primary-400 text-white'
-                                    : 'bg-primary-600 text-white'
-                                : 'bg-surface-200 text-surface-500 hover:bg-surface-300'
+                              ? priority === 0
+                                ? 'bg-surface-400 text-white'
+                                : priority === 1
+                                  ? 'bg-primary-400 text-white'
+                                  : 'bg-primary-600 text-white'
+                              : 'bg-surface-200 text-surface-500 hover:bg-surface-300'
                               }`}
                           >
                             {priorityLabels[priority]}
