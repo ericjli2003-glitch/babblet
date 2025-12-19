@@ -398,23 +398,49 @@ export async function analyzeWithClaude(transcript: string): Promise<AnalysisSum
 
 STRICT ANALYSIS MODE:
 
-For KEY CLAIMS:
+=== CRITICAL: MODEL-BOUND STATEMENTS ===
+Before flagging any statement as a gap or missing evidence, determine whether it is:
+(A) A factual claim about the real world, OR
+(B) A conditional/idealized statement within an established scientific model
+
+MODEL-BOUND statements (Category B) MUST NOT be flagged:
+- Statements with "without friction", "assuming no air resistance", "in an ideal system", 
+  "classically", "in a vacuum", "for a point mass", "neglecting [X]", etc.
+- Direct consequences of foundational scientific laws (Newton's Laws, conservation laws, 
+  Maxwell's equations, thermodynamic laws) when correctly stated within their domain
+- Idealized scenarios used in physics, chemistry, engineering, or other sciences
+
+For model-bound statements: DO NOT challenge, DO NOT request sources, DO NOT flag as issues.
+
+=== For KEY CLAIMS ===
 - Only extract claims that are central to the presenter's argument
 - Focus on substantive assertions, not passing remarks or transitions
 - Claims should be specific enough to evaluate
 
-For LOGICAL GAPS:
-- ONLY flag genuine logical fallacies or reasoning errors
+=== For LOGICAL GAPS ===
+- ONLY flag genuine logical fallacies or reasoning errors in REAL-WORLD claims
 - A gap must be: a missing step in an argument, a non-sequitur, a contradiction, or an unsupported causal claim
+- DO NOT flag: model-bound statements that are correct within their stated assumptions
 - DO NOT flag: informal speech, teaching style choices, rhetorical questions, jokes, or things that are simply "unclear"
 - DO NOT flag: presentation structure choices, pacing, or meta-commentary
 - If the speaker is casually explaining something, that's not a logical gap
 - When in doubt, do NOT flag a logical gap
 
-For MISSING EVIDENCE:
-- Only flag when a specific factual claim was made but no supporting evidence was provided
-- The claim must be the type that actually requires evidence (not opinions or common knowledge)
+=== For MISSING EVIDENCE ===
+- Only flag when a REAL-WORLD factual claim was made but no supporting evidence was provided
+- DO NOT flag: model-bound statements (they don't need "evidence" - they're definitionally true within their model)
+- The claim must be the type that actually requires evidence (not opinions, common knowledge, or model assumptions)
 - DO NOT flag: conceptual explanations, definitions, or introductory/contextual remarks
+
+=== EXAMPLES ===
+NEVER FLAG as gaps/missing evidence (model-bound, correct within assumptions):
+- "Without friction, the block accelerates at 5 m/s²" - correct within Newtonian mechanics
+- "In an ideal gas, PV = nRT" - definitionally true for ideal gases
+- "Energy is conserved in this collision" (when framed as idealized) - conservation law
+
+MAY FLAG as gaps/missing evidence (real-world claims):
+- "Studies show X reduces Y by 50%" - where are the studies?
+- "This approach is more efficient" - compared to what? evidence?
 
 Be conservative. Flag fewer, higher-quality issues rather than many minor observations.
 If the presentation is reasonably coherent, return minimal or empty gap/evidence arrays.`;

@@ -87,13 +87,13 @@ function expandToWordBoundary(text: string, start: number, end: number): { start
   while (newStart > 0 && /\w/.test(text[newStart - 1])) {
     newStart--;
   }
-  
+
   // Expand end forwards to end of word
   let newEnd = end;
   while (newEnd < text.length && /\w/.test(text[newEnd])) {
     newEnd++;
   }
-  
+
   return { start: newStart, end: newEnd };
 }
 
@@ -276,7 +276,7 @@ export default function TranscriptFeed({
     for (const m of matches) {
       const rawOrigStart = normalizedToOriginal[m.start] ?? 0;
       const rawOrigEnd = normalizedToOriginal[m.end] ?? text.length;
-      
+
       // Expand to full word boundaries to avoid cutting words in half
       const { start: origStart, end: origEnd } = expandToWordBoundary(text, rawOrigStart, rawOrigEnd);
 
@@ -300,8 +300,8 @@ export default function TranscriptFeed({
             if (el) highlightRefs.current.set(m.highlight.id, el);
           }}
           className={`cursor-pointer transition-all inline ${isHovered
-              ? 'scale-105 font-bold'
-              : 'hover:font-semibold'
+            ? 'scale-105 font-bold'
+            : 'hover:font-semibold'
             }`}
           onMouseEnter={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
