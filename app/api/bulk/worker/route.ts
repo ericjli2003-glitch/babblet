@@ -237,17 +237,24 @@ async function processSubmission(submissionId: string): Promise<void> {
 }
 
 // POST /api/bulk/worker - Process queued submissions
-// This can be triggered by Vercel Cron or manually
+// This can be triggered by external cron services or manually
 export async function POST(request: NextRequest) {
   try {
-    // Optional: verify cron secret for security
+    // Verify cron secret for security (supports header or query param)
     const authHeader = request.headers.get('authorization');
+    const { searchParams } = new URL(request.url);
+    const querySecret = searchParams.get('secret');
     const cronSecret = process.env.CRON_SECRET;
     
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-      // Allow manual triggers without auth in development
-      if (process.env.NODE_ENV === 'production') {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (cronSecret) {
+      const headerMatch = authHeader === `Bearer ${cronSecret}`;
+      const queryMatch = querySecret === cronSecret;
+      
+      if (!headerMatch && !queryMatch) {
+        // Allow manual triggers without auth in development only
+        if (process.env.NODE_ENV === 'production') {
+          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
       }
     }
 
