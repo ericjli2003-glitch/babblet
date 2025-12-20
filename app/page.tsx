@@ -16,7 +16,10 @@ import {
   Zap,
   CheckCircle2,
   Loader2,
+  FolderOpen,
+  Users,
 } from 'lucide-react';
+import Link from 'next/link';
 import SlideUpload from '@/components/SlideUpload';
 
 type InputMode = 'upload' | 'live' | null;
@@ -124,7 +127,7 @@ export default function HomePage() {
             Choose how to capture the presentation
           </h2>
 
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
             {/* Upload Option */}
             <motion.button
               whileHover={{ scale: 1.02 }}
@@ -145,8 +148,8 @@ export default function HomePage() {
                 <Upload className="w-7 h-7 text-primary-600" />
               </div>
               <h3 className="text-xl font-semibold text-surface-900 mb-2">Upload Video</h3>
-              <p className="text-surface-600">
-                Upload a pre-recorded presentation video (MP4, MOV, Zoom, or Loom recordings)
+              <p className="text-surface-600 text-sm">
+                Upload a pre-recorded presentation video (MP4, MOV, WebM)
               </p>
             </motion.button>
 
@@ -170,10 +173,30 @@ export default function HomePage() {
                 <Mic className="w-7 h-7 text-accent-600" />
               </div>
               <h3 className="text-xl font-semibold text-surface-900 mb-2">Record Live</h3>
-              <p className="text-surface-600">
-                Capture audio in real-time using your browser microphone during the presentation
+              <p className="text-surface-600 text-sm">
+                Capture audio in real-time using your microphone
               </p>
             </motion.button>
+
+            {/* Bulk Upload Option - Direct link */}
+            <Link
+              href="/bulk"
+              className="relative p-8 rounded-3xl text-left transition-all duration-300 bg-white/60 shadow-soft hover:bg-white hover:shadow-soft-lg hover:ring-2 hover:ring-emerald-500 group"
+            >
+              <div className="absolute top-4 right-4">
+                <div className="flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium">
+                  <Users className="w-3 h-3" />
+                  <span>Batch</span>
+                </div>
+              </div>
+              <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mb-4 group-hover:bg-emerald-500 transition-colors">
+                <FolderOpen className="w-7 h-7 text-emerald-600 group-hover:text-white transition-colors" />
+              </div>
+              <h3 className="text-xl font-semibold text-surface-900 mb-2">Bulk Upload</h3>
+              <p className="text-surface-600 text-sm">
+                Grade multiple student videos at once with batch processing
+              </p>
+            </Link>
           </div>
 
           {/* Configuration Form */}

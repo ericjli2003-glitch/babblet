@@ -35,7 +35,7 @@ export const config = {
         /** Segments to keep after consolidation */
         recentSegmentsToKeep: 50,
         /** Max key claims to show as insight markers */
-        maxClaimMarkers: 2,
+        maxClaimMarkers: 5,
         /** Max verification findings to return */
         maxVerificationFindings: 8,
         /** Max claims to send to verification */

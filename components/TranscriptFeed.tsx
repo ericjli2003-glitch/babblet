@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Clock, Mic, MessageSquareText, User } from 'lucide-react';
+import { Clock, Mic, MessageSquareText, User, AlertTriangle, Lightbulb, MessageCircleQuestion } from 'lucide-react';
 import type { TranscriptSegment } from '@/lib/types';
 
 // Highlight for any marker type (question, issue, insight)
@@ -176,15 +176,30 @@ export default function TranscriptFeed({
     }
   }, [hoveredMarkerId]);
 
-  // Get bracket/text colors by type - using brackets instead of background highlights
-  const getBracketColors = (type: 'question' | 'issue' | 'insight') => {
+  // Get styles for inline tags by type
+  const getTagStyles = (type: 'question' | 'issue' | 'insight') => {
     switch (type) {
       case 'question':
-        return { bracket: 'text-violet-500', text: 'text-violet-700' };
+        return {
+          bg: 'bg-violet-100 hover:bg-violet-200',
+          text: 'text-violet-600',
+          border: 'border-violet-300',
+          Icon: MessageCircleQuestion
+        };
       case 'issue':
-        return { bracket: 'text-amber-500', text: 'text-amber-700' };
+        return {
+          bg: 'bg-amber-100 hover:bg-amber-200',
+          text: 'text-amber-600',
+          border: 'border-amber-300',
+          Icon: AlertTriangle
+        };
       case 'insight':
-        return { bracket: 'text-emerald-500', text: 'text-emerald-700' };
+        return {
+          bg: 'bg-emerald-100 hover:bg-emerald-200',
+          text: 'text-emerald-600',
+          border: 'border-emerald-300',
+          Icon: Lightbulb
+        };
     }
   };
 
@@ -290,40 +305,42 @@ export default function TranscriptFeed({
 
       const matchedText = text.slice(origStart, origEnd);
       const isHovered = m.highlight.id === hoveredMarkerId;
-      const colors = getBracketColors(m.highlight.type);
+      const tagStyles = getTagStyles(m.highlight.type);
+      const TagIcon = tagStyles.Icon;
 
-      // Use bracket notation instead of background highlight
+      // Render text unchanged, then add a small inline tag at the end
       result.push(
-        <span
-          key={`hl-${keyIndex++}`}
-          ref={(el) => {
-            if (el) highlightRefs.current.set(m.highlight.id, el);
-          }}
-          className={`cursor-pointer transition-all inline ${isHovered
-            ? 'scale-105 font-bold'
-            : 'hover:font-semibold'
-            }`}
-          onMouseEnter={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            setHoveredHighlight({
-              label: m.highlight.label,
-              fullText: m.highlight.fullText,
-              type: m.highlight.type,
-              x: rect.left + rect.width / 2,
-              y: rect.top
-            });
-          }}
-          onMouseLeave={() => setHoveredHighlight(null)}
-          onClick={() => {
-            onHighlightClick?.(m.highlight.id);
-            onQuestionHighlightClick?.(m.highlight.id);
-          }}
-        >
-          <span className={`${colors.bracket} font-bold ${isHovered ? 'text-lg' : 'text-base'}`}>[</span>
-          <span className={`${colors.text} ${isHovered ? 'text-lg font-bold underline decoration-2' : ''}`}>
+        <span key={`hl-${keyIndex++}`}>
+          {/* The actual text - unchanged */}
+          <span
+            ref={(el) => {
+              if (el) highlightRefs.current.set(m.highlight.id, el);
+            }}
+          >
             {matchedText}
           </span>
-          <span className={`${colors.bracket} font-bold ${isHovered ? 'text-lg' : 'text-base'}`}>]</span>
+          {/* Small inline tag at the end */}
+          <span
+            className={`inline-flex items-center justify-center ml-0.5 px-1 py-0.5 rounded border cursor-pointer transition-all align-middle ${tagStyles.bg} ${tagStyles.text} ${tagStyles.border} ${isHovered ? 'scale-110 ring-2 ring-offset-1' : 'hover:scale-105'}`}
+            style={{ fontSize: '0.65rem', lineHeight: 1, verticalAlign: 'middle' }}
+            onMouseEnter={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setHoveredHighlight({
+                label: m.highlight.label,
+                fullText: m.highlight.fullText,
+                type: m.highlight.type,
+                x: rect.left + rect.width / 2,
+                y: rect.top
+              });
+            }}
+            onMouseLeave={() => setHoveredHighlight(null)}
+            onClick={() => {
+              onHighlightClick?.(m.highlight.id);
+              onQuestionHighlightClick?.(m.highlight.id);
+            }}
+          >
+            <TagIcon className="w-2.5 h-2.5" />
+          </span>
         </span>
       );
 

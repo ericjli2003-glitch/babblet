@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import NextLink from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Mic,
@@ -26,6 +27,10 @@ import {
   Headphones,
   Presentation,
   FileImage,
+  FolderOpen,
+  UserPlus,
+  Users,
+  Save,
 } from 'lucide-react';
 import TranscriptFeed, { type MarkerHighlight } from '@/components/TranscriptFeed';
 import { config } from '@/lib/config';
@@ -177,6 +182,21 @@ function LiveDashboardContent() {
   const recordedAudioRef = useRef<HTMLAudioElement | null>(null);
   const fullAudioChunksRef = useRef<Blob[]>([]);
 
+  // Live session batch for multi-student recording
+  const [liveSessionBatchId, setLiveSessionBatchId] = useState<string | null>(null);
+  const [savedRecordings, setSavedRecordings] = useState<Array<{
+    id: string;
+    studentName: string;
+    status: 'uploading' | 'queued' | 'processing' | 'ready' | 'failed';
+    duration: number;
+    createdAt: number;
+  }>>([]);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [studentNameInput, setStudentNameInput] = useState('');
+  const [isSavingRecording, setIsSavingRecording] = useState(false);
+  const [showRecordingsPanel, setShowRecordingsPanel] = useState(false);
+  const currentRecordingBlobRef = useRef<Blob | null>(null);
+
   const lastWordCountRef = useRef<number>(0);
   const pendingQuestionGenRef = useRef<boolean>(false);
   const lastQuestionGenTimeRef = useRef<number>(0);
@@ -304,7 +324,7 @@ function LiveDashboardContent() {
         });
 
         // Add markers for key claims (as insights)
-        analysisData.analysis.keyClaims?.slice(0, 2).forEach((claim: { id: string; claim: string; evidence?: string; relevantSnippet?: string }) => {
+        analysisData.analysis.keyClaims?.slice(0, config.limits.maxClaimMarkers).forEach((claim: { id: string; claim: string; evidence?: string; relevantSnippet?: string }) => {
           // Prefer Claude's relevantSnippet, fallback to search
           const snippet = (claim.relevantSnippet && claim.relevantSnippet.length >= 5)
             ? claim.relevantSnippet
@@ -1322,6 +1342,207 @@ function LiveDashboardContent() {
     }
   }, [isRecording, sessionId]);
 
+  // Create or get live session batch for multi-student recording
+  const ensureLiveSessionBatch = useCallback(async (): Promise<string> => {
+    if (liveSessionBatchId) return liveSessionBatchId;
+
+    try {
+      const res = await fetch('/api/bulk/create-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `Live Session - ${new Date().toLocaleDateString()}`,
+          courseName: 'Live Recording',
+          assignmentName: 'Oral Presentations',
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.batch?.id) {
+        setLiveSessionBatchId(data.batch.id);
+        return data.batch.id;
+      }
+      throw new Error('Failed to create batch');
+    } catch (e) {
+      console.error('[Live] Failed to create session batch:', e);
+      throw e;
+    }
+  }, [liveSessionBatchId]);
+
+  // Save current recording and reset for next student
+  const saveRecordingAndReset = useCallback(async (studentName: string) => {
+    if (!studentName.trim()) return;
+
+    setIsSavingRecording(true);
+    const recordingDuration = currentTime;
+
+    try {
+      // 1. Get or create batch
+      const batchId = await ensureLiveSessionBatch();
+
+      // 2. Collect the recording blob
+      let recordingBlob: Blob | null = null;
+      let mimeType = 'audio/webm';
+
+      if (includeCamera && recordedChunksRef.current.length > 0) {
+        // Video recording
+        mimeType = recordedChunksRef.current[0]?.type || 'video/webm';
+        recordingBlob = new Blob(recordedChunksRef.current, { type: mimeType });
+      } else if (fullAudioChunksRef.current.length > 0) {
+        // Audio-only recording
+        mimeType = fullAudioChunksRef.current[0]?.type || 'audio/webm';
+        recordingBlob = new Blob(fullAudioChunksRef.current, { type: mimeType });
+      }
+
+      if (!recordingBlob || recordingBlob.size < 1000) {
+        throw new Error('No recording data available');
+      }
+
+      // 3. Stop recording streams (but don't trigger normal analysis)
+      if (deepgramStream.isConnected) {
+        deepgramStream.disconnect();
+        setInterimTranscript('');
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      if (videoRecorderRef.current && videoRecorderRef.current.state !== 'inactive') {
+        videoRecorderRef.current.stop();
+      }
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(track => track.stop());
+        cameraStreamRef.current = null;
+      }
+      if (cameraPreviewRef.current) {
+        cameraPreviewRef.current.srcObject = null;
+      }
+      streamRef.current?.getTracks().forEach(track => track.stop());
+      audioContextRef.current?.close();
+      if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
+      if (sendAudioIntervalRef.current) clearInterval(sendAudioIntervalRef.current);
+
+      // 4. Add to saved recordings list (optimistic)
+      const tempId = `temp-${Date.now()}`;
+      setSavedRecordings(prev => [...prev, {
+        id: tempId,
+        studentName,
+        status: 'uploading',
+        duration: recordingDuration,
+        createdAt: Date.now(),
+      }]);
+
+      // 5. Get presigned URL and upload to R2
+      const filename = `${studentName.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.webm`;
+      const presignRes = await fetch('/api/bulk/presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batchId, filename, contentType: mimeType }),
+      });
+      const presignData = await presignRes.json();
+
+      if (!presignData.success) {
+        throw new Error(presignData.error || 'Failed to get upload URL');
+      }
+
+      // Upload to R2
+      const uploadRes = await fetch(presignData.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': mimeType },
+        body: recordingBlob,
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error('Upload failed');
+      }
+
+      // 6. Enqueue for processing
+      const enqueueRes = await fetch('/api/bulk/enqueue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          batchId,
+          submissionId: presignData.submissionId,
+          fileKey: presignData.fileKey,
+          originalFilename: filename,
+          fileSize: recordingBlob.size,
+          mimeType,
+          studentName,
+        }),
+      });
+      const enqueueData = await enqueueRes.json();
+
+      if (!enqueueData.success) {
+        throw new Error('Failed to enqueue');
+      }
+
+      // Update saved recording with real ID and status
+      setSavedRecordings(prev => prev.map(r =>
+        r.id === tempId ? { ...r, id: enqueueData.submission?.id || tempId, status: 'queued' } : r
+      ));
+
+      // 7. Trigger worker to start processing
+      fetch('/api/bulk/worker', { method: 'POST' }).catch(() => {});
+
+      // 8. Reset state for next student
+      setIsRecording(false);
+      setStatus('idle');
+      setTranscript([]);
+      setAnalysis(null);
+      setQuestions({ clarifying: [], criticalThinking: [], expansion: [] });
+      setRubric(null);
+      setTimelineMarkers([]);
+      setVerificationFindings([]);
+      setCurrentTime(0);
+      setRecordedVideoUrl(null);
+      setRecordedAudioUrl(null);
+      audioChunksRef.current = [];
+      fullAudioChunksRef.current = [];
+      recordedChunksRef.current = [];
+
+      console.log(`[Live] Saved recording for ${studentName}, ready for next student`);
+
+    } catch (e) {
+      console.error('[Live] Failed to save recording:', e);
+      // Mark as failed
+      setSavedRecordings(prev => prev.map(r =>
+        r.status === 'uploading' ? { ...r, status: 'failed' } : r
+      ));
+    } finally {
+      setIsSavingRecording(false);
+      setShowSaveModal(false);
+      setStudentNameInput('');
+    }
+  }, [currentTime, includeCamera, deepgramStream, ensureLiveSessionBatch, setTranscript]);
+
+  // Poll for saved recordings status updates
+  useEffect(() => {
+    if (savedRecordings.length === 0 || !liveSessionBatchId) return;
+
+    const processingRecordings = savedRecordings.filter(r => 
+      r.status === 'queued' || r.status === 'processing'
+    );
+    if (processingRecordings.length === 0) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/bulk/status?batchId=${liveSessionBatchId}`);
+        const data = await res.json();
+        if (data.success && data.submissions) {
+          setSavedRecordings(prev => prev.map(r => {
+            const serverSub = data.submissions.find((s: { id: string; status: string }) => s.id === r.id);
+            if (serverSub) {
+              return { ...r, status: serverSub.status };
+            }
+            return r;
+          }));
+        }
+      } catch (e) {
+        console.error('[Live] Failed to poll status:', e);
+      }
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
+  }, [savedRecordings, liveSessionBatchId]);
+
   // Trigger analysis
   const triggerAnalysis = async () => {
     if (transcript.length === 0) return;
@@ -1641,6 +1862,17 @@ function LiveDashboardContent() {
 
               {/* Actions */}
               <div className="flex items-center gap-2">
+                {/* Bulk Upload - only show in upload mode */}
+                {mode === 'upload' && (
+                  <NextLink
+                    href="/bulk"
+                    className="flex items-center gap-2 px-3 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl transition-colors text-sm font-medium"
+                    title="Bulk Upload - Grade multiple presentations"
+                  >
+                    <FolderOpen className="w-4 h-4" />
+                    <span>Bulk Upload</span>
+                  </NextLink>
+                )}
                 <button
                   onClick={() => setShowQuestionSettings(true)}
                   className="p-2 text-surface-500 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-colors"
@@ -1674,11 +1906,12 @@ function LiveDashboardContent() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={isRecording ? stopRecording : startRecording}
-                disabled={status === 'processing'}
+                disabled={status === 'processing' || isSavingRecording}
                 className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${isRecording
                   ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
                   : 'bg-gradient-primary text-white shadow-glow'
                   } disabled:opacity-50`}
+                title={isRecording ? 'Stop Recording' : 'Start Recording'}
               >
                 {status === 'processing' ? (
                   <Loader2 className="w-6 h-6 animate-spin" />
@@ -1688,6 +1921,44 @@ function LiveDashboardContent() {
                   <Mic className="w-6 h-6" />
                 )}
               </motion.button>
+
+              {/* Save & Next Student button - only show when recording */}
+              {isRecording && (
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setShowSaveModal(true)}
+                  disabled={isSavingRecording || currentTime < 5000}
+                  className="w-14 h-14 rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 flex items-center justify-center transition-all disabled:opacity-50"
+                  title="Save & Next Student"
+                >
+                  {isSavingRecording ? (
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  ) : (
+                    <UserPlus className="w-6 h-6" />
+                  )}
+                </motion.button>
+              )}
+
+              {/* Today's Recordings counter */}
+              {savedRecordings.length > 0 && (
+                <button
+                  onClick={() => setShowRecordingsPanel(!showRecordingsPanel)}
+                  className={`relative w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${
+                    showRecordingsPanel 
+                      ? 'bg-primary-100 text-primary-600' 
+                      : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
+                  }`}
+                  title={`Today's Recordings (${savedRecordings.length})`}
+                >
+                  <Users className="w-5 h-5" />
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary-500 text-white text-xs rounded-full flex items-center justify-center font-medium">
+                    {savedRecordings.length}
+                  </span>
+                </button>
+              )}
             </>
           ) : (
             <>
@@ -2127,18 +2398,41 @@ function LiveDashboardContent() {
               {!videoUrl ? (
                 <div className="flex flex-col items-center justify-center py-12 text-surface-400">
                   <Video className="w-16 h-16 mb-4 opacity-50" />
-                  <p className="text-lg mb-2">No video selected</p>
-                  <p className="text-sm mb-6">Select a video to analyze</p>
-                  <label className="px-6 py-3 bg-gradient-primary text-white font-medium rounded-xl cursor-pointer hover:shadow-glow transition-shadow">
-                    <Upload className="w-5 h-5 inline mr-2" />
-                    Select Video File
-                    <input
-                      type="file"
-                      accept="video/*"
-                      onChange={handleVideoUpload}
-                      className="hidden"
-                    />
-                  </label>
+                  <p className="text-lg mb-2">Ready to Analyze</p>
+                  <p className="text-sm mb-8">Upload a single video or batch process multiple student presentations</p>
+                  
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    {/* Single Video Upload */}
+                    <label className="flex flex-col items-center gap-3 px-8 py-6 bg-white border-2 border-surface-200 rounded-2xl cursor-pointer hover:border-primary-400 hover:shadow-lg transition-all group">
+                      <div className="w-14 h-14 rounded-2xl bg-gradient-primary text-white flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <Upload className="w-6 h-6" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-surface-900 font-semibold">Single Video</p>
+                        <p className="text-xs text-surface-500">Analyze one presentation</p>
+                      </div>
+                      <input
+                        type="file"
+                        accept="video/*"
+                        onChange={handleVideoUpload}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {/* Bulk Upload */}
+                    <NextLink 
+                      href="/bulk"
+                      className="flex flex-col items-center gap-3 px-8 py-6 bg-white border-2 border-surface-200 rounded-2xl hover:border-emerald-400 hover:shadow-lg transition-all group"
+                    >
+                      <div className="w-14 h-14 rounded-2xl bg-emerald-500 text-white flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <FolderOpen className="w-6 h-6" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-surface-900 font-semibold">Bulk Upload</p>
+                        <p className="text-xs text-surface-500">Grade multiple at once</p>
+                      </div>
+                    </NextLink>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -2607,6 +2901,161 @@ function LiveDashboardContent() {
                 </button>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Save & Next Student Modal */}
+      <AnimatePresence>
+        {showSaveModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            onClick={() => !isSavingRecording && setShowSaveModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 max-w-md w-full mx-4 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center">
+                  <Save className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-surface-900">Save Recording</h3>
+                  <p className="text-sm text-surface-500">Enter student name and continue to next</p>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-surface-700 mb-2">
+                  Student Name *
+                </label>
+                <input
+                  type="text"
+                  value={studentNameInput}
+                  onChange={(e) => setStudentNameInput(e.target.value)}
+                  placeholder="e.g., John Smith"
+                  className="w-full px-4 py-3 border border-surface-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && studentNameInput.trim()) {
+                      saveRecordingAndReset(studentNameInput);
+                    }
+                  }}
+                />
+                <p className="text-xs text-surface-500 mt-2">
+                  Recording duration: {Math.floor(currentTime / 60000)}:{String(Math.floor((currentTime % 60000) / 1000)).padStart(2, '0')}
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowSaveModal(false);
+                    setStudentNameInput('');
+                  }}
+                  disabled={isSavingRecording}
+                  className="flex-1 px-4 py-3 text-surface-600 hover:bg-surface-100 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => saveRecordingAndReset(studentNameInput)}
+                  disabled={!studentNameInput.trim() || isSavingRecording}
+                  className="flex-1 px-4 py-3 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSavingRecording ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Save & Next
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Today's Recordings Panel */}
+      <AnimatePresence>
+        {showRecordingsPanel && savedRecordings.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="fixed left-24 top-24 bottom-24 w-80 bg-white rounded-2xl shadow-2xl border border-surface-200 z-40 flex flex-col overflow-hidden"
+          >
+            <div className="p-4 border-b border-surface-200 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-surface-900">Today&apos;s Recordings</h3>
+                <p className="text-xs text-surface-500">{savedRecordings.length} student{savedRecordings.length !== 1 ? 's' : ''}</p>
+              </div>
+              <button
+                onClick={() => setShowRecordingsPanel(false)}
+                className="p-2 text-surface-400 hover:text-surface-600 rounded-lg hover:bg-surface-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {savedRecordings.map((recording, index) => (
+                <div
+                  key={recording.id}
+                  className="p-3 bg-surface-50 rounded-xl border border-surface-200"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-surface-900">{recording.studentName}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      recording.status === 'ready' ? 'bg-emerald-100 text-emerald-700' :
+                      recording.status === 'failed' ? 'bg-red-100 text-red-700' :
+                      recording.status === 'uploading' ? 'bg-blue-100 text-blue-700' :
+                      'bg-amber-100 text-amber-700'
+                    }`}>
+                      {recording.status === 'ready' ? '✓ Complete' :
+                       recording.status === 'failed' ? '✗ Failed' :
+                       recording.status === 'uploading' ? 'Uploading...' :
+                       'Processing...'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-surface-500">
+                    <span>#{index + 1}</span>
+                    <span>{Math.floor(recording.duration / 60000)}:{String(Math.floor((recording.duration % 60000) / 1000)).padStart(2, '0')}</span>
+                  </div>
+                  {recording.status === 'ready' && liveSessionBatchId && (
+                    <NextLink
+                      href={`/bulk/submission/${recording.id}`}
+                      className="mt-2 block text-center text-xs text-primary-600 hover:text-primary-700 font-medium py-1 bg-primary-50 rounded-lg"
+                    >
+                      View Report →
+                    </NextLink>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {liveSessionBatchId && (
+              <div className="p-4 border-t border-surface-200">
+                <NextLink
+                  href={`/bulk`}
+                  className="block w-full text-center py-2 bg-surface-100 text-surface-700 rounded-xl hover:bg-surface-200 text-sm font-medium"
+                >
+                  Open Batch Dashboard
+                </NextLink>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

@@ -38,6 +38,7 @@ export interface KeyClaim {
   timestamp?: number;
   confidence: number; // 0-1
   category?: string;
+  relevantSnippet?: string;
 }
 
 export interface LogicalGap {

@@ -507,6 +507,7 @@ Respond ONLY with the JSON.`;
       evidence: c.evidence || [],
       confidence: c.confidence || 0.5,
       timestamp: Date.now(),
+      relevantSnippet: c.relevantSnippet || '',
     }));
 
     const logicalGaps: LogicalGap[] = (parsed.logicalGaps || []).map((g: any) => ({
