@@ -1479,8 +1479,7 @@ function LiveDashboardContent() {
         r.id === tempId ? { ...r, id: enqueueData.submission?.id || tempId, status: 'queued' } : r
       ));
 
-      // 7. Trigger worker to start processing
-      fetch('/api/bulk/worker', { method: 'POST' }).catch(() => {});
+      // Processing will start when user clicks "Process Now" or via external cron
 
       // 8. Reset state for next student
       setIsRecording(false);
