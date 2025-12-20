@@ -341,12 +341,6 @@ export default function BulkUploadPage() {
     }
 
     setUploading(false);
-    
-    // Trigger worker multiple times to process the batch (each run handles up to 3 items)
-    for (let i = 0; i < 3; i++) {
-      fetch('/api/bulk/worker', { method: 'POST' }).catch(() => {});
-    }
-    
     loadBatchDetails(selectedBatchId);
   };
 
