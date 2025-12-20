@@ -1,9 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/bulk/worker",
-      "schedule": "* * * * *"
-    }
-  ]
-}
-
