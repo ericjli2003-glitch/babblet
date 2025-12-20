@@ -325,6 +325,9 @@ export default function BulkUploadPage() {
           throw new Error('Failed to enqueue');
         }
 
+        // Kick off processing immediately (don't wait for cron)
+        fetch('/api/bulk/worker', { method: 'POST' }).catch(() => {});
+
         setFilesToUpload(prev => prev.map(f => 
           f.id === fileData.id ? { ...f, status: 'uploaded', progress: 100 } : f
         ));
@@ -341,6 +344,12 @@ export default function BulkUploadPage() {
     }
 
     setUploading(false);
+    
+    // Trigger worker multiple times to process the batch (each run handles up to 3 items)
+    for (let i = 0; i < 3; i++) {
+      fetch('/api/bulk/worker', { method: 'POST' }).catch(() => {});
+    }
+    
     loadBatchDetails(selectedBatchId);
   };
 
