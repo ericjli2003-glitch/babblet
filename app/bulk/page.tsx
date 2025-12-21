@@ -392,16 +392,6 @@ export default function BulkUploadPage() {
                 uploadSpeed: speed,
               } : f
             ));
-
-            // Update overall stats
-            setUploadStats(prev => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                uploadedBytes: prev.uploadedBytes + (e.loaded - (fileData.bytesUploaded || 0)),
-                averageSpeed: speed,
-              };
-            });
           }
         });
 
@@ -608,13 +598,39 @@ export default function BulkUploadPage() {
   };
 
   // ============================================
-  // Calculate ETA
+  // Calculate Upload Progress from File State
   // ============================================
 
+  const getUploadProgress = () => {
+    const uploadingFiles = filesToUpload.filter(f => 
+      f.status === 'uploading' || f.status === 'uploaded'
+    );
+    
+    if (uploadingFiles.length === 0) {
+      return { totalBytes: 0, uploadedBytes: 0, averageSpeed: 0 };
+    }
+
+    const totalBytes = uploadingFiles.reduce((sum, f) => sum + f.file.size, 0);
+    const uploadedBytes = uploadingFiles.reduce((sum, f) => {
+      if (f.status === 'uploaded') return sum + f.file.size;
+      return sum + (f.bytesUploaded || 0);
+    }, 0);
+
+    // Average speed from currently uploading files
+    const currentlyUploading = uploadingFiles.filter(f => f.status === 'uploading' && f.uploadSpeed > 0);
+    const averageSpeed = currentlyUploading.length > 0
+      ? currentlyUploading.reduce((sum, f) => sum + f.uploadSpeed, 0) / currentlyUploading.length
+      : 0;
+
+    return { totalBytes, uploadedBytes, averageSpeed };
+  };
+
   const calculateETA = (): string => {
-    if (!uploadStats || uploadStats.averageSpeed <= 0) return '--';
-    const remainingBytes = uploadStats.totalBytes - uploadStats.uploadedBytes;
-    const remainingMs = (remainingBytes / uploadStats.averageSpeed) * 1000;
+    const { totalBytes, uploadedBytes, averageSpeed } = getUploadProgress();
+    if (averageSpeed <= 0 || totalBytes === 0) return '--';
+    const remainingBytes = totalBytes - uploadedBytes;
+    if (remainingBytes <= 0) return '0s';
+    const remainingMs = (remainingBytes / averageSpeed) * 1000;
     return formatDuration(remainingMs);
   };
 
@@ -1002,27 +1018,34 @@ export default function BulkUploadPage() {
                     </div>
 
                     {/* Upload Progress Bar */}
-                    {uploading && uploadStats && (
-                      <div className="mb-4 p-4 bg-primary-50 rounded-xl">
-                        <div className="flex items-center justify-between text-sm mb-2">
-                          <span className="text-primary-700 font-medium">
-                            Uploading {uploadStats.completedFiles}/{uploadStats.totalFiles} files
-                          </span>
-                          <span className="text-primary-600">
-                            ETA: {calculateETA()} • {formatBytes(uploadStats.averageSpeed)}/s
-                          </span>
+                    {uploading && (() => {
+                      const progress = getUploadProgress();
+                      const completedCount = filesToUpload.filter(f => f.status === 'uploaded').length;
+                      const totalCount = filesToUpload.filter(f => f.status === 'uploading' || f.status === 'uploaded' || f.status === 'pending').length;
+                      const percentComplete = progress.totalBytes > 0 ? (progress.uploadedBytes / progress.totalBytes) * 100 : 0;
+                      
+                      return (
+                        <div className="mb-4 p-4 bg-primary-50 rounded-xl">
+                          <div className="flex items-center justify-between text-sm mb-2">
+                            <span className="text-primary-700 font-medium">
+                              Uploading {completedCount}/{totalCount} files
+                            </span>
+                            <span className="text-primary-600">
+                              ETA: {calculateETA()} • {formatBytes(progress.averageSpeed)}/s
+                            </span>
+                          </div>
+                          <div className="h-2 bg-primary-200 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-primary-600 transition-all duration-300"
+                              style={{ width: `${Math.min(percentComplete, 100)}%` }}
+                            />
+                          </div>
+                          <div className="text-xs text-primary-600 mt-1 text-right">
+                            {formatBytes(progress.uploadedBytes)} / {formatBytes(progress.totalBytes)}
+                          </div>
                         </div>
-                        <div className="h-2 bg-primary-200 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-primary-600 transition-all duration-300"
-                            style={{ width: `${(uploadStats.uploadedBytes / uploadStats.totalBytes) * 100}%` }}
-                          />
-                        </div>
-                        <div className="text-xs text-primary-600 mt-1 text-right">
-                          {formatBytes(uploadStats.uploadedBytes)} / {formatBytes(uploadStats.totalBytes)}
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* File List */}
                     <div className="space-y-2 max-h-80 overflow-y-auto">
