@@ -731,6 +731,13 @@ export default function BulkUploadPage() {
                             <div className="text-2xl font-bold text-emerald-600">{batch.processedCount}</div>
                             <div className="text-xs text-surface-500">Complete</div>
                           </div>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); deleteBatch(batch.id); }}
+                            className="p-2 text-surface-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete batch"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
                           <ChevronRight className="w-5 h-5 text-surface-400" />
                         </div>
                       </div>
