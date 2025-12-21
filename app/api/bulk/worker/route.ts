@@ -7,7 +7,7 @@ import {
   updateSubmission, 
   updateBatchStats,
   getBatch,
-  requeue
+  getQueueLength
 } from '@/lib/batch-store';
 import { getPresignedDownloadUrl } from '@/lib/r2';
 import { analyzeWithClaude, isClaudeConfigured, generateQuestionsWithClaude, evaluateWithClaude } from '@/lib/claude';
@@ -97,14 +97,15 @@ async function transcribeFromUrl(url: string): Promise<{
   return { transcript, segments };
 }
 
-async function processSubmission(submissionId: string): Promise<void> {
+async function processSubmission(submissionId: string, batchId: string): Promise<void> {
+  const startTime = Date.now();
   const submission = await getSubmission(submissionId);
   if (!submission) {
     console.error(`[Worker] Submission ${submissionId} not found`);
     return;
   }
 
-  console.log(`[Worker] Processing submission ${submissionId} (${submission.originalFilename})`);
+  console.log(`[Worker] START batchId=${batchId} submissionId=${submissionId} file=${submission.originalFilename}`);
 
   try {
     // Update status to transcribing
@@ -117,8 +118,10 @@ async function processSubmission(submissionId: string): Promise<void> {
     const downloadUrl = await getPresignedDownloadUrl(submission.fileKey);
 
     // Transcribe using URL
-    console.log(`[Worker] Transcribing ${submission.originalFilename}...`);
+    console.log(`[Worker] Transcribing ${submissionId}...`);
+    const transcribeStart = Date.now();
     const { transcript, segments } = await transcribeFromUrl(downloadUrl);
+    console.log(`[Worker] Transcription complete for ${submissionId} in ${Date.now() - transcribeStart}ms`);
 
     if (!transcript || transcript.trim().length < 10) {
       throw new Error('Transcription returned empty or too short');
@@ -137,44 +140,38 @@ async function processSubmission(submissionId: string): Promise<void> {
 
     // Run analysis pipeline (if Claude is configured)
     if (isClaudeConfigured()) {
-      console.log(`[Worker] Analyzing ${submission.originalFilename}...`);
+      console.log(`[Worker] Analyzing ${submissionId}...`);
+      const analyzeStart = Date.now();
       
-      // 1. Analyze transcript
+      // 1. Analyze transcript (required for other steps)
       const analysis = await analyzeWithClaude(transcript);
+      console.log(`[Worker] Analysis complete for ${submissionId} in ${Date.now() - analyzeStart}ms`);
       
-      // 2. Evaluate with rubric
-      const rubricEvaluation = await evaluateWithClaude(
-        transcript,
-        rubricCriteria,
-        undefined, // customCriteria
-        analysis
-      );
-
-      // 3. Generate questions (limited set)
-      const questions = await generateQuestionsWithClaude(
-        transcript, 
-        analysis, 
-        undefined, // no slide content
-        { maxQuestions: config.limits.defaultMaxQuestions }
-      );
-
-      // 4. Verify key claims
+      // 2. Run rubric eval, questions, and verification in PARALLEL
       const claims = analysis.keyClaims.slice(0, config.limits.maxClaimsForVerification).map(c => c.claim);
-      let verificationFindings: Array<{ id: string; statement: string; status: string; explanation: string }> = [];
       
-      if (claims.length > 0) {
-        try {
-          const findings = await verifyWithClaude(transcript, claims);
-          verificationFindings = findings.map(f => ({
-            id: f.id,
-            statement: f.statement,
-            status: f.verdict, // verdict maps to status in our internal model
-            explanation: f.explanation,
-          }));
-        } catch (e) {
-          console.warn(`[Worker] Verification failed for ${submissionId}:`, e);
-        }
-      }
+      console.log(`[Worker] Starting parallel processing for ${submissionId}: rubric, questions, verification`);
+      const parallelStart = Date.now();
+      
+      const [rubricResult, questionsResult, verifyResult] = await Promise.allSettled([
+        evaluateWithClaude(transcript, rubricCriteria, undefined, analysis),
+        generateQuestionsWithClaude(transcript, analysis, undefined, { maxQuestions: config.limits.defaultMaxQuestions }),
+        claims.length > 0 ? verifyWithClaude(transcript, claims) : Promise.resolve([]),
+      ]);
+
+      console.log(`[Worker] Parallel processing complete for ${submissionId} in ${Date.now() - parallelStart}ms`);
+
+      // Extract results
+      const rubricEvaluation = rubricResult.status === 'fulfilled' ? rubricResult.value : null;
+      const questions = questionsResult.status === 'fulfilled' ? questionsResult.value : [];
+      const findings = verifyResult.status === 'fulfilled' ? verifyResult.value : [];
+
+      const verificationFindings = findings.map(f => ({
+        id: f.id,
+        statement: f.statement,
+        status: f.verdict,
+        explanation: f.explanation,
+      }));
 
       // Update submission with results
       await updateSubmission(submissionId, {
@@ -195,13 +192,12 @@ async function processSubmission(submissionId: string): Promise<void> {
           })),
           overallStrength: analysis.overallStrength,
         },
-        rubricEvaluation: {
+        rubricEvaluation: rubricEvaluation ? {
           overallScore: rubricEvaluation.overallScore,
           criteriaBreakdown: rubricEvaluation.criteriaBreakdown,
-          // Extract strengths/improvements from criteria breakdown or use empty arrays
           strengths: rubricEvaluation.criteriaBreakdown?.flatMap(c => c.strengths || []) || [],
           improvements: rubricEvaluation.criteriaBreakdown?.flatMap(c => c.improvements || []) || [],
-        },
+        } : undefined,
         questions: questions.slice(0, 8).map(q => ({
           id: q.id,
           question: q.question,
@@ -219,13 +215,15 @@ async function processSubmission(submissionId: string): Promise<void> {
       });
     }
 
-    console.log(`[Worker] Completed processing ${submissionId}`);
+    const totalTime = Date.now() - startTime;
+    console.log(`[Worker] COMPLETE batchId=${batchId} submissionId=${submissionId} duration=${totalTime}ms`);
 
     // Update batch stats
     await updateBatchStats(submission.batchId);
 
   } catch (error) {
-    console.error(`[Worker] Error processing ${submissionId}:`, error);
+    const totalTime = Date.now() - startTime;
+    console.error(`[Worker] FAILED batchId=${batchId} submissionId=${submissionId} duration=${totalTime}ms error=${error instanceof Error ? error.message : 'Unknown'}`);
     
     await updateSubmission(submissionId, {
       status: 'failed',
@@ -239,8 +237,10 @@ async function processSubmission(submissionId: string): Promise<void> {
 }
 
 // POST /api/bulk/worker - Process queued submissions
-// This can be triggered by external cron services or manually
+// This can be triggered by external cron services, process-now endpoint, or manually
 export async function POST(request: NextRequest) {
+  const workerStartTime = Date.now();
+  
   try {
     // Verify cron secret for security (supports header or query param)
     const authHeader = request.headers.get('authorization');
@@ -248,17 +248,30 @@ export async function POST(request: NextRequest) {
     const querySecret = searchParams.get('secret');
     const cronSecret = process.env.CRON_SECRET;
     
-    if (cronSecret) {
+    // Auth check logging
+    console.log(`[Worker] Auth check: cronSecret=${cronSecret ? 'SET' : 'NOT_SET'}, headerAuth=${authHeader ? 'present' : 'missing'}, querySecret=${querySecret ? 'present' : 'missing'}`);
+    
+    if (cronSecret && cronSecret.length > 0) {
       const headerMatch = authHeader === `Bearer ${cronSecret}`;
       const queryMatch = querySecret === cronSecret;
       
       if (!headerMatch && !queryMatch) {
-        // Allow manual triggers without auth in development only
+        // In production, require auth when CRON_SECRET is configured
         if (process.env.NODE_ENV === 'production') {
+          console.warn('[Worker] Unauthorized request - secret mismatch');
           return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        } else {
+          console.log('[Worker] Skipping auth in development');
         }
+      } else {
+        console.log('[Worker] Auth verified successfully');
       }
+    } else {
+      console.log('[Worker] No CRON_SECRET configured - auth disabled');
     }
+
+    const queueLength = await getQueueLength();
+    console.log(`[Worker] Starting worker run. Queue length: ${queueLength}, Max per run: ${MAX_SUBMISSIONS_PER_RUN}`);
 
     const processed: string[] = [];
     const errors: Array<{ id: string; error: string }> = [];
@@ -266,11 +279,16 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < MAX_SUBMISSIONS_PER_RUN; i++) {
       const submissionId = await getNextQueuedSubmission();
       if (!submissionId) {
-        break; // Queue is empty
+        console.log('[Worker] Queue empty, stopping');
+        break;
       }
 
+      // Get submission to find batchId for logging
+      const submission = await getSubmission(submissionId);
+      const batchId = submission?.batchId || 'unknown';
+
       try {
-        await processSubmission(submissionId);
+        await processSubmission(submissionId, batchId);
         processed.push(submissionId);
       } catch (error) {
         errors.push({
@@ -280,14 +298,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const workerDuration = Date.now() - workerStartTime;
+    console.log(`[Worker] Worker run complete. Processed: ${processed.length}, Errors: ${errors.length}, Duration: ${workerDuration}ms`);
+
     return NextResponse.json({
       success: true,
       processed: processed.length,
       processedIds: processed,
       errors,
+      duration: workerDuration,
     });
   } catch (error) {
-    console.error('[Worker] Error:', error);
+    console.error('[Worker] Fatal error:', error);
     return NextResponse.json(
       { error: 'Worker failed', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
@@ -298,14 +320,15 @@ export async function POST(request: NextRequest) {
 // GET /api/bulk/worker - Check worker status (for debugging)
 export async function GET() {
   try {
-    const { getQueueLength } = await import('@/lib/batch-store');
     const queueLength = await getQueueLength();
     
     return NextResponse.json({
       success: true,
       queueLength,
+      maxPerRun: MAX_SUBMISSIONS_PER_RUN,
       deepgramConfigured: !!process.env.DEEPGRAM_API_KEY,
       claudeConfigured: isClaudeConfigured(),
+      cronSecretConfigured: !!process.env.CRON_SECRET,
     });
   } catch (error) {
     return NextResponse.json(
@@ -314,4 +337,3 @@ export async function GET() {
     );
   }
 }
-
