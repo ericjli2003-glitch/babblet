@@ -1,21 +1,164 @@
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // Allow up to 60 seconds for processing
 
 import { NextResponse } from 'next/server';
-import { getQueueLength } from '@/lib/batch-store';
+import { 
+  getQueueLength, 
+  getNextQueuedSubmission, 
+  getSubmission, 
+  updateSubmission, 
+  updateBatchStats, 
+  getBatch 
+} from '@/lib/batch-store';
+import { getPresignedDownloadUrl, isR2Configured } from '@/lib/r2';
+import { analyzeWithClaude, isClaudeConfigured, generateQuestionsWithClaude, evaluateWithClaude } from '@/lib/claude';
+import { verifyWithClaude } from '@/lib/verify';
+import { createClient } from '@deepgram/sdk';
+import { config } from '@/lib/config';
 
-// How many worker instances to trigger concurrently
-const DEFAULT_FANOUT = 3;
+// Maximum submissions to process per request
+const MAX_PROCESS_PER_REQUEST = 2;
 
-// POST /api/bulk/process-now - Trigger workers from browser (no auth needed)
-// This endpoint can be safely called from the frontend
+// Lazy Deepgram client
+let deepgramClient: ReturnType<typeof createClient> | null = null;
+
+function getDeepgram() {
+  if (!deepgramClient) {
+    const apiKey = process.env.DEEPGRAM_API_KEY;
+    if (!apiKey) throw new Error('DEEPGRAM_API_KEY not configured');
+    deepgramClient = createClient(apiKey);
+  }
+  return deepgramClient;
+}
+
+async function transcribeFromUrl(url: string): Promise<{
+  transcript: string;
+  segments: Array<{ id: string; text: string; timestamp: number; speaker?: string }>;
+}> {
+  const deepgram = getDeepgram();
+  
+  const { result, error } = await deepgram.listen.prerecorded.transcribeUrl(
+    { url },
+    { model: 'nova-2', language: 'en', smart_format: true, punctuate: true, diarize: true, paragraphs: true }
+  );
+
+  if (error) throw new Error(`Deepgram error: ${error.message}`);
+
+  const channel = result?.results?.channels?.[0];
+  const alternative = channel?.alternatives?.[0];
+  if (!alternative) return { transcript: '', segments: [] };
+
+  const transcript = alternative.transcript || '';
+  const segments: Array<{ id: string; text: string; timestamp: number; speaker?: string }> = [];
+  
+  if (alternative.paragraphs?.paragraphs) {
+    alternative.paragraphs.paragraphs.forEach((para, i) => {
+      (para.sentences || []).forEach((sent, j) => {
+        segments.push({
+          id: `seg-${i}-${j}`,
+          text: sent.text || '',
+          timestamp: Math.round((sent.start || 0) * 1000),
+          speaker: para.speaker !== undefined ? `Speaker ${para.speaker + 1}` : undefined,
+        });
+      });
+    });
+  }
+
+  return { transcript, segments };
+}
+
+async function processSubmission(submissionId: string): Promise<{ success: boolean; error?: string }> {
+  const startTime = Date.now();
+  const submission = await getSubmission(submissionId);
+  
+  if (!submission) {
+    console.error(`[ProcessNow] Submission ${submissionId} not found`);
+    return { success: false, error: 'Submission not found' };
+  }
+
+  console.log(`[ProcessNow] START submissionId=${submissionId} file=${submission.originalFilename}`);
+
+  try {
+    await updateSubmission(submissionId, { status: 'transcribing', startedAt: Date.now() });
+
+    // Transcribe
+    const downloadUrl = await getPresignedDownloadUrl(submission.fileKey);
+    console.log(`[ProcessNow] Transcribing ${submissionId}...`);
+    const { transcript, segments } = await transcribeFromUrl(downloadUrl);
+
+    if (!transcript || transcript.trim().length < 10) {
+      throw new Error('Transcription returned empty or too short');
+    }
+
+    await updateSubmission(submissionId, { transcript, transcriptSegments: segments, status: 'analyzing' });
+
+    // Analyze with Claude
+    if (isClaudeConfigured()) {
+      console.log(`[ProcessNow] Analyzing ${submissionId}...`);
+      
+      const batch = await getBatch(submission.batchId);
+      const analysis = await analyzeWithClaude(transcript);
+      
+      // Parallel: rubric, questions, verify
+      const claims = analysis.keyClaims.slice(0, config.limits.maxClaimsForVerification).map(c => c.claim);
+      
+      const [rubricResult, questionsResult, verifyResult] = await Promise.allSettled([
+        evaluateWithClaude(transcript, batch?.rubricCriteria, undefined, analysis),
+        generateQuestionsWithClaude(transcript, analysis, undefined, { maxQuestions: config.limits.defaultMaxQuestions }),
+        claims.length > 0 ? verifyWithClaude(transcript, claims) : Promise.resolve([]),
+      ]);
+
+      const rubricEvaluation = rubricResult.status === 'fulfilled' ? rubricResult.value : null;
+      const questions = questionsResult.status === 'fulfilled' ? questionsResult.value : [];
+      const findings = verifyResult.status === 'fulfilled' ? verifyResult.value : [];
+
+      await updateSubmission(submissionId, {
+        analysis: {
+          keyClaims: analysis.keyClaims.map(c => ({ id: c.id, claim: c.claim, evidence: c.evidence })),
+          logicalGaps: analysis.logicalGaps.map(g => ({ id: g.id, description: g.description, severity: g.severity })),
+          missingEvidence: analysis.missingEvidence.map(e => ({ id: e.id, description: e.description })),
+          overallStrength: analysis.overallStrength,
+        },
+        rubricEvaluation: rubricEvaluation ? {
+          overallScore: rubricEvaluation.overallScore,
+          criteriaBreakdown: rubricEvaluation.criteriaBreakdown,
+          strengths: rubricEvaluation.criteriaBreakdown?.flatMap(c => c.strengths || []) || [],
+          improvements: rubricEvaluation.criteriaBreakdown?.flatMap(c => c.improvements || []) || [],
+        } : undefined,
+        questions: questions.slice(0, 8).map(q => ({ id: q.id, question: q.question, category: q.category })),
+        verificationFindings: findings.map(f => ({ id: f.id, statement: f.statement, status: f.verdict, explanation: f.explanation })),
+        status: 'ready',
+        completedAt: Date.now(),
+      });
+    } else {
+      await updateSubmission(submissionId, { status: 'ready', completedAt: Date.now() });
+    }
+
+    console.log(`[ProcessNow] COMPLETE submissionId=${submissionId} duration=${Date.now() - startTime}ms`);
+    await updateBatchStats(submission.batchId);
+    return { success: true };
+
+  } catch (error) {
+    console.error(`[ProcessNow] FAILED submissionId=${submissionId} error=${error instanceof Error ? error.message : 'Unknown'}`);
+    await updateSubmission(submissionId, {
+      status: 'failed',
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      completedAt: Date.now(),
+    });
+    await updateBatchStats(submission.batchId);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+// POST /api/bulk/process-now - Process submissions directly (no auth needed)
 export async function POST() {
+  const startTime = Date.now();
+  
   try {
     const queueLength = await getQueueLength();
-    
     console.log(`[ProcessNow] Queue length: ${queueLength}`);
     
     if (queueLength === 0) {
-      console.log('[ProcessNow] Queue is empty, nothing to process');
       return NextResponse.json({ 
         success: true, 
         message: 'Queue is empty, nothing to process',
@@ -23,67 +166,59 @@ export async function POST() {
       });
     }
 
-    // Determine base URL for internal API calls
-    let baseUrl: string;
-    if (process.env.NEXT_PUBLIC_BASE_URL) {
-      baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
-    } else if (process.env.VERCEL_URL) {
-      baseUrl = `https://${process.env.VERCEL_URL}`;
-    } else {
-      baseUrl = 'http://localhost:3000';
+    // Check dependencies
+    if (!isR2Configured()) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'R2 storage not configured' 
+      }, { status: 500 });
     }
 
-    const secret = process.env.CRON_SECRET || '';
-    const fanout = Math.min(queueLength, Number(process.env.BULK_WORKER_FANOUT) || DEFAULT_FANOUT);
+    if (!process.env.DEEPGRAM_API_KEY) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'DEEPGRAM_API_KEY not configured' 
+      }, { status: 500 });
+    }
 
-    console.log(`[ProcessNow] Triggering ${fanout} workers at ${baseUrl}, secret=${secret ? 'configured' : 'not-set'}`);
+    // Process submissions directly
+    const processed: string[] = [];
+    const errors: Array<{ id: string; error: string }> = [];
 
-    // Fire workers with proper auth
-    const workerUrl = secret 
-      ? `${baseUrl}/api/bulk/worker?secret=${encodeURIComponent(secret)}`
-      : `${baseUrl}/api/bulk/worker`;
+    for (let i = 0; i < MAX_PROCESS_PER_REQUEST; i++) {
+      const submissionId = await getNextQueuedSubmission();
+      if (!submissionId) break;
 
-    const workerPromises = Array.from({ length: fanout }).map(async (_, i) => {
-      try {
-        console.log(`[ProcessNow] Triggering worker ${i + 1}/${fanout}`);
-        const response = await fetch(workerUrl, { method: 'POST' });
-        const data = await response.json();
-        console.log(`[ProcessNow] Worker ${i + 1} response:`, { status: response.status, processed: data.processed });
-        return { success: response.ok, data };
-      } catch (err) {
-        console.error(`[ProcessNow] Worker ${i + 1} failed:`, err);
-        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+      const result = await processSubmission(submissionId);
+      if (result.success) {
+        processed.push(submissionId);
+      } else {
+        errors.push({ id: submissionId, error: result.error || 'Unknown' });
       }
-    });
+    }
 
-    // Wait for all workers to at least start (with timeout)
-    const results = await Promise.race([
-      Promise.allSettled(workerPromises),
-      new Promise<PromiseSettledResult<{ success: boolean }>[]>(resolve => 
-        setTimeout(() => resolve([]), 5000) // 5 second timeout
-      ),
-    ]);
-
-    const successCount = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
-    console.log(`[ProcessNow] Triggered ${successCount}/${fanout} workers successfully`);
+    const duration = Date.now() - startTime;
+    console.log(`[ProcessNow] Completed. Processed: ${processed.length}, Errors: ${errors.length}, Duration: ${duration}ms`);
 
     return NextResponse.json({
       success: true,
-      message: `Triggered ${fanout} workers for ${queueLength} queued submissions`,
-      queueLength,
-      fanout,
-      workersStarted: successCount,
+      message: `Processed ${processed.length} submissions`,
+      processed: processed.length,
+      processedIds: processed,
+      errors,
+      duration,
+      remainingInQueue: await getQueueLength(),
     });
   } catch (error) {
-    console.error('[ProcessNow] Error:', error);
+    console.error('[ProcessNow] Fatal error:', error);
     return NextResponse.json(
-      { error: 'Failed to trigger processing', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Processing failed', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
 }
 
-// GET /api/bulk/process-now - Check configuration (for debugging)
+// GET /api/bulk/process-now - Check configuration
 export async function GET() {
   try {
     const queueLength = await getQueueLength();
@@ -91,14 +226,12 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       queueLength,
-      cronSecretConfigured: !!process.env.CRON_SECRET,
-      baseUrl: process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL || 'localhost:3000',
-      fanout: Number(process.env.BULK_WORKER_FANOUT) || DEFAULT_FANOUT,
+      maxPerRequest: MAX_PROCESS_PER_REQUEST,
+      r2Configured: isR2Configured(),
+      deepgramConfigured: !!process.env.DEEPGRAM_API_KEY,
+      claudeConfigured: isClaudeConfigured(),
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to check status' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to check status' }, { status: 500 });
   }
 }
