@@ -350,9 +350,19 @@ export default function BulkUploadPage() {
 
   const triggerWorker = async () => {
     try {
-      await fetch('/api/bulk/worker', { method: 'POST' });
+      // Use process-now endpoint which handles auth internally
+      const res = await fetch('/api/bulk/process-now', { method: 'POST' });
+      const data = await res.json();
+      console.log('[Bulk] Processing triggered:', data);
+      
       if (selectedBatchId) {
-        setTimeout(() => loadBatchDetails(selectedBatchId), 1000);
+        // Poll for updates more frequently while processing
+        const pollInterval = setInterval(() => {
+          loadBatchDetails(selectedBatchId);
+        }, 2000);
+        
+        // Stop polling after 2 minutes
+        setTimeout(() => clearInterval(pollInterval), 120000);
       }
     } catch (error) {
       console.error('Failed to trigger worker:', error);
@@ -398,9 +408,9 @@ export default function BulkUploadPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
-              <Link href="/live" className="flex items-center gap-2 text-surface-600 hover:text-surface-900">
+              <Link href="/" className="flex items-center gap-2 text-surface-600 hover:text-surface-900">
                 <ArrowLeft className="w-5 h-5" />
-                <span className="text-sm">Back to Dashboard</span>
+                <span className="text-sm">Back to Home</span>
               </Link>
               <div className="h-6 w-px bg-surface-200" />
               <h1 className="text-xl font-bold bg-gradient-to-r from-primary-600 to-violet-600 bg-clip-text text-transparent">
