@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getPresignedUploadUrl, generateFileKey, isR2Configured } from '@/lib/r2';
 import { v4 as uuidv4 } from 'uuid';

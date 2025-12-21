@@ -330,6 +330,8 @@ export async function updateBatchStats(batchId: string): Promise<void> {
   const allDone = processedCount + failedCount === submissions.length && submissions.length > 0;
   
   await updateBatch(batchId, {
+    // Sync totalSubmissions with actual count to prevent mismatches
+    totalSubmissions: submissions.length,
     processedCount,
     failedCount,
     status: allDone ? 'completed' : 'processing',

@@ -408,10 +408,20 @@ export default function BulkUploadPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
-              <Link href="/" className="flex items-center gap-2 text-surface-600 hover:text-surface-900">
-                <ArrowLeft className="w-5 h-5" />
-                <span className="text-sm">Back to Home</span>
-              </Link>
+              {view === 'batch' ? (
+                <button 
+                  onClick={() => { setView('list'); setSelectedBatchId(null); }}
+                  className="flex items-center gap-2 text-surface-600 hover:text-surface-900"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                  <span className="text-sm">Back to Batches</span>
+                </button>
+              ) : (
+                <Link href="/" className="flex items-center gap-2 text-surface-600 hover:text-surface-900">
+                  <ArrowLeft className="w-5 h-5" />
+                  <span className="text-sm">Back to Home</span>
+                </Link>
+              )}
               <div className="h-6 w-px bg-surface-200" />
               <h1 className="text-xl font-bold bg-gradient-to-r from-primary-600 to-violet-600 bg-clip-text text-transparent">
                 Bulk Upload
