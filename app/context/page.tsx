@@ -299,31 +299,36 @@ export default function CourseContextPage() {
     const lines = rubricText.split('\n').filter(l => l.trim());
     const criteria: RubricCriterion[] = [];
     
-    // Use a simple object type instead of Partial<RubricCriterion>
-    let currentCriterion: { name: string; description: string; weight: number } | null = null;
+    type CriterionDraft = { name: string; description: string; weight: number };
+    let currentCriterion: CriterionDraft | null = null;
 
-    lines.forEach((line) => {
+    // Helper to push current criterion to list
+    const pushCurrent = () => {
+      if (currentCriterion !== null) {
+        criteria.push({
+          id: `criterion-${criteria.length + 1}`,
+          name: currentCriterion.name,
+          description: currentCriterion.description || '',
+          weight: currentCriterion.weight || 1,
+        });
+      }
+    };
+
+    for (const line of lines) {
       const trimmed = line.trim();
       
       // Check for criterion header patterns
       const headerMatch = trimmed.match(/^(?:\d+[\.\)]\s*)?(.+?)(?:\s*[-–:]\s*(\d+)\s*(?:pts?|points?|%)?)?$/i);
       
       if (headerMatch && trimmed.length < 100) {
-        // Looks like a criterion name
-        if (currentCriterion && currentCriterion.name) {
-          criteria.push({
-            id: `criterion-${criteria.length + 1}`,
-            name: currentCriterion.name,
-            description: currentCriterion.description || '',
-            weight: currentCriterion.weight || 1,
-          });
-        }
+        // Looks like a criterion name - push previous if exists
+        pushCurrent();
         currentCriterion = {
           name: headerMatch[1].trim(),
           weight: headerMatch[2] ? parseInt(headerMatch[2]) : 1,
           description: '',
         };
-      } else if (currentCriterion) {
+      } else if (currentCriterion !== null) {
         // Add to description
         currentCriterion.description = currentCriterion.description 
           ? `${currentCriterion.description} ${trimmed}`
@@ -332,17 +337,10 @@ export default function CourseContextPage() {
         // First line, treat as first criterion
         currentCriterion = { name: trimmed, description: '', weight: 1 };
       }
-    });
+    }
 
     // Add last criterion
-    if (currentCriterion && currentCriterion.name) {
-      criteria.push({
-        id: `criterion-${criteria.length + 1}`,
-        name: currentCriterion.name,
-        description: currentCriterion.description || '',
-        weight: currentCriterion.weight || 1,
-      });
-    }
+    pushCurrent();
 
     if (criteria.length > 0) {
       setEditedCriteria(criteria);
