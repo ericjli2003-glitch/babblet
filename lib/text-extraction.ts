@@ -4,13 +4,25 @@
 // ============================================
 
 import mammoth from 'mammoth';
+import { extractText as extractPdfText } from 'unpdf';
 
-// pdf-parse uses CommonJS exports, need to handle dynamically
+// Serverless-compatible PDF parsing using unpdf
 async function parsePDF(buffer: Buffer): Promise<{ text: string; numpages: number }> {
-  // Dynamic import to handle CommonJS module
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pdfParse = await import('pdf-parse').then((m: any) => m.default || m);
-  return pdfParse(buffer);
+  try {
+    // Convert Buffer to Uint8Array for unpdf
+    const uint8Array = new Uint8Array(buffer);
+    
+    // Use unpdf which is designed for serverless environments
+    const { text, totalPages } = await extractPdfText(uint8Array, { mergePages: true });
+    
+    return { 
+      text: typeof text === 'string' ? text : text.join('\n'), 
+      numpages: totalPages 
+    };
+  } catch (error) {
+    console.error('unpdf extraction failed:', error);
+    throw error;
+  }
 }
 
 export type SupportedFileType = 'pdf' | 'docx' | 'txt' | 'md' | 'unknown';
