@@ -59,6 +59,13 @@ export interface Submission {
       criterion: string;
       score: number;
       feedback: string;
+      // Criterion-level citations (Stage 4)
+      citations?: Array<{
+        chunkId: string;
+        documentName: string;
+        snippet: string;
+        relevanceScore?: number;
+      }>;
     }>;
     strengths: string[];
     improvements: string[];

@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Plus, BookOpen, FileText, ClipboardList, Save,
   Trash2, ChevronRight, Loader2, CheckCircle, Camera, Edit3,
-  GraduationCap, Calendar, Hash
+  GraduationCap, Calendar, Hash, Upload, File
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -108,6 +108,9 @@ export default function CourseContextPage() {
   const [newDocType, setNewDocType] = useState<string>('lecture_notes');
   const [newDocText, setNewDocText] = useState('');
   const [addingDocument, setAddingDocument] = useState(false);
+  const [uploadMode, setUploadMode] = useState<'paste' | 'file'>('file');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ============================================
   // Load Courses
@@ -410,34 +413,79 @@ export default function CourseContextPage() {
   // ============================================
 
   const addDocument = async () => {
-    if (!selectedCourse || !newDocName.trim() || !newDocText.trim()) return;
+    if (!selectedCourse) return;
+
+    // Validate based on mode
+    if (uploadMode === 'file' && !selectedFile) return;
+    if (uploadMode === 'paste' && (!newDocName.trim() || !newDocText.trim())) return;
 
     try {
       setAddingDocument(true);
-      const res = await fetch('/api/context/documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          courseId: selectedCourse.id,
-          assignmentId: selectedAssignment?.id,
-          name: newDocName.trim(),
-          type: newDocType,
-          rawText: newDocText.trim(),
-        }),
-      });
-      const data = await res.json();
+
+      let data;
+
+      if (uploadMode === 'file' && selectedFile) {
+        // File upload mode - use FormData
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('courseId', selectedCourse.id);
+        if (selectedAssignment) {
+          formData.append('assignmentId', selectedAssignment.id);
+        }
+        formData.append('type', newDocType);
+
+        const res = await fetch('/api/context/upload-document', {
+          method: 'POST',
+          body: formData,
+        });
+        data = await res.json();
+      } else {
+        // Paste mode
+        const res = await fetch('/api/context/documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            courseId: selectedCourse.id,
+            assignmentId: selectedAssignment?.id,
+            name: newDocName.trim(),
+            type: newDocType,
+            rawText: newDocText.trim(),
+          }),
+        });
+        data = await res.json();
+      }
+
       if (data.success) {
         setDocuments(prev => [data.document, ...prev]);
         setShowAddDocument(false);
         setNewDocName('');
         setNewDocType('lecture_notes');
         setNewDocText('');
-        alert(`Document added! ${data.chunkCount} chunks created with embeddings.`);
+        setSelectedFile(null);
+        const msg = uploadMode === 'file'
+          ? `Document uploaded! Extracted ${data.document.wordCount || 0} words, created ${data.chunkCount} chunks.`
+          : `Document added! ${data.chunkCount} chunks created with embeddings.`;
+        alert(msg);
+      } else {
+        alert(`Error: ${data.error}`);
       }
     } catch (error) {
       console.error('Failed to add document:', error);
+      alert('Failed to add document. Please try again.');
     } finally {
       setAddingDocument(false);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      // Auto-set doc name from filename if empty
+      if (!newDocName) {
+        const nameWithoutExt = file.name.replace(/\.[^.]+$/, '');
+        setNewDocName(nameWithoutExt);
+      }
     }
   };
 
@@ -956,13 +1004,79 @@ Presentation within time limits"
                 {/* Add Document Form */}
                 {showAddDocument && (
                   <div className="p-4 bg-violet-50 rounded-xl border border-violet-200 mb-4">
-                    <div className="space-y-3">
+                    <div className="space-y-4">
+                      {/* Mode Toggle */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setUploadMode('file')}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${
+                            uploadMode === 'file'
+                              ? 'bg-violet-600 text-white'
+                              : 'bg-white text-surface-600 border border-surface-300'
+                          }`}
+                        >
+                          <Upload className="w-4 h-4" />
+                          Upload File
+                        </button>
+                        <button
+                          onClick={() => setUploadMode('paste')}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${
+                            uploadMode === 'paste'
+                              ? 'bg-violet-600 text-white'
+                              : 'bg-white text-surface-600 border border-surface-300'
+                          }`}
+                        >
+                          <FileText className="w-4 h-4" />
+                          Paste Text
+                        </button>
+                      </div>
+
+                      {/* File Upload Mode */}
+                      {uploadMode === 'file' && (
+                        <div>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".pdf,.docx,.doc,.txt,.md"
+                            onChange={handleFileSelect}
+                            className="hidden"
+                          />
+                          <div
+                            onClick={() => fileInputRef.current?.click()}
+                            className="border-2 border-dashed border-violet-300 rounded-xl p-6 text-center cursor-pointer hover:border-violet-500 hover:bg-violet-100/50 transition-colors"
+                          >
+                            {selectedFile ? (
+                              <div className="flex items-center justify-center gap-3">
+                                <File className="w-8 h-8 text-violet-500" />
+                                <div className="text-left">
+                                  <p className="font-medium text-surface-900">{selectedFile.name}</p>
+                                  <p className="text-sm text-surface-500">
+                                    {(selectedFile.size / 1024).toFixed(1)} KB • Click to change
+                                  </p>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <Upload className="w-8 h-8 text-violet-400 mx-auto mb-2" />
+                                <p className="text-sm text-surface-600">
+                                  Click to upload <span className="font-medium">PDF, DOCX, TXT, or MD</span>
+                                </p>
+                                <p className="text-xs text-surface-500 mt-1">
+                                  Text will be automatically extracted
+                                </p>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Document Name & Type (shown for both modes) */}
                       <div className="flex gap-3">
                         <input
                           type="text"
                           value={newDocName}
                           onChange={(e) => setNewDocName(e.target.value)}
-                          placeholder="Document name"
+                          placeholder={uploadMode === 'file' ? 'Document name (auto-filled from file)' : 'Document name'}
                           className="flex-1 px-3 py-2 rounded-lg border border-violet-300 focus:ring-2 focus:ring-violet-500 text-sm"
                         />
                         <select
@@ -978,26 +1092,50 @@ Presentation within time limits"
                           <option value="other">Other</option>
                         </select>
                       </div>
-                      <textarea
-                        value={newDocText}
-                        onChange={(e) => setNewDocText(e.target.value)}
-                        placeholder="Paste document content here..."
-                        rows={6}
-                        className="w-full px-3 py-2 rounded-lg border border-violet-300 focus:ring-2 focus:ring-violet-500 text-sm font-mono"
-                      />
+
+                      {/* Text Paste Mode */}
+                      {uploadMode === 'paste' && (
+                        <textarea
+                          value={newDocText}
+                          onChange={(e) => setNewDocText(e.target.value)}
+                          placeholder="Paste document content here..."
+                          rows={6}
+                          className="w-full px-3 py-2 rounded-lg border border-violet-300 focus:ring-2 focus:ring-violet-500 text-sm font-mono"
+                        />
+                      )}
+
                       <div className="flex justify-end gap-2">
                         <button
-                          onClick={() => setShowAddDocument(false)}
+                          onClick={() => {
+                            setShowAddDocument(false);
+                            setSelectedFile(null);
+                            setNewDocName('');
+                            setNewDocText('');
+                          }}
                           className="px-3 py-1.5 text-sm text-surface-600 hover:bg-surface-100 rounded-lg"
                         >
                           Cancel
                         </button>
                         <button
                           onClick={addDocument}
-                          disabled={!newDocName.trim() || !newDocText.trim() || addingDocument}
-                          className="px-3 py-1.5 text-sm bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50"
+                          disabled={
+                            addingDocument ||
+                            (uploadMode === 'file' && !selectedFile) ||
+                            (uploadMode === 'paste' && (!newDocName.trim() || !newDocText.trim()))
+                          }
+                          className="flex items-center gap-2 px-3 py-1.5 text-sm bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50"
                         >
-                          {addingDocument ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add & Generate Embeddings'}
+                          {addingDocument ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Processing...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4" />
+                              {uploadMode === 'file' ? 'Upload & Extract' : 'Add Document'}
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>

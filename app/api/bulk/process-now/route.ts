@@ -18,7 +18,13 @@ import { verifyWithClaude } from '@/lib/verify';
 import { createClient } from '@deepgram/sdk';
 import { config } from '@/lib/config';
 import { getGradingContext, type GradingContext } from '@/lib/context-store';
-import { retrieveContextForGrading, isEmbeddingsConfigured, type RetrievalResult } from '@/lib/embeddings';
+import { 
+  retrieveContextForGrading, 
+  retrieveContextByCriterion,
+  isEmbeddingsConfigured, 
+  type RetrievalResult,
+  type CriterionRetrievalResult,
+} from '@/lib/embeddings';
 
 // Maximum submissions to process per request
 const MAX_PROCESS_PER_REQUEST = 2;
@@ -126,21 +132,50 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
       let assignmentContext = '';
       let retrievedContext: RetrievalResult | null = null;
       
+      // Criterion-level retrieval for better context mapping
+      let criterionRetrievalResult: CriterionRetrievalResult | null = null;
+      
       if (gradingContext) {
         assignmentContext = `${gradingContext.assignmentSummary}\n\n${gradingContext.evaluationGuidance || ''}`;
         
         // Retrieve relevant document chunks using embeddings
         if (isEmbeddingsConfigured() && batch?.courseId) {
           try {
-            retrievedContext = await retrieveContextForGrading(
-              transcript,
-              batch.courseId,
-              batch.assignmentId,
-              5 // top 5 chunks
-            );
+            // Use criterion-level retrieval if we have rubric criteria
+            if (gradingContext.rubric?.criteria?.length > 0) {
+              criterionRetrievalResult = await retrieveContextByCriterion(
+                transcript,
+                gradingContext.rubric.criteria.map(c => ({
+                  id: c.id,
+                  name: c.name,
+                  description: c.description,
+                })),
+                batch.courseId,
+                batch.assignmentId,
+                2 // 2 chunks per criterion
+              );
+              
+              // Use all citations for context
+              retrievedContext = {
+                chunks: [],
+                formattedContext: criterionRetrievalResult.allCitations
+                  .map(c => `[${c.documentName}]: ${c.snippet}`)
+                  .join('\n\n'),
+                citations: criterionRetrievalResult.allCitations,
+              };
+              
+              console.log(`[ProcessNow] Retrieved ${criterionRetrievalResult.allCitations.length} chunks across ${gradingContext.rubric.criteria.length} criteria`);
+            } else {
+              // Fallback to general retrieval
+              retrievedContext = await retrieveContextForGrading(
+                transcript,
+                batch.courseId,
+                batch.assignmentId,
+                5
+              );
+            }
             
-            if (retrievedContext.formattedContext) {
-              console.log(`[ProcessNow] Retrieved ${retrievedContext.chunks.length} relevant chunks`);
+            if (retrievedContext?.formattedContext) {
               assignmentContext += `\n\n--- RELEVANT COURSE MATERIALS ---\n${retrievedContext.formattedContext}`;
             }
           } catch (retrievalError) {
@@ -175,7 +210,18 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
         },
         rubricEvaluation: rubricEvaluation ? {
           overallScore: rubricEvaluation.overallScore,
-          criteriaBreakdown: rubricEvaluation.criteriaBreakdown,
+          criteriaBreakdown: rubricEvaluation.criteriaBreakdown?.map(c => {
+            // Find criterion-level citations for this criterion
+            const criterionCites = criterionRetrievalResult?.criterionCitations.find(
+              cc => cc.criterionName.toLowerCase() === c.criterion.toLowerCase() ||
+                   cc.criterionName.includes(c.criterion) ||
+                   c.criterion.includes(cc.criterionName)
+            );
+            return {
+              ...c,
+              citations: criterionCites?.citations || undefined,
+            };
+          }),
           strengths: rubricEvaluation.criteriaBreakdown?.flatMap(c => c.strengths || []) || [],
           improvements: rubricEvaluation.criteriaBreakdown?.flatMap(c => c.improvements || []) || [],
         } : undefined,

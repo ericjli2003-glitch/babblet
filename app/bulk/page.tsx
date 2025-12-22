@@ -198,6 +198,7 @@ export default function BulkUploadPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentBatch, setCurrentBatch] = useState<BatchSummary | null>(null);
   const [initialLoading, setInitialLoading] = useState(false);
+  const [isRegrading, setIsRegrading] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortAllRef = useRef<boolean>(false);
@@ -669,6 +670,66 @@ export default function BulkUploadPage() {
       ));
 
       return false;
+    }
+  };
+
+  // ============================================
+  // Re-grade All Submissions
+  // ============================================
+
+  const regradeAll = async () => {
+    if (!selectedBatchId || !currentBatch?.bundleVersionId) {
+      alert('This batch does not have a context version. Set up class context first.');
+      return;
+    }
+
+    const completedSubmissions = pipeline.filter(f => f.stage === 'complete' && f.submissionId);
+    if (completedSubmissions.length === 0) {
+      alert('No completed submissions to re-grade.');
+      return;
+    }
+
+    if (!confirm(`Re-grade ${completedSubmissions.length} submission(s) with the current context version?`)) {
+      return;
+    }
+
+    try {
+      setIsRegrading(true);
+      
+      const submissionIds = completedSubmissions.map(f => f.submissionId).filter(Boolean);
+      
+      const res = await fetch('/api/bulk/regrade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          submissionIds,
+          bundleVersionId: currentBatch.bundleVersionId,
+        }),
+      });
+      
+      const data = await res.json();
+      
+      if (data.success) {
+        // Trigger processing
+        await fetch(`/api/bulk/process-now?batchId=${selectedBatchId}`, { method: 'POST' });
+        
+        // Reset pipeline state for re-graded items
+        setPipeline(prev => prev.map(f => {
+          if (f.stage === 'complete' && f.submissionId && submissionIds.includes(f.submissionId)) {
+            return { ...f, stage: 'queued' as const, overallScore: undefined };
+          }
+          return f;
+        }));
+        
+        alert(`${data.results?.filter((r: { success: boolean }) => r.success).length || 0} submissions queued for re-grading.`);
+      } else {
+        alert(`Error: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Re-grade failed:', error);
+      alert('Re-grade failed. Please try again.');
+    } finally {
+      setIsRegrading(false);
     }
   };
 
@@ -1291,6 +1352,22 @@ export default function BulkUploadPage() {
                         >
                           <Play className="w-4 h-4" />
                           {pendingFiles.length > 0 ? 'Upload & Process' : 'Process Now'}
+                        </button>
+                      )}
+
+                      {/* Re-grade All Button */}
+                      {currentBatch?.bundleVersionId && stats.complete > 0 && (
+                        <button
+                          onClick={regradeAll}
+                          disabled={isRegrading}
+                          className="flex items-center gap-2 px-3 py-2 text-violet-600 bg-violet-100 rounded-lg hover:bg-violet-200 text-sm disabled:opacity-50"
+                        >
+                          {isRegrading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <ArrowLeft className="w-4 h-4 rotate-180" />
+                          )}
+                          Re-grade All ({stats.complete})
                         </button>
                       )}
                     </div>

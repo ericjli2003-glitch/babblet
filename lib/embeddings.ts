@@ -509,6 +509,82 @@ export async function retrieveContextForGrading(
 }
 
 // ============================================
+// Criterion-Level Context Retrieval
+// ============================================
+
+export interface CriterionCitation {
+  criterionId: string;
+  criterionName: string;
+  citations: Array<{
+    chunkId: string;
+    documentName: string;
+    snippet: string;
+    relevanceScore: number;
+  }>;
+}
+
+export interface CriterionRetrievalResult {
+  criterionCitations: CriterionCitation[];
+  allCitations: RetrievalResult['citations'];
+}
+
+export async function retrieveContextByCriterion(
+  transcript: string,
+  rubricCriteria: Array<{ id: string; name: string; description: string }>,
+  courseId: string,
+  assignmentId?: string,
+  chunksPerCriterion: number = 2
+): Promise<CriterionRetrievalResult> {
+  const criterionCitations: CriterionCitation[] = [];
+  const allChunkIds = new Set<string>();
+  const allCitations: RetrievalResult['citations'] = [];
+
+  // For each criterion, retrieve relevant chunks
+  for (const criterion of rubricCriteria) {
+    // Build a query that combines transcript context with criterion
+    const query = `${criterion.name}: ${criterion.description}\n\nStudent said: ${transcript.slice(0, 1000)}`;
+
+    try {
+      const results = await hybridSearch(query, courseId, assignmentId, chunksPerCriterion);
+
+      const citations = results.map(r => ({
+        chunkId: r.chunk.id,
+        documentName: r.chunk.documentName,
+        snippet: r.chunk.content.slice(0, 200),
+        relevanceScore: r.score,
+      }));
+
+      criterionCitations.push({
+        criterionId: criterion.id,
+        criterionName: criterion.name,
+        citations,
+      });
+
+      // Add to all citations (deduplicated)
+      for (const c of citations) {
+        if (!allChunkIds.has(c.chunkId)) {
+          allChunkIds.add(c.chunkId);
+          allCitations.push({
+            chunkId: c.chunkId,
+            documentName: c.documentName,
+            snippet: c.snippet,
+          });
+        }
+      }
+    } catch (error) {
+      console.error(`[Embeddings] Failed to retrieve for criterion ${criterion.name}:`, error);
+      criterionCitations.push({
+        criterionId: criterion.id,
+        criterionName: criterion.name,
+        citations: [],
+      });
+    }
+  }
+
+  return { criterionCitations, allCitations };
+}
+
+// ============================================
 // Delete Chunks for Document
 // ============================================
 

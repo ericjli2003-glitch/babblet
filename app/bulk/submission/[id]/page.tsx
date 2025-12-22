@@ -47,6 +47,12 @@ interface Submission {
       criterion: string;
       score: number;
       feedback: string;
+      citations?: Array<{
+        chunkId: string;
+        documentName: string;
+        snippet: string;
+        relevanceScore?: number;
+      }>;
     }>;
     strengths: string[];
     improvements: string[];
@@ -271,6 +277,16 @@ export default function SubmissionDetailPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {/* Student Report Link */}
+              <Link
+                href={`/report/${submission.id}`}
+                target="_blank"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-emerald-600 bg-emerald-100 rounded-lg hover:bg-emerald-200"
+              >
+                <FileText className="w-4 h-4" />
+                Student Report
+              </Link>
+              
               {submission.bundleVersionId && (
                 <button
                   onClick={openRegradeModal}
@@ -338,6 +354,18 @@ export default function SubmissionDetailPage() {
                           </span>
                         </div>
                         <p className="text-sm text-surface-600">{c.feedback}</p>
+                        
+                        {/* Criterion-level citations */}
+                        {c.citations && c.citations.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-surface-200">
+                            <p className="text-xs text-violet-600 mb-1">📚 Based on:</p>
+                            {c.citations.slice(0, 2).map((cite, cIdx) => (
+                              <p key={cIdx} className="text-xs text-surface-500 truncate">
+                                {cite.documentName}
+                              </p>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
