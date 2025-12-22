@@ -1,14 +1,16 @@
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // Allow up to 60 seconds for processing
+export const maxDuration = 300; // Allow up to 5 minutes for processing (Vercel Pro)
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { 
   getQueueLength, 
   getNextQueuedSubmission, 
   getSubmission, 
   updateSubmission, 
   updateBatchStats, 
-  getBatch 
+  getBatch,
+  getBatchSubmissions,
+  requeue
 } from '@/lib/batch-store';
 import { getPresignedDownloadUrl, isR2Configured } from '@/lib/r2';
 import { analyzeWithClaude, isClaudeConfigured, generateQuestionsWithClaude, evaluateWithClaude } from '@/lib/claude';
@@ -151,12 +153,33 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
 }
 
 // POST /api/bulk/process-now - Process submissions directly (no auth needed)
-export async function POST() {
+export async function POST(request: NextRequest) {
   const startTime = Date.now();
   
   try {
-    const queueLength = await getQueueLength();
-    console.log(`[ProcessNow] Queue length: ${queueLength}`);
+    // Check for batchId param to re-queue stuck submissions
+    const { searchParams } = new URL(request.url);
+    const batchId = searchParams.get('batchId');
+    
+    let queueLength = await getQueueLength();
+    console.log(`[ProcessNow] Initial queue length: ${queueLength}`);
+    
+    // If queue is empty but batchId provided, re-queue stuck submissions
+    if (queueLength === 0 && batchId) {
+      console.log(`[ProcessNow] Queue empty, checking for stuck submissions in batch ${batchId}`);
+      const submissions = await getBatchSubmissions(batchId);
+      const stuckSubmissions = submissions.filter(s => s.status === 'queued');
+      
+      console.log(`[ProcessNow] Found ${stuckSubmissions.length} stuck submissions`);
+      
+      for (const sub of stuckSubmissions) {
+        await requeue(sub.id);
+        console.log(`[ProcessNow] Re-queued submission ${sub.id}`);
+      }
+      
+      queueLength = await getQueueLength();
+      console.log(`[ProcessNow] Queue length after re-queue: ${queueLength}`);
+    }
     
     if (queueLength === 0) {
       return NextResponse.json({ 
@@ -181,7 +204,7 @@ export async function POST() {
       }, { status: 500 });
     }
 
-    // Process submissions directly
+    // Process submissions directly - one at a time for reliability
     const processed: string[] = [];
     const errors: Array<{ id: string; error: string }> = [];
 
@@ -189,6 +212,8 @@ export async function POST() {
       const submissionId = await getNextQueuedSubmission();
       if (!submissionId) break;
 
+      console.log(`[ProcessNow] Processing submission ${i + 1}/${MAX_PROCESS_PER_REQUEST}: ${submissionId}`);
+      
       const result = await processSubmission(submissionId);
       if (result.success) {
         processed.push(submissionId);

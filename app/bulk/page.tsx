@@ -555,7 +555,11 @@ export default function BulkUploadPage() {
   const triggerWorker = async () => {
     try {
       console.log('[Bulk] Triggering processing...');
-      const res = await fetch('/api/bulk/process-now', { method: 'POST' });
+      // Pass batchId to re-queue any stuck submissions
+      const url = selectedBatchId 
+        ? `/api/bulk/process-now?batchId=${selectedBatchId}` 
+        : '/api/bulk/process-now';
+      const res = await fetch(url, { method: 'POST' });
       
       // Handle non-OK responses (including timeouts)
       if (!res.ok) {
