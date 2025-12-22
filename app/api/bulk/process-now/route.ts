@@ -187,8 +187,13 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
       // Parallel: rubric, questions, verify
       const claims = analysis.keyClaims.slice(0, config.limits.maxClaimsForVerification).map(c => c.claim);
       
+      // Combine rubric criteria with assignment context for evaluation
+      const fullRubricContext = assignmentContext
+        ? `${rubricCriteria || ''}\n\n--- ASSIGNMENT CONTEXT ---\n${assignmentContext}`
+        : rubricCriteria;
+      
       const [rubricResult, questionsResult, verifyResult] = await Promise.allSettled([
-        evaluateWithClaude(transcript, rubricCriteria, assignmentContext || undefined, analysis),
+        evaluateWithClaude(transcript, fullRubricContext, undefined, analysis),
         generateQuestionsWithClaude(transcript, analysis, undefined, { maxQuestions: config.limits.defaultMaxQuestions }),
         claims.length > 0 ? verifyWithClaude(transcript, claims) : Promise.resolve([]),
       ]);

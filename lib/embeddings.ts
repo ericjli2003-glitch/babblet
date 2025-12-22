@@ -161,7 +161,7 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
 
   for (let i = 0; i < texts.length; i += batchSize) {
     const batch = texts.slice(i, i + batchSize).map(t => t.slice(0, 8000));
-    
+
     const response = await openai.embeddings.create({
       model: EMBEDDING_MODEL,
       input: batch,
@@ -188,7 +188,7 @@ export async function storeDocumentChunks(
 ): Promise<DocumentChunk[]> {
   // Chunk the text
   const textChunks = chunkText(rawText);
-  
+
   if (textChunks.length === 0) {
     console.log(`[Embeddings] No chunks generated for document ${documentId}`);
     return [];
@@ -590,7 +590,7 @@ export async function retrieveContextByCriterion(
 
 export async function deleteDocumentChunks(documentId: string): Promise<void> {
   const chunkIds = await kv.smembers(`${DOC_CHUNKS_PREFIX}${documentId}`);
-  
+
   for (const chunkId of chunkIds || []) {
     const chunk = await getChunk(chunkId as string);
     if (chunk) {

@@ -89,6 +89,18 @@ export async function getPresignedDownloadUrl(
 /**
  * Delete a file from R2
  */
+export async function uploadFile(key: string, body: Buffer, contentType: string): Promise<void> {
+  const client = getR2Client();
+  const bucket = getBucket();
+
+  await client.send(new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    Body: body,
+    ContentType: contentType,
+  }));
+}
+
 export async function deleteFile(key: string): Promise<void> {
   const client = getR2Client();
   const bucket = getBucket();

@@ -3,8 +3,14 @@
 // Supports: PDF, DOCX, TXT, MD
 // ============================================
 
-import pdf from 'pdf-parse';
 import mammoth from 'mammoth';
+
+// pdf-parse uses CommonJS exports, need to handle dynamically
+async function parsePDF(buffer: Buffer): Promise<{ text: string; numpages: number }> {
+  // Dynamic import to handle CommonJS module
+  const pdfParse = await import('pdf-parse').then(m => m.default || m);
+  return pdfParse(buffer);
+}
 
 export type SupportedFileType = 'pdf' | 'docx' | 'txt' | 'md' | 'unknown';
 
@@ -47,7 +53,7 @@ export function detectFileType(filename: string, mimeType?: string): SupportedFi
 
 async function extractFromPDF(buffer: Buffer): Promise<ExtractionResult> {
   try {
-    const data = await pdf(buffer);
+    const data = await parsePDF(buffer);
     
     return {
       success: true,

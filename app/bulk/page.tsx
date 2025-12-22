@@ -2,8 +2,8 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Upload, FolderOpen, Plus, Trash2, Download, 
+import {
+  Upload, FolderOpen, Plus, Trash2, Download,
   CheckCircle, XCircle, Clock, Loader2, FileVideo, FileAudio,
   ChevronRight, ArrowLeft, Users, AlertTriangle, X, Play, BookOpen
 } from 'lucide-react';
@@ -22,7 +22,7 @@ const ESTIMATED_ANALYSIS_TIME_MS = 30000; // ~30s per file
 // Unified Pipeline Types
 // ============================================
 
-type PipelineStage = 
+type PipelineStage =
   | 'pending'       // File selected, not yet started
   | 'uploading'     // Currently uploading to R2
   | 'queued'        // Uploaded, waiting in queue
@@ -199,7 +199,7 @@ export default function BulkUploadPage() {
   const [currentBatch, setCurrentBatch] = useState<BatchSummary | null>(null);
   const [initialLoading, setInitialLoading] = useState(false);
   const [isRegrading, setIsRegrading] = useState(false);
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortAllRef = useRef<boolean>(false);
 
@@ -215,14 +215,14 @@ export default function BulkUploadPage() {
     const analyzing = pipeline.filter(f => f.stage === 'analyzing').length;
     const complete = pipeline.filter(f => f.stage === 'complete').length;
     const failed = pipeline.filter(f => f.stage === 'failed').length;
-    
+
     const total = pipeline.length;
     const processing = uploading + queued + transcribing + analyzing;
     const inProgress = pending + processing;
-    
-    return { 
-      total, pending, uploading, queued, transcribing, analyzing, 
-      complete, failed, processing, inProgress 
+
+    return {
+      total, pending, uploading, queued, transcribing, analyzing,
+      complete, failed, processing, inProgress
     };
   }, [pipeline]);
 
@@ -230,9 +230,9 @@ export default function BulkUploadPage() {
   // End-to-End ETA Calculation
   // ============================================
 
-  const calculateEndToEndETA = useCallback((): { 
-    eta: string; 
-    breakdown: { upload: number; queue: number; analysis: number } 
+  const calculateEndToEndETA = useCallback((): {
+    eta: string;
+    breakdown: { upload: number; queue: number; analysis: number }
   } => {
     const pending = pipeline.filter(f => f.stage === 'pending');
     const uploading = pipeline.filter(f => f.stage === 'uploading');
@@ -246,7 +246,7 @@ export default function BulkUploadPage() {
     const avgSpeed = uploading.length > 0
       ? uploading.reduce((sum, f) => sum + f.uploadSpeed, 0) / uploading.length
       : 2 * 1024 * 1024; // Default 2 MB/s
-    
+
     if (avgSpeed > 0) {
       // Remaining bytes in current uploads
       const remainingUploadBytes = uploading.reduce((sum, f) => sum + (f.fileSize - f.bytesUploaded), 0);
@@ -256,15 +256,15 @@ export default function BulkUploadPage() {
     // Estimate processing time
     const filesToProcess = pending.length + uploading.length + queued.length + transcribing.length + analyzing.length;
     const alreadyInProcessing = transcribing.length + analyzing.length;
-    
+
     // Processing happens sequentially (1-2 at a time based on our MAX_PROCESS_PER_REQUEST)
     const processingTimeMs = (filesToProcess - alreadyInProcessing) * (ESTIMATED_TRANSCRIPTION_TIME_MS + ESTIMATED_ANALYSIS_TIME_MS) / 2;
     // Currently processing items (remaining time)
-    const currentProcessingTime = (transcribing.length * ESTIMATED_TRANSCRIPTION_TIME_MS / 2) + 
-                                   (analyzing.length * ESTIMATED_ANALYSIS_TIME_MS / 2);
+    const currentProcessingTime = (transcribing.length * ESTIMATED_TRANSCRIPTION_TIME_MS / 2) +
+      (analyzing.length * ESTIMATED_ANALYSIS_TIME_MS / 2);
 
     const totalMs = uploadTimeMs + processingTimeMs + currentProcessingTime;
-    
+
     return {
       eta: totalMs > 0 ? formatDuration(totalMs) : '--',
       breakdown: {
@@ -287,7 +287,7 @@ export default function BulkUploadPage() {
       if (!coursesData.success) return;
 
       const contexts: ContextOption[] = [];
-      
+
       for (const course of coursesData.courses || []) {
         const assignmentsRes = await fetch(`/api/context/assignments?courseId=${course.id}`);
         const assignmentsData = await assignmentsRes.json();
@@ -322,11 +322,11 @@ export default function BulkUploadPage() {
     const ctx = availableContexts.find(c => c.versionId === versionId);
     if (ctx) {
       setSelectedContextVersion({ id: ctx.versionId, version: ctx.version });
-      setSelectedContextCourse({ 
-        id: ctx.courseId, 
-        name: ctx.courseName, 
-        courseCode: '', 
-        term: '' 
+      setSelectedContextCourse({
+        id: ctx.courseId,
+        name: ctx.courseName,
+        courseCode: '',
+        term: ''
       });
       setSelectedContextAssignment({ id: ctx.assignmentId, name: ctx.assignmentName });
       // Auto-fill form fields
@@ -376,7 +376,7 @@ export default function BulkUploadPage() {
 
     try {
       setCreating(true);
-      
+
       // Build request body with context if selected
       const requestBody: Record<string, unknown> = {
         name: batchName.trim(),
@@ -425,18 +425,18 @@ export default function BulkUploadPage() {
     const silent = options?.silent ?? false;
     try {
       if (!silent) setInitialLoading(true);
-      
+
       const res = await fetch(`/api/bulk/status?batchId=${batchId}`);
       const data = await res.json();
-      
+
       if (data.success) {
         setCurrentBatch(data.batch);
-        
+
         // Merge server submissions with local pipeline state
         setPipeline(prev => {
           const serverSubmissions = data.submissions || [];
           const localPending = prev.filter(f => f.stage === 'pending' || f.stage === 'uploading');
-          
+
           // Convert server submissions to pipeline format
           const serverFiles: PipelineFile[] = serverSubmissions.map((sub: {
             id: string;
@@ -450,7 +450,7 @@ export default function BulkUploadPage() {
           }) => {
             // Check if this file exists in local state (preserve upload progress)
             const existing = prev.find(f => f.submissionId === sub.id || f.filename === sub.originalFilename);
-            
+
             return {
               id: existing?.id || sub.id,
               filename: sub.originalFilename,
@@ -472,7 +472,7 @@ export default function BulkUploadPage() {
           // Combine: local pending/uploading files + server files (avoiding duplicates)
           const serverFilenames = new Set(serverFiles.map(f => f.filename));
           const uniqueLocal = localPending.filter(f => !serverFilenames.has(f.filename));
-          
+
           return [...uniqueLocal, ...serverFiles];
         });
       }
@@ -487,11 +487,11 @@ export default function BulkUploadPage() {
   useEffect(() => {
     if (view === 'batch' && selectedBatchId) {
       syncPipelineWithServer(selectedBatchId);
-      
+
       const interval = setInterval(() => {
         syncPipelineWithServer(selectedBatchId, { silent: true });
       }, POLL_INTERVAL_MS);
-      
+
       return () => clearInterval(interval);
     }
   }, [view, selectedBatchId, syncPipelineWithServer]);
@@ -559,12 +559,12 @@ export default function BulkUploadPage() {
     const abortController = new AbortController();
     const startTime = Date.now();
 
-    setPipeline(prev => prev.map(f => 
-      f.id === file.id ? { 
-        ...f, 
-        stage: 'uploading', 
+    setPipeline(prev => prev.map(f =>
+      f.id === file.id ? {
+        ...f,
+        stage: 'uploading',
         uploadStartedAt: startTime,
-        abortController 
+        abortController
       } : f
     ));
 
@@ -581,7 +581,7 @@ export default function BulkUploadPage() {
         signal: abortController.signal,
       });
       const presignData = await presignRes.json();
-      
+
       if (!presignData.success) {
         throw new Error(presignData.error || 'Failed to get upload URL');
       }
@@ -589,16 +589,16 @@ export default function BulkUploadPage() {
       // 2. Upload to R2 with progress tracking
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        
+
         xhr.upload.addEventListener('progress', (e) => {
           if (e.lengthComputable) {
             const progress = Math.round((e.loaded / e.total) * 100);
             const elapsed = Date.now() - startTime;
             const speed = elapsed > 0 ? (e.loaded / elapsed) * 1000 : 0;
-            
-            setPipeline(prev => prev.map(f => 
-              f.id === file.id ? { 
-                ...f, 
+
+            setPipeline(prev => prev.map(f =>
+              f.id === file.id ? {
+                ...f,
                 uploadProgress: Math.min(progress, 95),
                 bytesUploaded: e.loaded,
                 uploadSpeed: speed,
@@ -644,9 +644,9 @@ export default function BulkUploadPage() {
         throw new Error('Failed to enqueue');
       }
 
-      setPipeline(prev => prev.map(f => 
-        f.id === file.id ? { 
-          ...f, 
+      setPipeline(prev => prev.map(f =>
+        f.id === file.id ? {
+          ...f,
           stage: 'queued',
           uploadProgress: 100,
           uploadCompletedAt: Date.now(),
@@ -659,13 +659,13 @@ export default function BulkUploadPage() {
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-      
+
       if (errorMessage === 'Upload cancelled' || abortController.signal.aborted) {
         setPipeline(prev => prev.filter(f => f.id !== file.id));
         return false;
       }
 
-      setPipeline(prev => prev.map(f => 
+      setPipeline(prev => prev.map(f =>
         f.id === file.id ? { ...f, stage: 'failed', errorMessage } : f
       ));
 
@@ -695,9 +695,9 @@ export default function BulkUploadPage() {
 
     try {
       setIsRegrading(true);
-      
+
       const submissionIds = completedSubmissions.map(f => f.submissionId).filter(Boolean);
-      
+
       const res = await fetch('/api/bulk/regrade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -706,13 +706,13 @@ export default function BulkUploadPage() {
           bundleVersionId: currentBatch.bundleVersionId,
         }),
       });
-      
+
       const data = await res.json();
-      
+
       if (data.success) {
         // Trigger processing
         await fetch(`/api/bulk/process-now?batchId=${selectedBatchId}`, { method: 'POST' });
-        
+
         // Reset pipeline state for re-graded items
         setPipeline(prev => prev.map(f => {
           if (f.stage === 'complete' && f.submissionId && submissionIds.includes(f.submissionId)) {
@@ -720,7 +720,7 @@ export default function BulkUploadPage() {
           }
           return f;
         }));
-        
+
         alert(`${data.results?.filter((r: { success: boolean }) => r.success).length || 0} submissions queued for re-grading.`);
       } else {
         alert(`Error: ${data.error}`);
@@ -752,11 +752,11 @@ export default function BulkUploadPage() {
 
     // Upload files with concurrency limit
     const executing: Promise<void>[] = [];
-    
+
     for (const file of pendingFiles) {
       if (abortAllRef.current) break;
-      
-      const p = uploadSingleFile(file).then(() => {});
+
+      const p = uploadSingleFile(file).then(() => { });
       executing.push(p);
 
       if (executing.length >= MAX_UPLOAD_CONCURRENCY) {
@@ -773,10 +773,10 @@ export default function BulkUploadPage() {
     }
 
     await Promise.allSettled(executing);
-    
+
     // Trigger server-side processing
     await triggerProcessing();
-    
+
     setIsProcessing(false);
   };
 
@@ -786,20 +786,20 @@ export default function BulkUploadPage() {
 
   const triggerProcessing = async () => {
     try {
-      const url = selectedBatchId 
-        ? `/api/bulk/process-now?batchId=${selectedBatchId}` 
+      const url = selectedBatchId
+        ? `/api/bulk/process-now?batchId=${selectedBatchId}`
         : '/api/bulk/process-now';
-      
+
       const res = await fetch(url, { method: 'POST' });
-      
+
       if (!res.ok) {
         console.error(`[Bulk] Processing failed with status ${res.status}`);
         return;
       }
-      
+
       const data = await res.json();
       console.log('[Bulk] Processing triggered:', data);
-      
+
       // Refresh immediately
       if (selectedBatchId) {
         syncPipelineWithServer(selectedBatchId, { silent: true });
@@ -890,7 +890,7 @@ export default function BulkUploadPage() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
               {view === 'batch' ? (
-                <button 
+                <button
                   onClick={goToBatchList}
                   className="flex items-center gap-2 text-surface-600 hover:text-surface-900 transition-colors"
                 >
@@ -898,7 +898,7 @@ export default function BulkUploadPage() {
                   <span className="text-sm font-medium">Back to Batches</span>
                 </button>
               ) : view === 'create' ? (
-                <button 
+                <button
                   onClick={goToBatchList}
                   className="flex items-center gap-2 text-surface-600 hover:text-surface-900 transition-colors"
                 >
@@ -916,7 +916,7 @@ export default function BulkUploadPage() {
                 Bulk Upload
               </h1>
             </div>
-            
+
             {/* Header Actions */}
             {view === 'batch' && currentBatch && (
               <div className="flex items-center gap-2">
@@ -996,11 +996,10 @@ export default function BulkUploadPage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-3">
                             <h3 className="text-lg font-semibold text-surface-900">{batch.name}</h3>
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                              batch.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${batch.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
                               batch.status === 'processing' ? 'bg-amber-100 text-amber-700' :
-                              'bg-surface-100 text-surface-700'
-                            }`}>
+                                'bg-surface-100 text-surface-700'
+                              }`}>
                               {batch.status}
                             </span>
                           </div>
@@ -1032,7 +1031,7 @@ export default function BulkUploadPage() {
                       {batch.totalSubmissions > 0 && (
                         <div className="mt-3">
                           <div className="h-2 bg-surface-100 rounded-full overflow-hidden">
-                            <div 
+                            <div
                               className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all"
                               style={{ width: `${(batch.processedCount / batch.totalSubmissions) * 100}%` }}
                             />
@@ -1236,7 +1235,7 @@ export default function BulkUploadPage() {
                             <BookOpen className="w-3 h-3" />
                             Using Class Context
                           </span>
-                          <Link 
+                          <Link
                             href={`/context?courseId=${currentBatch.courseId}&assignmentId=${currentBatch.assignmentId}`}
                             className="text-xs text-primary-600 hover:text-primary-700"
                           >
@@ -1244,7 +1243,7 @@ export default function BulkUploadPage() {
                           </Link>
                         </div>
                       ) : (
-                        <Link 
+                        <Link
                           href="/context"
                           className="inline-flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 mt-2"
                         >
@@ -1291,7 +1290,7 @@ export default function BulkUploadPage() {
                         </span>
                       </div>
                       <div className="h-2 bg-primary-200 rounded-full overflow-hidden">
-                        <div 
+                        <div
                           className="h-full bg-primary-600 transition-all duration-500"
                           style={{ width: `${stats.total > 0 ? (stats.complete / stats.total) * 100 : 0}%` }}
                         />
@@ -1378,23 +1377,22 @@ export default function BulkUploadPage() {
                     {pipeline.map(file => {
                       const stageInfo = getStageInfo(file.stage);
                       const isClickable = file.stage === 'complete' && file.submissionId;
-                      
+
                       const content = (
-                        <div 
-                          className={`flex items-center gap-4 p-4 rounded-xl border transition-colors ${
-                            file.stage === 'failed' ? 'bg-red-50 border-red-200' :
+                        <div
+                          className={`flex items-center gap-4 p-4 rounded-xl border transition-colors ${file.stage === 'failed' ? 'bg-red-50 border-red-200' :
                             file.stage === 'complete' ? 'bg-emerald-50 border-emerald-200' :
-                            file.stage === 'uploading' || file.stage === 'transcribing' || file.stage === 'analyzing' 
-                              ? 'bg-blue-50 border-blue-200' :
-                            'bg-surface-50 border-surface-200'
-                          } ${isClickable ? 'cursor-pointer hover:shadow-md' : ''}`}
+                              file.stage === 'uploading' || file.stage === 'transcribing' || file.stage === 'analyzing'
+                                ? 'bg-blue-50 border-blue-200' :
+                                'bg-surface-50 border-surface-200'
+                            } ${isClickable ? 'cursor-pointer hover:shadow-md' : ''}`}
                         >
                           {file.fileType.startsWith('video') ? (
                             <FileVideo className="w-10 h-10 text-primary-500 flex-shrink-0" />
                           ) : (
                             <FileAudio className="w-10 h-10 text-violet-500 flex-shrink-0" />
                           )}
-                          
+
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <p className="font-medium text-surface-900 truncate">{file.filename}</p>
@@ -1404,7 +1402,7 @@ export default function BulkUploadPage() {
                                 </span>
                               )}
                             </div>
-                            
+
                             {file.stage === 'pending' ? (
                               <input
                                 type="text"
@@ -1417,12 +1415,12 @@ export default function BulkUploadPage() {
                             ) : (
                               <p className="text-sm text-surface-500">{file.studentName}</p>
                             )}
-                            
+
                             {/* Progress bar for uploading */}
                             {file.stage === 'uploading' && (
                               <div className="mt-2">
                                 <div className="h-1.5 bg-blue-200 rounded-full overflow-hidden">
-                                  <div 
+                                  <div
                                     className="h-full bg-blue-500 transition-all duration-300"
                                     style={{ width: `${file.uploadProgress}%` }}
                                   />
@@ -1433,12 +1431,12 @@ export default function BulkUploadPage() {
                                 </div>
                               </div>
                             )}
-                            
+
                             {file.errorMessage && (
                               <p className="text-xs text-red-600 mt-1">{file.errorMessage}</p>
                             )}
                           </div>
-                          
+
                           <div className="flex items-center gap-3">
                             <span className="text-xs text-surface-500">{formatBytes(file.fileSize)}</span>
                             <div className={`flex items-center gap-1.5 ${stageInfo.color}`}>
@@ -1457,7 +1455,7 @@ export default function BulkUploadPage() {
                           </div>
                         </div>
                       );
-                      
+
                       return isClickable ? (
                         <Link key={file.id} href={`/bulk/submission/${file.submissionId}`}>
                           {content}
