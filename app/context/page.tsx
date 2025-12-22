@@ -299,9 +299,10 @@ export default function CourseContextPage() {
     const lines = rubricText.split('\n').filter(l => l.trim());
     const criteria: RubricCriterion[] = [];
     
-    let currentCriterion: Partial<RubricCriterion> | null = null;
+    // Use a simple object type instead of Partial<RubricCriterion>
+    let currentCriterion: { name: string; description: string; weight: number } | null = null;
 
-    lines.forEach((line, idx) => {
+    lines.forEach((line) => {
       const trimmed = line.trim();
       
       // Check for criterion header patterns
@@ -309,7 +310,7 @@ export default function CourseContextPage() {
       
       if (headerMatch && trimmed.length < 100) {
         // Looks like a criterion name
-        if (currentCriterion?.name) {
+        if (currentCriterion && currentCriterion.name) {
           criteria.push({
             id: `criterion-${criteria.length + 1}`,
             name: currentCriterion.name,
@@ -334,7 +335,7 @@ export default function CourseContextPage() {
     });
 
     // Add last criterion
-    if (currentCriterion?.name) {
+    if (currentCriterion && currentCriterion.name) {
       criteria.push({
         id: `criterion-${criteria.length + 1}`,
         name: currentCriterion.name,
