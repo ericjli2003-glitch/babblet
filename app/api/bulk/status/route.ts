@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getBatch, getBatchSubmissions, getQueueLength } from '@/lib/batch-store';
+import { kv } from '@vercel/kv';
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,7 +18,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
     }
 
+    // Debug: Check raw KV state
+    const rawSubmissionIds = await kv.smembers(`batch_submissions:${batchId}`);
+    console.log(`[Status] BatchId=${batchId} Raw submission IDs in set:`, rawSubmissionIds);
+
     const submissions = await getBatchSubmissions(batchId);
+    console.log(`[Status] BatchId=${batchId} Found ${submissions.length} submissions`);
+    
     const queueLength = await getQueueLength();
 
     // Calculate stats

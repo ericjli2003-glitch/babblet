@@ -8,7 +8,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { batchId, submissionId, fileKey, originalFilename, fileSize, mimeType, studentName } = body;
 
+    console.log(`[Enqueue] Request: batchId=${batchId}, file=${originalFilename}, fileKey=${fileKey}`);
+
     if (!batchId || !fileKey || !originalFilename) {
+      console.error('[Enqueue] Missing required fields');
       return NextResponse.json(
         { error: 'batchId, fileKey, and originalFilename are required' },
         { status: 400 }
@@ -18,8 +21,11 @@ export async function POST(request: NextRequest) {
     // Verify batch exists
     const batch = await getBatch(batchId);
     if (!batch) {
+      console.error(`[Enqueue] Batch not found: ${batchId}`);
       return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
     }
+
+    console.log(`[Enqueue] Found batch: ${batch.name}`);
 
     // Create submission (this also queues it for processing)
     const submission = await createSubmission({
@@ -31,8 +37,7 @@ export async function POST(request: NextRequest) {
       studentName,
     });
 
-    // Override ID if client provided one (from presign)
-    // Note: in production you might want to validate this matches
+    console.log(`[Enqueue] Created submission: id=${submission.id}, studentName=${submission.studentName}`);
 
     return NextResponse.json({
       success: true,
