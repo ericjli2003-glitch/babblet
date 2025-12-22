@@ -20,6 +20,8 @@ interface Submission {
   studentName: string;
   status: string;
   errorMessage?: string;
+  // Context reference
+  bundleVersionId?: string;
   transcript?: string;
   transcriptSegments?: Array<{
     id: string;
@@ -56,6 +58,12 @@ interface Submission {
   }>;
   createdAt: number;
   completedAt?: number;
+}
+
+interface BundleVersionInfo {
+  version: number;
+  courseName?: string;
+  assignmentName?: string;
 }
 
 // ============================================
@@ -102,6 +110,7 @@ export default function SubmissionDetailPage() {
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'transcript' | 'questions'>('overview');
+  const [contextInfo, setContextInfo] = useState<BundleVersionInfo | null>(null);
 
   const loadSubmission = useCallback(async () => {
     try {
@@ -109,6 +118,23 @@ export default function SubmissionDetailPage() {
       const data = await res.json();
       if (data.success) {
         setSubmission(data.submission);
+        
+        // Load context info if bundleVersionId exists
+        if (data.submission.bundleVersionId) {
+          try {
+            const ctxRes = await fetch(`/api/context/bundles?versionId=${data.submission.bundleVersionId}`);
+            const ctxData = await ctxRes.json();
+            if (ctxData.success && ctxData.context) {
+              setContextInfo({
+                version: ctxData.context.bundleVersion,
+                courseName: ctxData.context.assignment?.name,
+                assignmentName: ctxData.context.rubric?.name,
+              });
+            }
+          } catch (e) {
+            console.log('Could not load context info:', e);
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to load submission:', error);
@@ -158,9 +184,17 @@ export default function SubmissionDetailPage() {
                 <span className="text-sm">Back to Batch</span>
               </Link>
               <div className="h-6 w-px bg-surface-200" />
-              <h1 className="text-xl font-bold text-surface-900">
-                {submission.studentName}
-              </h1>
+              <div>
+                <h1 className="text-xl font-bold text-surface-900">
+                  {submission.studentName}
+                </h1>
+                {/* Context Indicator */}
+                {contextInfo && (
+                  <span className="inline-flex items-center gap-1 mt-1 text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                    Graded with Context v{contextInfo.version}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2">
               {submission.rubricEvaluation && (

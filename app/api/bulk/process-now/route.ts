@@ -17,6 +17,7 @@ import { analyzeWithClaude, isClaudeConfigured, generateQuestionsWithClaude, eva
 import { verifyWithClaude } from '@/lib/verify';
 import { createClient } from '@deepgram/sdk';
 import { config } from '@/lib/config';
+import { getGradingContext, type GradingContext } from '@/lib/context-store';
 
 // Maximum submissions to process per request
 const MAX_PROCESS_PER_REQUEST = 2;
@@ -99,13 +100,38 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
       console.log(`[ProcessNow] Analyzing ${submissionId}...`);
       
       const batch = await getBatch(submission.batchId);
+      
+      // Get grading context if available
+      let gradingContext: GradingContext | null = null;
+      const bundleVersionId = submission.bundleVersionId || batch?.bundleVersionId;
+      
+      if (bundleVersionId) {
+        gradingContext = await getGradingContext(bundleVersionId);
+        if (gradingContext) {
+          console.log(`[ProcessNow] Using context v${gradingContext.bundleVersion} for ${submissionId}`);
+        }
+      }
+      
       const analysis = await analyzeWithClaude(transcript);
+      
+      // Build rubric criteria from context or batch
+      let rubricCriteria = batch?.rubricCriteria;
+      if (gradingContext) {
+        // Use structured rubric from context
+        rubricCriteria = gradingContext.rubricJSON;
+      }
+      
+      // Build assignment context for better evaluation
+      let assignmentContext = '';
+      if (gradingContext) {
+        assignmentContext = `${gradingContext.assignmentSummary}\n\n${gradingContext.evaluationGuidance || ''}`;
+      }
       
       // Parallel: rubric, questions, verify
       const claims = analysis.keyClaims.slice(0, config.limits.maxClaimsForVerification).map(c => c.claim);
       
       const [rubricResult, questionsResult, verifyResult] = await Promise.allSettled([
-        evaluateWithClaude(transcript, batch?.rubricCriteria, undefined, analysis),
+        evaluateWithClaude(transcript, rubricCriteria, assignmentContext || undefined, analysis),
         generateQuestionsWithClaude(transcript, analysis, undefined, { maxQuestions: config.limits.defaultMaxQuestions }),
         claims.length > 0 ? verifyWithClaude(transcript, claims) : Promise.resolve([]),
       ]);
@@ -115,6 +141,8 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
       const findings = verifyResult.status === 'fulfilled' ? verifyResult.value : [];
 
       await updateSubmission(submissionId, {
+        // Store the bundleVersionId used for grading
+        bundleVersionId: bundleVersionId,
         analysis: {
           keyClaims: analysis.keyClaims.map(c => ({ id: c.id, claim: c.claim, evidence: c.evidence })),
           logicalGaps: analysis.logicalGaps.map(g => ({ id: g.id, description: g.description, severity: g.severity })),

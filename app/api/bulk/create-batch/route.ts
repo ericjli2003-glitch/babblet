@@ -6,7 +6,17 @@ import { createBatch } from '@/lib/batch-store';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, courseName, assignmentName, rubricCriteria, rubricTemplateId } = body;
+    const { 
+      name, 
+      courseName, 
+      assignmentName, 
+      rubricCriteria, 
+      rubricTemplateId,
+      // New context references
+      courseId,
+      assignmentId,
+      bundleVersionId,
+    } = body;
 
     if (!name) {
       return NextResponse.json(
@@ -21,7 +31,13 @@ export async function POST(request: NextRequest) {
       assignmentName,
       rubricCriteria,
       rubricTemplateId,
+      // Pass context references if provided
+      courseId,
+      assignmentId: assignmentId,
+      bundleVersionId,
     });
+
+    console.log(`[CreateBatch] Created batch ${batch.id} with bundleVersionId: ${bundleVersionId || 'none'}`);
 
     return NextResponse.json({ success: true, batch });
   } catch (error) {

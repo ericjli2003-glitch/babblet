@@ -29,6 +29,8 @@ export interface Submission {
   // Student mapping
   studentName: string;
   studentId?: string; // optional external ID
+  // Context (versioned grading context)
+  bundleVersionId?: string; // The snapshot used for grading this submission
   // Processing status
   status: SubmissionStatus;
   errorMessage?: string;
@@ -79,7 +81,11 @@ export interface Batch {
   name: string;
   courseName?: string;
   assignmentName?: string;
-  // Settings
+  // Context (new versioned system)
+  courseId?: string;
+  assignmentId?: string;
+  bundleVersionId?: string; // Immutable snapshot used for grading
+  // Settings (legacy - for batches without context)
   rubricCriteria?: string;
   rubricTemplateId?: string;
   // Stats
@@ -113,12 +119,21 @@ export async function createBatch(params: {
   assignmentName?: string;
   rubricCriteria?: string;
   rubricTemplateId?: string;
+  // Context references (new versioned system)
+  courseId?: string;
+  assignmentId?: string;
+  bundleVersionId?: string;
 }): Promise<Batch> {
   const batch: Batch = {
     id: uuidv4(),
     name: params.name,
     courseName: params.courseName,
     assignmentName: params.assignmentName,
+    // Context references
+    courseId: params.courseId,
+    assignmentId: params.assignmentId,
+    bundleVersionId: params.bundleVersionId,
+    // Legacy settings
     rubricCriteria: params.rubricCriteria,
     rubricTemplateId: params.rubricTemplateId,
     totalSubmissions: 0,

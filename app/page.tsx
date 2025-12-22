@@ -18,6 +18,7 @@ import {
   Loader2,
   FolderOpen,
   Users,
+  BookOpen,
 } from 'lucide-react';
 import Link from 'next/link';
 import SlideUpload from '@/components/SlideUpload';
@@ -127,7 +128,7 @@ export default function HomePage() {
             Choose how to capture the presentation
           </h2>
 
-          <div className="grid md:grid-cols-3 gap-6 mb-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {/* Upload Option */}
             <motion.button
               whileHover={{ scale: 1.02 }}
@@ -195,6 +196,25 @@ export default function HomePage() {
               <h3 className="text-xl font-semibold text-surface-900 mb-2">Bulk Upload</h3>
               <p className="text-surface-600 text-sm">
                 Grade multiple student videos at once with batch processing
+              </p>
+            </Link>
+
+            {/* Course Notebooks Option - Direct link */}
+            <Link
+              href="/context"
+              className="relative p-8 rounded-3xl text-left transition-all duration-300 bg-white/60 shadow-soft hover:bg-white hover:shadow-soft-lg hover:ring-2 hover:ring-violet-500 group"
+            >
+              <div className="absolute top-4 right-4">
+                <div className="flex items-center gap-1 px-2 py-1 bg-violet-100 text-violet-700 rounded-full text-xs font-medium">
+                  <span>NEW</span>
+                </div>
+              </div>
+              <div className="w-14 h-14 rounded-2xl bg-violet-100 flex items-center justify-center mb-4 group-hover:bg-violet-500 transition-colors">
+                <BookOpen className="w-7 h-7 text-violet-600 group-hover:text-white transition-colors" />
+              </div>
+              <h3 className="text-xl font-semibold text-surface-900 mb-2">Course Notebooks</h3>
+              <p className="text-surface-600 text-sm">
+                Set up rubrics, assignments, and course materials for better AI grading
               </p>
             </Link>
           </div>

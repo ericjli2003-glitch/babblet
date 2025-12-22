@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Upload, FolderOpen, Plus, Trash2, Download, 
   CheckCircle, XCircle, Clock, Loader2, FileVideo, FileAudio,
-  ChevronRight, ArrowLeft, Users, AlertTriangle, X, Play
+  ChevronRight, ArrowLeft, Users, AlertTriangle, X, Play, BookOpen
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -65,6 +65,11 @@ interface BatchSummary {
   name: string;
   courseName?: string;
   assignmentName?: string;
+  // Context references
+  courseId?: string;
+  assignmentId?: string;
+  bundleVersionId?: string;
+  // Stats
   totalSubmissions: number;
   processedCount: number;
   failedCount: number;
@@ -168,6 +173,26 @@ export default function BulkUploadPage() {
   const [rubricCriteria, setRubricCriteria] = useState('');
   const [creating, setCreating] = useState(false);
 
+  // Context selection
+  interface ContextOption {
+    versionId: string;
+    bundleId: string;
+    courseId: string;
+    courseName: string;
+    assignmentId: string;
+    assignmentName: string;
+    version: number;
+  }
+  interface ContextCourse { id: string; name: string; courseCode: string; term: string; }
+  interface ContextAssignment { id: string; name: string; }
+  interface ContextVersion { id: string; version: number; }
+
+  const [availableContexts, setAvailableContexts] = useState<ContextOption[]>([]);
+  const [selectedContextId, setSelectedContextId] = useState('');
+  const [selectedContextVersion, setSelectedContextVersion] = useState<ContextVersion | null>(null);
+  const [selectedContextCourse, setSelectedContextCourse] = useState<ContextCourse | null>(null);
+  const [selectedContextAssignment, setSelectedContextAssignment] = useState<ContextAssignment | null>(null);
+
   // Unified pipeline state
   const [pipeline, setPipeline] = useState<PipelineFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -253,6 +278,69 @@ export default function BulkUploadPage() {
   // Load Batches
   // ============================================
 
+  // Load available class contexts
+  const loadAvailableContexts = useCallback(async () => {
+    try {
+      const coursesRes = await fetch('/api/context/courses');
+      const coursesData = await coursesRes.json();
+      if (!coursesData.success) return;
+
+      const contexts: ContextOption[] = [];
+      
+      for (const course of coursesData.courses || []) {
+        const assignmentsRes = await fetch(`/api/context/assignments?courseId=${course.id}`);
+        const assignmentsData = await assignmentsRes.json();
+        if (!assignmentsData.success) continue;
+
+        for (const assignment of assignmentsData.assignments || []) {
+          // Check if this assignment has a bundle with a version
+          const bundleRes = await fetch(`/api/context/bundles?assignmentId=${assignment.id}`);
+          const bundleData = await bundleRes.json();
+          if (bundleData.success && bundleData.latestVersion) {
+            contexts.push({
+              versionId: bundleData.latestVersion.id,
+              bundleId: bundleData.bundle.id,
+              courseId: course.id,
+              courseName: `${course.courseCode} - ${course.name}`,
+              assignmentId: assignment.id,
+              assignmentName: assignment.name,
+              version: bundleData.latestVersion.version,
+            });
+          }
+        }
+      }
+
+      setAvailableContexts(contexts);
+    } catch (error) {
+      console.error('[Bulk] Failed to load contexts:', error);
+    }
+  }, []);
+
+  const handleContextSelect = (versionId: string) => {
+    setSelectedContextId(versionId);
+    const ctx = availableContexts.find(c => c.versionId === versionId);
+    if (ctx) {
+      setSelectedContextVersion({ id: ctx.versionId, version: ctx.version });
+      setSelectedContextCourse({ 
+        id: ctx.courseId, 
+        name: ctx.courseName, 
+        courseCode: '', 
+        term: '' 
+      });
+      setSelectedContextAssignment({ id: ctx.assignmentId, name: ctx.assignmentName });
+      // Auto-fill form fields
+      setCourseName(ctx.courseName);
+      setAssignmentName(ctx.assignmentName);
+    }
+  };
+
+  const clearSelectedContext = () => {
+    setSelectedContextId('');
+    setSelectedContextVersion(null);
+    setSelectedContextCourse(null);
+    setSelectedContextAssignment(null);
+  };
+
   const loadBatches = useCallback(async () => {
     try {
       setLoadingBatches(true);
@@ -272,7 +360,11 @@ export default function BulkUploadPage() {
     if (view === 'list') {
       loadBatches();
     }
-  }, [view, loadBatches]);
+    // Load contexts when entering create view
+    if (view === 'create') {
+      loadAvailableContexts();
+    }
+  }, [view, loadBatches, loadAvailableContexts]);
 
   // ============================================
   // Create Batch
@@ -283,15 +375,26 @@ export default function BulkUploadPage() {
 
     try {
       setCreating(true);
+      
+      // Build request body with context if selected
+      const requestBody: Record<string, unknown> = {
+        name: batchName.trim(),
+        courseName: courseName.trim() || undefined,
+        assignmentName: assignmentName.trim() || undefined,
+        rubricCriteria: rubricCriteria.trim() || undefined,
+      };
+
+      // Add context references if selected
+      if (selectedContextVersion && selectedContextCourse && selectedContextAssignment) {
+        requestBody.courseId = selectedContextCourse.id;
+        requestBody.assignmentId = selectedContextAssignment.id;
+        requestBody.bundleVersionId = selectedContextVersion.id;
+      }
+
       const res = await fetch('/api/bulk/create-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: batchName.trim(),
-          courseName: courseName.trim() || undefined,
-          assignmentName: assignmentName.trim() || undefined,
-          rubricCriteria: rubricCriteria.trim() || undefined,
-        }),
+        body: JSON.stringify(requestBody),
       });
       const data = await res.json();
       if (data.success) {
@@ -299,10 +402,12 @@ export default function BulkUploadPage() {
         setCurrentBatch(data.batch);
         setPipeline([]);
         setView('batch');
+        // Clear form
         setBatchName('');
         setCourseName('');
         setAssignmentName('');
         setRubricCriteria('');
+        clearSelectedContext();
       }
     } catch (error) {
       console.error('[Bulk] Failed to create batch:', error);
@@ -892,6 +997,76 @@ export default function BulkUploadPage() {
                 <h2 className="text-2xl font-bold text-surface-900 mb-6">Create New Batch</h2>
 
                 <div className="space-y-6 max-w-xl">
+                  {/* Context Selection Banner */}
+                  {selectedContextVersion ? (
+                    <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <BookOpen className="w-5 h-5 text-emerald-600" />
+                          <div>
+                            <p className="font-medium text-emerald-900">
+                              Using Class Context v{selectedContextVersion.version}
+                            </p>
+                            <p className="text-sm text-emerald-700">
+                              {selectedContextCourse?.name} • {selectedContextAssignment?.name}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={clearSelectedContext}
+                          className="text-sm text-emerald-600 hover:text-emerald-700"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    </div>
+                  ) : availableContexts.length > 0 ? (
+                    <div className="p-4 bg-violet-50 rounded-xl border border-violet-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <BookOpen className="w-5 h-5 text-violet-600" />
+                          <span className="font-medium text-violet-900">Select Class Context</span>
+                        </div>
+                        <Link href="/context" className="text-xs text-violet-600 hover:text-violet-700">
+                          Manage Courses →
+                        </Link>
+                      </div>
+                      <select
+                        value={selectedContextId}
+                        onChange={(e) => handleContextSelect(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-violet-300 focus:ring-2 focus:ring-violet-500 text-sm"
+                      >
+                        <option value="">Choose a course & assignment...</option>
+                        {availableContexts.map(ctx => (
+                          <option key={ctx.versionId} value={ctx.versionId}>
+                            {ctx.courseName} • {ctx.assignmentName} (v{ctx.version})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-violet-600 mt-2">
+                        Using class context improves AI grading accuracy
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+                      <div className="flex items-center gap-3">
+                        <BookOpen className="w-5 h-5 text-amber-600" />
+                        <div className="flex-1">
+                          <p className="font-medium text-amber-900">No Class Context Set Up</p>
+                          <p className="text-sm text-amber-700">
+                            Set up rubrics and course materials for better AI grading
+                          </p>
+                        </div>
+                        <Link
+                          href="/context"
+                          className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700"
+                        >
+                          Set Up
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-surface-700 mb-2">
                       Batch Name *
@@ -905,47 +1080,52 @@ export default function BulkUploadPage() {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-surface-700 mb-2">
-                      Course Name (optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={courseName}
-                      onChange={(e) => setCourseName(e.target.value)}
-                      placeholder="e.g., COMM 101"
-                      className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                  </div>
+                  {/* Show manual course/assignment fields only if no context selected */}
+                  {!selectedContextVersion && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 mb-2">
+                          Course Name (optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={courseName}
+                          onChange={(e) => setCourseName(e.target.value)}
+                          placeholder="e.g., COMM 101"
+                          className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                      </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-surface-700 mb-2">
-                      Assignment Name (optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={assignmentName}
-                      onChange={(e) => setAssignmentName(e.target.value)}
-                      placeholder="e.g., Persuasive Speech"
-                      className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                  </div>
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 mb-2">
+                          Assignment Name (optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={assignmentName}
+                          onChange={(e) => setAssignmentName(e.target.value)}
+                          placeholder="e.g., Persuasive Speech"
+                          className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                      </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-surface-700 mb-2">
-                      Rubric Criteria (optional)
-                    </label>
-                    <textarea
-                      value={rubricCriteria}
-                      onChange={(e) => setRubricCriteria(e.target.value)}
-                      placeholder="Paste your rubric criteria here..."
-                      rows={4}
-                      className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                    <p className="text-xs text-surface-500 mt-1">
-                      The AI will use this to generate more targeted feedback
-                    </p>
-                  </div>
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 mb-2">
+                          Rubric Criteria (optional)
+                        </label>
+                        <textarea
+                          value={rubricCriteria}
+                          onChange={(e) => setRubricCriteria(e.target.value)}
+                          placeholder="Paste your rubric criteria here..."
+                          rows={4}
+                          className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                        <p className="text-xs text-surface-500 mt-1">
+                          The AI will use this to generate more targeted feedback
+                        </p>
+                      </div>
+                    </>
+                  )}
 
                   <button
                     onClick={createBatch}
@@ -988,6 +1168,29 @@ export default function BulkUploadPage() {
                         {currentBatch.courseName && <span>{currentBatch.courseName}</span>}
                         {currentBatch.assignmentName && <span>• {currentBatch.assignmentName}</span>}
                       </div>
+                      {/* Context Indicator */}
+                      {currentBatch.bundleVersionId ? (
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="inline-flex items-center gap-1.5 text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">
+                            <BookOpen className="w-3 h-3" />
+                            Using Class Context
+                          </span>
+                          <Link 
+                            href={`/context?courseId=${currentBatch.courseId}&assignmentId=${currentBatch.assignmentId}`}
+                            className="text-xs text-primary-600 hover:text-primary-700"
+                          >
+                            Edit Context →
+                          </Link>
+                        </div>
+                      ) : (
+                        <Link 
+                          href="/context"
+                          className="inline-flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 mt-2"
+                        >
+                          <BookOpen className="w-3 h-3" />
+                          Set up Class Context for better grading →
+                        </Link>
+                      )}
                     </div>
                   </div>
 
