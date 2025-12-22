@@ -8,7 +8,8 @@ import mammoth from 'mammoth';
 // pdf-parse uses CommonJS exports, need to handle dynamically
 async function parsePDF(buffer: Buffer): Promise<{ text: string; numpages: number }> {
   // Dynamic import to handle CommonJS module
-  const pdfParse = await import('pdf-parse').then(m => m.default || m);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pdfParse = await import('pdf-parse').then((m: any) => m.default || m);
   return pdfParse(buffer);
 }
 
