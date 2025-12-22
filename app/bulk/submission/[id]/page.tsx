@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { 
   ArrowLeft, CheckCircle, XCircle, AlertTriangle, Lightbulb,
-  MessageCircleQuestion, FileText, BarChart3, Clock, Loader2, Download
+  MessageCircleQuestion, FileText, BarChart3, Clock, Loader2, Download,
+  RefreshCw, X
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -22,6 +23,11 @@ interface Submission {
   errorMessage?: string;
   // Context reference
   bundleVersionId?: string;
+  contextCitations?: Array<{
+    chunkId: string;
+    documentName: string;
+    snippet: string;
+  }>;
   transcript?: string;
   transcriptSegments?: Array<{
     id: string;
@@ -112,6 +118,13 @@ export default function SubmissionDetailPage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'transcript' | 'questions'>('overview');
   const [contextInfo, setContextInfo] = useState<BundleVersionInfo | null>(null);
 
+  // Re-grade state
+  interface VersionOption { id: string; version: number; createdAt: number; criteriaCount: number; }
+  const [showRegradeModal, setShowRegradeModal] = useState(false);
+  const [availableVersions, setAvailableVersions] = useState<VersionOption[]>([]);
+  const [selectedVersion, setSelectedVersion] = useState('');
+  const [regrading, setRegrading] = useState(false);
+
   const loadSubmission = useCallback(async () => {
     try {
       const res = await fetch(`/api/bulk/submissions?id=${submissionId}`);
@@ -146,6 +159,67 @@ export default function SubmissionDetailPage() {
   useEffect(() => {
     loadSubmission();
   }, [loadSubmission]);
+
+  // Load available versions for re-grade
+  const loadVersions = async (bundleId: string) => {
+    try {
+      const res = await fetch(`/api/bulk/regrade?bundleId=${bundleId}`);
+      const data = await res.json();
+      if (data.success) {
+        setAvailableVersions(data.versions || []);
+      }
+    } catch (error) {
+      console.error('Failed to load versions:', error);
+    }
+  };
+
+  const handleRegrade = async () => {
+    if (!selectedVersion || !submission) return;
+    
+    try {
+      setRegrading(true);
+      const res = await fetch('/api/bulk/regrade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          submissionId: submission.id,
+          bundleVersionId: selectedVersion,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowRegradeModal(false);
+        // Trigger processing
+        await fetch(`/api/bulk/process-now?batchId=${submission.batchId}`, { method: 'POST' });
+        // Reload submission
+        loadSubmission();
+        alert('Re-grade started. The submission will be re-analyzed with the new context.');
+      }
+    } catch (error) {
+      console.error('Re-grade failed:', error);
+    } finally {
+      setRegrading(false);
+    }
+  };
+
+  const openRegradeModal = async () => {
+    // Get bundle ID from context info (we need to fetch it)
+    if (submission?.bundleVersionId) {
+      try {
+        const res = await fetch(`/api/context/bundles?versionId=${submission.bundleVersionId}`);
+        const data = await res.json();
+        if (data.success && data.context) {
+          // The bundle ID is in the version, we need to get versions for this bundle
+          const bundleRes = await fetch(`/api/context/bundles?versionId=${submission.bundleVersionId}`);
+          const bundleData = await bundleRes.json();
+          // For now, let's get versions from the batch
+        }
+      } catch (e) {
+        console.log('Could not load bundle info:', e);
+      }
+    }
+    setShowRegradeModal(true);
+  };
 
   if (loading) {
     return (
@@ -197,6 +271,15 @@ export default function SubmissionDetailPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {submission.bundleVersionId && (
+                <button
+                  onClick={openRegradeModal}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-violet-600 bg-violet-100 rounded-lg hover:bg-violet-200"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Re-grade
+                </button>
+              )}
               {submission.rubricEvaluation && (
                 <div className={`px-4 py-2 rounded-lg ${getScoreBg(submission.rubricEvaluation.overallScore)}`}>
                   <span className="text-sm text-surface-600">Score:</span>
@@ -390,6 +473,42 @@ export default function SubmissionDetailPage() {
                 </div>
               </div>
             )}
+
+            {/* Context Citations */}
+            {submission.contextCitations && submission.contextCitations.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6 lg:col-span-2">
+                <div className="flex items-center gap-2 mb-4">
+                  <FileText className="w-5 h-5 text-violet-500" />
+                  <h3 className="font-semibold text-surface-900">Context Used for Grading</h3>
+                  {contextInfo && (
+                    <span className="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full ml-2">
+                      v{contextInfo.version}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-surface-500 mb-4">
+                  These course materials were retrieved and used by the AI during evaluation.
+                </p>
+                <div className="space-y-3">
+                  {submission.contextCitations.map((citation, idx) => (
+                    <div 
+                      key={citation.chunkId} 
+                      className="p-4 bg-violet-50 rounded-lg border border-violet-200"
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className="w-6 h-6 bg-violet-200 text-violet-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
+                          {idx + 1}
+                        </span>
+                        <div>
+                          <p className="text-sm font-medium text-violet-900">{citation.documentName}</p>
+                          <p className="text-sm text-surface-600 mt-1 italic">"{citation.snippet}"</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
 
@@ -470,6 +589,83 @@ export default function SubmissionDetailPage() {
           <span>Processed: {submission.completedAt ? formatDate(submission.completedAt) : 'In progress'}</span>
         </div>
       </main>
+
+      {/* Re-grade Modal */}
+      {showRegradeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-xl p-6 max-w-md w-full mx-4"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-surface-900">Re-grade with Different Context</h3>
+              <button
+                onClick={() => setShowRegradeModal(false)}
+                className="p-1 text-surface-400 hover:text-surface-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-surface-600 mb-4">
+              Re-grade this submission using a different context snapshot. The submission will be re-analyzed with the selected rubric and materials.
+            </p>
+
+            {availableVersions.length > 0 ? (
+              <div className="space-y-3 mb-6">
+                {availableVersions.map(v => (
+                  <label
+                    key={v.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${
+                      selectedVersion === v.id
+                        ? 'border-violet-500 bg-violet-50'
+                        : 'border-surface-200 hover:border-surface-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="version"
+                      value={v.id}
+                      checked={selectedVersion === v.id}
+                      onChange={(e) => setSelectedVersion(e.target.value)}
+                      className="text-violet-600 focus:ring-violet-500"
+                    />
+                    <div>
+                      <p className="font-medium text-surface-900">Context v{v.version}</p>
+                      <p className="text-xs text-surface-500">
+                        {v.criteriaCount} criteria • {new Date(v.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-surface-500 text-sm">
+                <p>No alternative versions available.</p>
+                <p className="mt-1">Create a new snapshot in the Course Notebook to re-grade.</p>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowRegradeModal(false)}
+                className="px-4 py-2 text-surface-600 hover:bg-surface-100 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRegrade}
+                disabled={!selectedVersion || regrading}
+                className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50"
+              >
+                {regrading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                Start Re-grade
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

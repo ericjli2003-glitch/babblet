@@ -18,6 +18,7 @@ import { verifyWithClaude } from '@/lib/verify';
 import { createClient } from '@deepgram/sdk';
 import { config } from '@/lib/config';
 import { getGradingContext, type GradingContext } from '@/lib/context-store';
+import { retrieveContextForGrading, isEmbeddingsConfigured, type RetrievalResult } from '@/lib/embeddings';
 
 // Maximum submissions to process per request
 const MAX_PROCESS_PER_REQUEST = 2;
@@ -123,8 +124,29 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
       
       // Build assignment context for better evaluation
       let assignmentContext = '';
+      let retrievedContext: RetrievalResult | null = null;
+      
       if (gradingContext) {
         assignmentContext = `${gradingContext.assignmentSummary}\n\n${gradingContext.evaluationGuidance || ''}`;
+        
+        // Retrieve relevant document chunks using embeddings
+        if (isEmbeddingsConfigured() && batch?.courseId) {
+          try {
+            retrievedContext = await retrieveContextForGrading(
+              transcript,
+              batch.courseId,
+              batch.assignmentId,
+              5 // top 5 chunks
+            );
+            
+            if (retrievedContext.formattedContext) {
+              console.log(`[ProcessNow] Retrieved ${retrievedContext.chunks.length} relevant chunks`);
+              assignmentContext += `\n\n--- RELEVANT COURSE MATERIALS ---\n${retrievedContext.formattedContext}`;
+            }
+          } catch (retrievalError) {
+            console.error('[ProcessNow] Document retrieval failed:', retrievalError);
+          }
+        }
       }
       
       // Parallel: rubric, questions, verify
@@ -143,6 +165,8 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
       await updateSubmission(submissionId, {
         // Store the bundleVersionId used for grading
         bundleVersionId: bundleVersionId,
+        // Store citations from retrieved documents
+        contextCitations: retrievedContext?.citations || undefined,
         analysis: {
           keyClaims: analysis.keyClaims.map(c => ({ id: c.id, claim: c.claim, evidence: c.evidence })),
           logicalGaps: analysis.logicalGaps.map(g => ({ id: g.id, description: g.description, severity: g.severity })),

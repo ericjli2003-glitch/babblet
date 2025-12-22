@@ -95,6 +95,20 @@ export default function CourseContextPage() {
   const [savingRubric, setSavingRubric] = useState(false);
   const [creatingSnapshot, setCreatingSnapshot] = useState(false);
 
+  // Documents
+  interface CourseDocument {
+    id: string;
+    name: string;
+    type: string;
+    createdAt: number;
+  }
+  const [documents, setDocuments] = useState<CourseDocument[]>([]);
+  const [showAddDocument, setShowAddDocument] = useState(false);
+  const [newDocName, setNewDocName] = useState('');
+  const [newDocType, setNewDocType] = useState<string>('lecture_notes');
+  const [newDocText, setNewDocText] = useState('');
+  const [addingDocument, setAddingDocument] = useState(false);
+
   // ============================================
   // Load Courses
   // ============================================
@@ -234,7 +248,7 @@ export default function CourseContextPage() {
     setSelectedAssignment(assignment);
     setView('assignment');
 
-    // Load rubric and bundle info
+    // Load rubric, bundle info, and documents
     try {
       const res = await fetch(`/api/context/assignments?id=${assignment.id}`);
       const data = await res.json();
@@ -254,6 +268,18 @@ export default function CourseContextPage() {
         }
         setLatestVersion(data.latestVersion);
       }
+
+      // Load documents for this assignment and course
+      const docsRes = await fetch(`/api/context/documents?assignmentId=${assignment.id}`);
+      const docsData = await docsRes.json();
+      const courseDocsRes = await fetch(`/api/context/documents?courseId=${assignment.courseId}`);
+      const courseDocsData = await courseDocsRes.json();
+      
+      const allDocs = [
+        ...(docsData.documents || []),
+        ...(courseDocsData.documents || []),
+      ];
+      setDocuments(allDocs);
     } catch (error) {
       console.error('Failed to load assignment details:', error);
     }
@@ -377,6 +403,53 @@ export default function CourseContextPage() {
 
   const removeCriterion = (id: string) => {
     setEditedCriteria(prev => prev.filter(c => c.id !== id));
+  };
+
+  // ============================================
+  // Document Operations
+  // ============================================
+
+  const addDocument = async () => {
+    if (!selectedCourse || !newDocName.trim() || !newDocText.trim()) return;
+
+    try {
+      setAddingDocument(true);
+      const res = await fetch('/api/context/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseId: selectedCourse.id,
+          assignmentId: selectedAssignment?.id,
+          name: newDocName.trim(),
+          type: newDocType,
+          rawText: newDocText.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDocuments(prev => [data.document, ...prev]);
+        setShowAddDocument(false);
+        setNewDocName('');
+        setNewDocType('lecture_notes');
+        setNewDocText('');
+        alert(`Document added! ${data.chunkCount} chunks created with embeddings.`);
+      }
+    } catch (error) {
+      console.error('Failed to add document:', error);
+    } finally {
+      setAddingDocument(false);
+    }
+  };
+
+  const deleteDoc = async (docId: string) => {
+    if (!confirm('Delete this document?')) return;
+    
+    try {
+      await fetch(`/api/context/documents?id=${docId}`, { method: 'DELETE' });
+      setDocuments(prev => prev.filter(d => d.id !== docId));
+    } catch (error) {
+      console.error('Failed to delete document:', error);
+    }
   };
 
   // ============================================
@@ -861,6 +934,102 @@ Presentation within time limits"
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Course Materials */}
+              <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-surface-900">Course Materials</h3>
+                  <button
+                    onClick={() => setShowAddDocument(true)}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm bg-violet-100 text-violet-700 rounded-lg hover:bg-violet-200"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Document
+                  </button>
+                </div>
+
+                <p className="text-sm text-surface-500 mb-4">
+                  Add lecture notes, readings, and other materials. The AI will use these to provide more accurate, context-aware feedback.
+                </p>
+
+                {/* Add Document Form */}
+                {showAddDocument && (
+                  <div className="p-4 bg-violet-50 rounded-xl border border-violet-200 mb-4">
+                    <div className="space-y-3">
+                      <div className="flex gap-3">
+                        <input
+                          type="text"
+                          value={newDocName}
+                          onChange={(e) => setNewDocName(e.target.value)}
+                          placeholder="Document name"
+                          className="flex-1 px-3 py-2 rounded-lg border border-violet-300 focus:ring-2 focus:ring-violet-500 text-sm"
+                        />
+                        <select
+                          value={newDocType}
+                          onChange={(e) => setNewDocType(e.target.value)}
+                          className="px-3 py-2 rounded-lg border border-violet-300 focus:ring-2 focus:ring-violet-500 text-sm"
+                        >
+                          <option value="lecture_notes">Lecture Notes</option>
+                          <option value="reading">Reading</option>
+                          <option value="slides">Slides</option>
+                          <option value="policy">Policy</option>
+                          <option value="example">Example</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+                      <textarea
+                        value={newDocText}
+                        onChange={(e) => setNewDocText(e.target.value)}
+                        placeholder="Paste document content here..."
+                        rows={6}
+                        className="w-full px-3 py-2 rounded-lg border border-violet-300 focus:ring-2 focus:ring-violet-500 text-sm font-mono"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => setShowAddDocument(false)}
+                          className="px-3 py-1.5 text-sm text-surface-600 hover:bg-surface-100 rounded-lg"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={addDocument}
+                          disabled={!newDocName.trim() || !newDocText.trim() || addingDocument}
+                          className="px-3 py-1.5 text-sm bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50"
+                        >
+                          {addingDocument ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add & Generate Embeddings'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Document List */}
+                {documents.length > 0 ? (
+                  <div className="space-y-2">
+                    {documents.map(doc => (
+                      <div key={doc.id} className="flex items-center justify-between p-3 bg-surface-50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <FileText className="w-5 h-5 text-violet-500" />
+                          <div>
+                            <p className="font-medium text-surface-900 text-sm">{doc.name}</p>
+                            <p className="text-xs text-surface-500">{doc.type.replace('_', ' ')}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => deleteDoc(doc.id)}
+                          className="p-1.5 text-surface-400 hover:text-red-500"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-surface-500 text-sm">
+                    No documents added yet. Add lecture notes or readings to improve AI grading.
+                  </div>
+                )}
               </div>
 
               {/* Version History */}

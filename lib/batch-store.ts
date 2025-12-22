@@ -31,6 +31,11 @@ export interface Submission {
   studentId?: string; // optional external ID
   // Context (versioned grading context)
   bundleVersionId?: string; // The snapshot used for grading this submission
+  contextCitations?: Array<{
+    chunkId: string;
+    documentName: string;
+    snippet: string;
+  }>;
   // Processing status
   status: SubmissionStatus;
   errorMessage?: string;
