@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Plus, BookOpen, FileText, ClipboardList, Save,
@@ -55,10 +55,10 @@ interface BundleVersion {
 }
 
 // ============================================
-// Main Component
+// Main Component (wrapped in Suspense for useSearchParams)
 // ============================================
 
-export default function CourseContextPage() {
+function CourseContextPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const courseIdParam = searchParams.get('courseId');
@@ -1193,3 +1193,18 @@ Presentation within time limits"
   );
 }
 
+// ============================================
+// Default Export with Suspense Boundary
+// ============================================
+
+export default function CourseContextPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-stone-900 via-stone-800 to-stone-900 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+      </div>
+    }>
+      <CourseContextPageContent />
+    </Suspense>
+  );
+}
