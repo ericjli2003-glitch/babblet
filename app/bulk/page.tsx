@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Upload, FolderOpen, Plus, Trash2, Download, RefreshCw, 
+  Upload, FolderOpen, Plus, Trash2, Download, 
   CheckCircle, XCircle, Clock, Loader2, FileVideo, FileAudio,
-  ChevronRight, ArrowLeft, Users, BarChart3, AlertTriangle, X, Play
+  ChevronRight, ArrowLeft, Users, AlertTriangle, X, Play
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -14,25 +14,50 @@ import Link from 'next/link';
 // ============================================
 
 const MAX_UPLOAD_CONCURRENCY = 3;
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_MS = 3000;
+const ESTIMATED_TRANSCRIPTION_TIME_MS = 45000; // ~45s per file
+const ESTIMATED_ANALYSIS_TIME_MS = 30000; // ~30s per file
 
 // ============================================
-// Types
+// Unified Pipeline Types
 // ============================================
 
-type SubmissionStatus = 'queued' | 'uploading' | 'transcribing' | 'analyzing' | 'ready' | 'failed';
+type PipelineStage = 
+  | 'pending'       // File selected, not yet started
+  | 'uploading'     // Currently uploading to R2
+  | 'queued'        // Uploaded, waiting in queue
+  | 'transcribing'  // Being transcribed by Deepgram
+  | 'analyzing'     // Being analyzed by Claude
+  | 'complete'      // Fully processed
+  | 'failed';       // Error at any stage
 
-interface FileToUpload {
-  file: File;
+interface PipelineFile {
   id: string;
+  // File info
+  filename: string;
+  fileSize: number;
+  fileType: string;
   studentName: string;
-  status: 'pending' | 'uploading' | 'uploaded' | 'error' | 'cancelled';
-  progress: number;
+  // Local file (only present before upload completes)
+  localFile?: File;
+  // Upload progress
+  uploadProgress: number;
+  uploadSpeed: number;
   bytesUploaded: number;
-  uploadSpeed: number; // bytes per second
-  error?: string;
+  // Pipeline state
+  stage: PipelineStage;
+  errorMessage?: string;
+  // Timing
+  addedAt: number;
+  uploadStartedAt?: number;
+  uploadCompletedAt?: number;
+  processingStartedAt?: number;
+  completedAt?: number;
+  // Result (after processing)
+  overallScore?: number;
+  submissionId?: string;
+  // Upload control
   abortController?: AbortController;
-  startTime?: number;
 }
 
 interface BatchSummary {
@@ -45,26 +70,6 @@ interface BatchSummary {
   failedCount: number;
   status: string;
   createdAt: number;
-}
-
-interface SubmissionSummary {
-  id: string;
-  studentName: string;
-  originalFilename: string;
-  status: SubmissionStatus;
-  errorMessage?: string;
-  overallScore?: number;
-  createdAt: number;
-  completedAt?: number;
-}
-
-interface UploadStats {
-  totalFiles: number;
-  completedFiles: number;
-  totalBytes: number;
-  uploadedBytes: number;
-  startTime: number;
-  averageSpeed: number;
 }
 
 // ============================================
@@ -96,13 +101,13 @@ function formatDate(timestamp: number): string {
 
 function formatDuration(ms: number): string {
   if (ms < 0 || !isFinite(ms)) return '--';
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
   if (minutes > 0) {
-    return `~${minutes}m ${remainingSeconds}s`;
+    return `${minutes}m ${seconds}s`;
   }
-  return `~${seconds}s`;
+  return `${seconds}s`;
 }
 
 function formatBytes(bytes: number): string {
@@ -111,61 +116,36 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function getStatusIcon(status: SubmissionStatus) {
-  switch (status) {
-    case 'queued': return <Clock className="w-4 h-4 text-surface-400" />;
-    case 'uploading': return <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />;
-    case 'transcribing': return <Loader2 className="w-4 h-4 text-purple-500 animate-spin" />;
-    case 'analyzing': return <Loader2 className="w-4 h-4 text-amber-500 animate-spin" />;
-    case 'ready': return <CheckCircle className="w-4 h-4 text-emerald-500" />;
-    case 'failed': return <XCircle className="w-4 h-4 text-red-500" />;
+function getStageInfo(stage: PipelineStage): { icon: React.ReactNode; label: string; color: string } {
+  switch (stage) {
+    case 'pending':
+      return { icon: <Clock className="w-4 h-4" />, label: 'Pending', color: 'text-surface-400' };
+    case 'uploading':
+      return { icon: <Loader2 className="w-4 h-4 animate-spin" />, label: 'Uploading', color: 'text-blue-500' };
+    case 'queued':
+      return { icon: <Clock className="w-4 h-4" />, label: 'Queued', color: 'text-amber-500' };
+    case 'transcribing':
+      return { icon: <Loader2 className="w-4 h-4 animate-spin" />, label: 'Transcribing', color: 'text-purple-500' };
+    case 'analyzing':
+      return { icon: <Loader2 className="w-4 h-4 animate-spin" />, label: 'Analyzing', color: 'text-indigo-500' };
+    case 'complete':
+      return { icon: <CheckCircle className="w-4 h-4" />, label: 'Complete', color: 'text-emerald-500' };
+    case 'failed':
+      return { icon: <XCircle className="w-4 h-4" />, label: 'Failed', color: 'text-red-500' };
   }
 }
 
-function getStatusLabel(status: SubmissionStatus) {
+// Map server status to pipeline stage
+function serverStatusToStage(status: string): PipelineStage {
   switch (status) {
-    case 'queued': return 'Queued';
-    case 'uploading': return 'Uploading...';
-    case 'transcribing': return 'Transcribing...';
-    case 'analyzing': return 'Analyzing...';
-    case 'ready': return 'Complete';
-    case 'failed': return 'Failed';
+    case 'queued': return 'queued';
+    case 'uploading': return 'uploading';
+    case 'transcribing': return 'transcribing';
+    case 'analyzing': return 'analyzing';
+    case 'ready': return 'complete';
+    case 'failed': return 'failed';
+    default: return 'queued';
   }
-}
-
-// ============================================
-// Concurrency Pool
-// ============================================
-
-async function runWithConcurrency<T, R>(
-  items: T[],
-  fn: (item: T) => Promise<R>,
-  concurrency: number
-): Promise<R[]> {
-  const results: R[] = [];
-  const executing: Promise<void>[] = [];
-
-  for (const item of items) {
-    const p = fn(item).then(result => {
-      results.push(result);
-    });
-    executing.push(p);
-
-    if (executing.length >= concurrency) {
-      await Promise.race(executing);
-      // Remove settled promises
-      executing.splice(0, executing.length, 
-        ...executing.filter(e => {
-          let settled = false;
-          e.then(() => { settled = true; }).catch(() => { settled = true; });
-          return !settled;
-        })
-      );
-    }
-  }
-
-  await Promise.all(executing);
-  return results;
 }
 
 // ============================================
@@ -188,17 +168,86 @@ export default function BulkUploadPage() {
   const [rubricCriteria, setRubricCriteria] = useState('');
   const [creating, setCreating] = useState(false);
 
-  // File upload
-  const [filesToUpload, setFilesToUpload] = useState<FileToUpload[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [uploadStats, setUploadStats] = useState<UploadStats | null>(null);
+  // Unified pipeline state
+  const [pipeline, setPipeline] = useState<PipelineFile[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [currentBatch, setCurrentBatch] = useState<BatchSummary | null>(null);
+  const [initialLoading, setInitialLoading] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortAllRef = useRef<boolean>(false);
 
-  // Batch detail
-  const [currentBatch, setCurrentBatch] = useState<BatchSummary | null>(null);
-  const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
-  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+  // ============================================
+  // Derived Stats (Single Source of Truth)
+  // ============================================
+
+  const stats = useMemo(() => {
+    const pending = pipeline.filter(f => f.stage === 'pending').length;
+    const uploading = pipeline.filter(f => f.stage === 'uploading').length;
+    const queued = pipeline.filter(f => f.stage === 'queued').length;
+    const transcribing = pipeline.filter(f => f.stage === 'transcribing').length;
+    const analyzing = pipeline.filter(f => f.stage === 'analyzing').length;
+    const complete = pipeline.filter(f => f.stage === 'complete').length;
+    const failed = pipeline.filter(f => f.stage === 'failed').length;
+    
+    const total = pipeline.length;
+    const processing = uploading + queued + transcribing + analyzing;
+    const inProgress = pending + processing;
+    
+    return { 
+      total, pending, uploading, queued, transcribing, analyzing, 
+      complete, failed, processing, inProgress 
+    };
+  }, [pipeline]);
+
+  // ============================================
+  // End-to-End ETA Calculation
+  // ============================================
+
+  const calculateEndToEndETA = useCallback((): { 
+    eta: string; 
+    breakdown: { upload: number; queue: number; analysis: number } 
+  } => {
+    const pending = pipeline.filter(f => f.stage === 'pending');
+    const uploading = pipeline.filter(f => f.stage === 'uploading');
+    const queued = pipeline.filter(f => f.stage === 'queued');
+    const transcribing = pipeline.filter(f => f.stage === 'transcribing');
+    const analyzing = pipeline.filter(f => f.stage === 'analyzing');
+
+    // Estimate remaining upload time
+    let uploadTimeMs = 0;
+    const totalPendingBytes = pending.reduce((sum, f) => sum + f.fileSize, 0);
+    const avgSpeed = uploading.length > 0
+      ? uploading.reduce((sum, f) => sum + f.uploadSpeed, 0) / uploading.length
+      : 2 * 1024 * 1024; // Default 2 MB/s
+    
+    if (avgSpeed > 0) {
+      // Remaining bytes in current uploads
+      const remainingUploadBytes = uploading.reduce((sum, f) => sum + (f.fileSize - f.bytesUploaded), 0);
+      uploadTimeMs = ((remainingUploadBytes + totalPendingBytes) / avgSpeed) * 1000;
+    }
+
+    // Estimate processing time
+    const filesToProcess = pending.length + uploading.length + queued.length + transcribing.length + analyzing.length;
+    const alreadyInProcessing = transcribing.length + analyzing.length;
+    
+    // Processing happens sequentially (1-2 at a time based on our MAX_PROCESS_PER_REQUEST)
+    const processingTimeMs = (filesToProcess - alreadyInProcessing) * (ESTIMATED_TRANSCRIPTION_TIME_MS + ESTIMATED_ANALYSIS_TIME_MS) / 2;
+    // Currently processing items (remaining time)
+    const currentProcessingTime = (transcribing.length * ESTIMATED_TRANSCRIPTION_TIME_MS / 2) + 
+                                   (analyzing.length * ESTIMATED_ANALYSIS_TIME_MS / 2);
+
+    const totalMs = uploadTimeMs + processingTimeMs + currentProcessingTime;
+    
+    return {
+      eta: totalMs > 0 ? formatDuration(totalMs) : '--',
+      breakdown: {
+        upload: Math.round(uploadTimeMs / 1000),
+        queue: Math.round((processingTimeMs + currentProcessingTime) / 1000),
+        analysis: 0, // Combined into queue for simplicity
+      }
+    };
+  }, [pipeline]);
 
   // ============================================
   // Load Batches
@@ -247,6 +296,8 @@ export default function BulkUploadPage() {
       const data = await res.json();
       if (data.success) {
         setSelectedBatchId(data.batch.id);
+        setCurrentBatch(data.batch);
+        setPipeline([]);
         setView('batch');
         setBatchName('');
         setCourseName('');
@@ -261,34 +312,83 @@ export default function BulkUploadPage() {
   };
 
   // ============================================
-  // Load Batch Details (with silent refresh option)
+  // Load Batch Details & Sync Pipeline
   // ============================================
 
-  const loadBatchDetails = useCallback(async (batchId: string, options?: { silent?: boolean }) => {
+  const syncPipelineWithServer = useCallback(async (batchId: string, options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
     try {
-      if (!silent) setLoadingSubmissions(true);
+      if (!silent) setInitialLoading(true);
+      
       const res = await fetch(`/api/bulk/status?batchId=${batchId}`);
       const data = await res.json();
+      
       if (data.success) {
         setCurrentBatch(data.batch);
-        setSubmissions(data.submissions || []);
+        
+        // Merge server submissions with local pipeline state
+        setPipeline(prev => {
+          const serverSubmissions = data.submissions || [];
+          const localPending = prev.filter(f => f.stage === 'pending' || f.stage === 'uploading');
+          
+          // Convert server submissions to pipeline format
+          const serverFiles: PipelineFile[] = serverSubmissions.map((sub: {
+            id: string;
+            studentName: string;
+            originalFilename: string;
+            status: string;
+            errorMessage?: string;
+            overallScore?: number;
+            createdAt: number;
+            completedAt?: number;
+          }) => {
+            // Check if this file exists in local state (preserve upload progress)
+            const existing = prev.find(f => f.submissionId === sub.id || f.filename === sub.originalFilename);
+            
+            return {
+              id: existing?.id || sub.id,
+              filename: sub.originalFilename,
+              fileSize: existing?.fileSize || 0,
+              fileType: existing?.fileType || 'video/mp4',
+              studentName: sub.studentName,
+              uploadProgress: 100,
+              uploadSpeed: 0,
+              bytesUploaded: existing?.fileSize || 0,
+              stage: serverStatusToStage(sub.status),
+              errorMessage: sub.errorMessage,
+              addedAt: sub.createdAt,
+              completedAt: sub.completedAt,
+              overallScore: sub.overallScore,
+              submissionId: sub.id,
+            };
+          });
+
+          // Combine: local pending/uploading files + server files (avoiding duplicates)
+          const serverFilenames = new Set(serverFiles.map(f => f.filename));
+          const uniqueLocal = localPending.filter(f => !serverFilenames.has(f.filename));
+          
+          return [...uniqueLocal, ...serverFiles];
+        });
       }
     } catch (error) {
-      console.error('[Bulk] Failed to load batch details:', error);
+      console.error('[Bulk] Failed to sync pipeline:', error);
     } finally {
-      if (!silent) setLoadingSubmissions(false);
+      if (!silent) setInitialLoading(false);
     }
   }, []);
 
+  // Poll for updates when viewing a batch
   useEffect(() => {
     if (view === 'batch' && selectedBatchId) {
-      loadBatchDetails(selectedBatchId);
-      // Poll for updates silently
-      const interval = setInterval(() => loadBatchDetails(selectedBatchId, { silent: true }), POLL_INTERVAL_MS);
+      syncPipelineWithServer(selectedBatchId);
+      
+      const interval = setInterval(() => {
+        syncPipelineWithServer(selectedBatchId, { silent: true });
+      }, POLL_INTERVAL_MS);
+      
       return () => clearInterval(interval);
     }
-  }, [view, selectedBatchId, loadBatchDetails]);
+  }, [view, selectedBatchId, syncPipelineWithServer]);
 
   // ============================================
   // File Selection
@@ -298,24 +398,28 @@ export default function BulkUploadPage() {
     if (!files) return;
 
     const validTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'audio/mpeg', 'audio/wav', 'audio/webm'];
-    const newFiles: FileToUpload[] = [];
+    const newFiles: PipelineFile[] = [];
 
     Array.from(files).forEach(file => {
       const isValid = validTypes.some(t => file.type.startsWith(t.split('/')[0]));
       if (isValid) {
         newFiles.push({
-          file,
           id: Math.random().toString(36).substr(2, 9),
+          filename: file.name,
+          fileSize: file.size,
+          fileType: file.type,
           studentName: inferStudentName(file.name),
-          status: 'pending',
-          progress: 0,
-          bytesUploaded: 0,
+          localFile: file,
+          uploadProgress: 0,
           uploadSpeed: 0,
+          bytesUploaded: 0,
+          stage: 'pending',
+          addedAt: Date.now(),
         });
       }
     });
 
-    setFilesToUpload(prev => [...prev, ...newFiles]);
+    setPipeline(prev => [...prev, ...newFiles]);
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -324,7 +428,7 @@ export default function BulkUploadPage() {
   }, []);
 
   const removeFile = (id: string) => {
-    setFilesToUpload(prev => {
+    setPipeline(prev => {
       const file = prev.find(f => f.id === id);
       if (file?.abortController) {
         file.abortController.abort();
@@ -334,37 +438,39 @@ export default function BulkUploadPage() {
   };
 
   const updateStudentName = (id: string, name: string) => {
-    setFilesToUpload(prev => prev.map(f => f.id === id ? { ...f, studentName: name } : f));
+    setPipeline(prev => prev.map(f => f.id === id ? { ...f, studentName: name } : f));
   };
 
   // ============================================
-  // Single File Upload (with real progress)
+  // Single File Upload
   // ============================================
 
-  const uploadSingleFile = async (fileData: FileToUpload): Promise<{ success: boolean; error?: string }> => {
-    if (abortAllRef.current) {
-      return { success: false, error: 'Cancelled' };
+  const uploadSingleFile = async (file: PipelineFile): Promise<boolean> => {
+    if (abortAllRef.current || !file.localFile) {
+      return false;
     }
 
     const abortController = new AbortController();
     const startTime = Date.now();
 
-    // Update with abort controller
-    setFilesToUpload(prev => prev.map(f => 
-      f.id === fileData.id ? { ...f, status: 'uploading', progress: 0, abortController, startTime } : f
+    setPipeline(prev => prev.map(f => 
+      f.id === file.id ? { 
+        ...f, 
+        stage: 'uploading', 
+        uploadStartedAt: startTime,
+        abortController 
+      } : f
     ));
 
     try {
-      console.log(`[Upload] Starting: ${fileData.file.name} (${formatBytes(fileData.file.size)})`);
-
       // 1. Get presigned URL
       const presignRes = await fetch('/api/bulk/presign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           batchId: selectedBatchId,
-          filename: fileData.file.name,
-          contentType: fileData.file.type,
+          filename: file.filename,
+          contentType: file.fileType,
         }),
         signal: abortController.signal,
       });
@@ -374,7 +480,7 @@ export default function BulkUploadPage() {
         throw new Error(presignData.error || 'Failed to get upload URL');
       }
 
-      // 2. Upload to R2 with progress tracking using XMLHttpRequest
+      // 2. Upload to R2 with progress tracking
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         
@@ -384,10 +490,10 @@ export default function BulkUploadPage() {
             const elapsed = Date.now() - startTime;
             const speed = elapsed > 0 ? (e.loaded / elapsed) * 1000 : 0;
             
-            setFilesToUpload(prev => prev.map(f => 
-              f.id === fileData.id ? { 
+            setPipeline(prev => prev.map(f => 
+              f.id === file.id ? { 
                 ...f, 
-                progress: Math.min(progress, 95), // Reserve last 5% for enqueue
+                uploadProgress: Math.min(progress, 95),
                 bytesUploaded: e.loaded,
                 uploadSpeed: speed,
               } : f
@@ -405,13 +511,11 @@ export default function BulkUploadPage() {
 
         xhr.addEventListener('error', () => reject(new Error('Upload failed')));
         xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
-
-        // Handle abort signal
         abortController.signal.addEventListener('abort', () => xhr.abort());
 
         xhr.open('PUT', presignData.uploadUrl);
-        xhr.setRequestHeader('Content-Type', fileData.file.type);
-        xhr.send(fileData.file);
+        xhr.setRequestHeader('Content-Type', file.fileType);
+        xhr.send(file.localFile!);
       });
 
       // 3. Enqueue for processing
@@ -422,10 +526,10 @@ export default function BulkUploadPage() {
           batchId: selectedBatchId,
           submissionId: presignData.submissionId,
           fileKey: presignData.fileKey,
-          originalFilename: fileData.file.name,
-          fileSize: fileData.file.size,
-          mimeType: fileData.file.type,
-          studentName: fileData.studentName,
+          originalFilename: file.filename,
+          fileSize: file.fileSize,
+          mimeType: file.fileType,
+          studentName: file.studentName,
         }),
         signal: abortController.signal,
       });
@@ -434,161 +538,147 @@ export default function BulkUploadPage() {
         throw new Error('Failed to enqueue');
       }
 
-      console.log(`[Upload] Complete: ${fileData.file.name}`);
-
-      setFilesToUpload(prev => prev.map(f => 
-        f.id === fileData.id ? { ...f, status: 'uploaded', progress: 100 } : f
+      setPipeline(prev => prev.map(f => 
+        f.id === file.id ? { 
+          ...f, 
+          stage: 'queued',
+          uploadProgress: 100,
+          uploadCompletedAt: Date.now(),
+          submissionId: presignData.submissionId,
+          localFile: undefined, // Clear local file reference
+        } : f
       ));
 
-      return { success: true };
+      return true;
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-      console.error(`[Upload] Error: ${fileData.file.name} - ${errorMessage}`);
       
       if (errorMessage === 'Upload cancelled' || abortController.signal.aborted) {
-        setFilesToUpload(prev => prev.map(f => 
-          f.id === fileData.id ? { ...f, status: 'cancelled', error: 'Cancelled' } : f
-        ));
-        return { success: false, error: 'Cancelled' };
+        setPipeline(prev => prev.filter(f => f.id !== file.id));
+        return false;
       }
 
-      setFilesToUpload(prev => prev.map(f => 
-        f.id === fileData.id ? { ...f, status: 'error', error: errorMessage } : f
+      setPipeline(prev => prev.map(f => 
+        f.id === file.id ? { ...f, stage: 'failed', errorMessage } : f
       ));
 
-      return { success: false, error: errorMessage };
+      return false;
     }
   };
 
   // ============================================
-  // Upload All Files (Concurrent)
+  // Start Processing Pipeline
   // ============================================
 
-  const uploadFiles = async () => {
-    if (!selectedBatchId || filesToUpload.length === 0) return;
+  const startPipeline = async () => {
+    if (!selectedBatchId) return;
 
-    const pendingFiles = filesToUpload.filter(f => f.status === 'pending');
-    if (pendingFiles.length === 0) return;
+    const pendingFiles = pipeline.filter(f => f.stage === 'pending' && f.localFile);
+    if (pendingFiles.length === 0) {
+      // No files to upload, just trigger processing
+      triggerProcessing();
+      return;
+    }
 
-    setUploading(true);
+    setIsProcessing(true);
     abortAllRef.current = false;
 
-    // Initialize upload stats
-    const totalBytes = pendingFiles.reduce((sum, f) => sum + f.file.size, 0);
-    setUploadStats({
-      totalFiles: pendingFiles.length,
-      completedFiles: 0,
-      totalBytes,
-      uploadedBytes: 0,
-      startTime: Date.now(),
-      averageSpeed: 0,
-    });
-
-    console.log(`[Upload] Starting batch upload: ${pendingFiles.length} files, ${formatBytes(totalBytes)} total, concurrency=${MAX_UPLOAD_CONCURRENCY}`);
-
-    // Run uploads with concurrency limit
-    const uploadPromises = pendingFiles.map(fileData => async () => {
-      const result = await uploadSingleFile(fileData);
-      setUploadStats(prev => prev ? {
-        ...prev,
-        completedFiles: prev.completedFiles + 1,
-      } : null);
-      return result;
-    });
-
-    // Execute with concurrency pool
+    // Upload files with concurrency limit
     const executing: Promise<void>[] = [];
-    for (const createPromise of uploadPromises) {
+    
+    for (const file of pendingFiles) {
       if (abortAllRef.current) break;
       
-      const p = createPromise().then(() => {});
+      const p = uploadSingleFile(file).then(() => {});
       executing.push(p);
 
       if (executing.length >= MAX_UPLOAD_CONCURRENCY) {
         await Promise.race(executing);
         // Clean up settled promises
         for (let i = executing.length - 1; i >= 0; i--) {
-          let settled = false;
-          executing[i].then(() => { settled = true; }).catch(() => { settled = true; });
+          const settled = await Promise.race([
+            executing[i].then(() => true).catch(() => true),
+            Promise.resolve(false)
+          ]);
           if (settled) executing.splice(i, 1);
         }
       }
     }
 
     await Promise.allSettled(executing);
-
-    console.log('[Upload] Batch upload complete');
-
-    setUploading(false);
-    setUploadStats(null);
-    loadBatchDetails(selectedBatchId, { silent: true });
-  };
-
-  // ============================================
-  // Cancel All Uploads
-  // ============================================
-
-  const cancelAllUploads = () => {
-    console.log('[Upload] Cancelling all uploads');
-    abortAllRef.current = true;
     
-    setFilesToUpload(prev => prev.map(f => {
-      if (f.status === 'uploading' && f.abortController) {
-        f.abortController.abort();
-        return { ...f, status: 'cancelled', error: 'Cancelled' };
-      }
-      if (f.status === 'pending') {
-        return { ...f, status: 'cancelled', error: 'Cancelled' };
-      }
-      return f;
-    }));
-
-    setUploading(false);
-    setUploadStats(null);
+    // Trigger server-side processing
+    await triggerProcessing();
+    
+    setIsProcessing(false);
   };
 
   // ============================================
-  // Trigger Worker
+  // Trigger Server Processing
   // ============================================
 
-  const triggerWorker = async () => {
+  const triggerProcessing = async () => {
     try {
-      console.log('[Bulk] Triggering processing...');
-      // Pass batchId to re-queue any stuck submissions
       const url = selectedBatchId 
         ? `/api/bulk/process-now?batchId=${selectedBatchId}` 
         : '/api/bulk/process-now';
+      
       const res = await fetch(url, { method: 'POST' });
       
-      // Handle non-OK responses (including timeouts)
       if (!res.ok) {
-        const text = await res.text();
-        console.error(`[Bulk] Processing failed with status ${res.status}:`, text);
-        alert(`Processing request failed (${res.status}). The server may be timing out. Videos may be too large for the current plan.`);
-        if (selectedBatchId) {
-          loadBatchDetails(selectedBatchId, { silent: true });
-        }
+        console.error(`[Bulk] Processing failed with status ${res.status}`);
         return;
       }
       
       const data = await res.json();
-      console.log('[Bulk] Processing response:', data);
+      console.log('[Bulk] Processing triggered:', data);
       
-      if (data.errors && data.errors.length > 0) {
-        console.warn('[Bulk] Some submissions had errors:', data.errors);
-      }
-      
-      // Refresh after a short delay
+      // Refresh immediately
       if (selectedBatchId) {
-        setTimeout(() => loadBatchDetails(selectedBatchId, { silent: true }), 1000);
+        syncPipelineWithServer(selectedBatchId, { silent: true });
       }
     } catch (error) {
-      console.error('[Bulk] Failed to trigger worker:', error);
-      // Still refresh to show current state
-      if (selectedBatchId) {
-        loadBatchDetails(selectedBatchId, { silent: true });
+      console.error('[Bulk] Failed to trigger processing:', error);
+    }
+  };
+
+  // ============================================
+  // Cancel All
+  // ============================================
+
+  const cancelAll = () => {
+    abortAllRef.current = true;
+    setPipeline(prev => prev.map(f => {
+      if (f.stage === 'uploading' && f.abortController) {
+        f.abortController.abort();
       }
+      if (f.stage === 'pending' || f.stage === 'uploading') {
+        return { ...f, stage: 'failed' as PipelineStage, errorMessage: 'Cancelled' };
+      }
+      return f;
+    }));
+    setIsProcessing(false);
+  };
+
+  // ============================================
+  // Delete Batch
+  // ============================================
+
+  const deleteBatch = async (batchId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (!confirm('Are you sure you want to delete this batch and all its submissions?')) return;
+
+    try {
+      await fetch(`/api/bulk/batches?id=${batchId}`, { method: 'DELETE' });
+      loadBatches();
+      if (selectedBatchId === batchId) {
+        setView('list');
+        setSelectedBatchId(null);
+        setPipeline([]);
+      }
+    } catch (error) {
+      console.error('[Bulk] Failed to delete batch:', error);
     }
   };
 
@@ -602,85 +692,57 @@ export default function BulkUploadPage() {
   };
 
   // ============================================
-  // Delete Batch
+  // Navigation Helpers
   // ============================================
 
-  const deleteBatch = async (batchId: string) => {
-    if (!confirm('Are you sure you want to delete this batch and all its submissions?')) return;
-
-    try {
-      console.log(`[Bulk] Deleting batch: ${batchId}`);
-      await fetch(`/api/bulk/batches?id=${batchId}`, { method: 'DELETE' });
-      loadBatches();
-      if (selectedBatchId === batchId) {
-        setView('list');
-        setSelectedBatchId(null);
-      }
-    } catch (error) {
-      console.error('[Bulk] Failed to delete batch:', error);
-    }
+  const goToBatchList = () => {
+    setView('list');
+    setSelectedBatchId(null);
+    setPipeline([]);
+    setCurrentBatch(null);
   };
 
-  // ============================================
-  // Calculate Upload Progress from File State
-  // ============================================
-
-  const getUploadProgress = () => {
-    const uploadingFiles = filesToUpload.filter(f => 
-      f.status === 'uploading' || f.status === 'uploaded'
-    );
-    
-    if (uploadingFiles.length === 0) {
-      return { totalBytes: 0, uploadedBytes: 0, averageSpeed: 0 };
-    }
-
-    const totalBytes = uploadingFiles.reduce((sum, f) => sum + f.file.size, 0);
-    const uploadedBytes = uploadingFiles.reduce((sum, f) => {
-      if (f.status === 'uploaded') return sum + f.file.size;
-      return sum + (f.bytesUploaded || 0);
-    }, 0);
-
-    // Average speed from currently uploading files
-    const currentlyUploading = uploadingFiles.filter(f => f.status === 'uploading' && f.uploadSpeed > 0);
-    const averageSpeed = currentlyUploading.length > 0
-      ? currentlyUploading.reduce((sum, f) => sum + f.uploadSpeed, 0) / currentlyUploading.length
-      : 0;
-
-    return { totalBytes, uploadedBytes, averageSpeed };
-  };
-
-  const calculateETA = (): string => {
-    const { totalBytes, uploadedBytes, averageSpeed } = getUploadProgress();
-    if (averageSpeed <= 0 || totalBytes === 0) return '--';
-    const remainingBytes = totalBytes - uploadedBytes;
-    if (remainingBytes <= 0) return '0s';
-    const remainingMs = (remainingBytes / averageSpeed) * 1000;
-    return formatDuration(remainingMs);
+  const openBatch = (batchId: string) => {
+    setSelectedBatchId(batchId);
+    setPipeline([]);
+    setView('batch');
   };
 
   // ============================================
   // Render
   // ============================================
 
+  const etaInfo = calculateEndToEndETA();
+  const hasActiveWork = stats.inProgress > 0;
+  const pendingFiles = pipeline.filter(f => f.stage === 'pending');
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-surface-50 via-surface-100 to-primary-50">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-lg border-b border-surface-200">
+      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-lg border-b border-surface-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
               {view === 'batch' ? (
                 <button 
-                  onClick={() => { setView('list'); setSelectedBatchId(null); }}
-                  className="flex items-center gap-2 text-surface-600 hover:text-surface-900"
+                  onClick={goToBatchList}
+                  className="flex items-center gap-2 text-surface-600 hover:text-surface-900 transition-colors"
                 >
                   <ArrowLeft className="w-5 h-5" />
-                  <span className="text-sm">Back to Batches</span>
+                  <span className="text-sm font-medium">Back to Batches</span>
+                </button>
+              ) : view === 'create' ? (
+                <button 
+                  onClick={goToBatchList}
+                  className="flex items-center gap-2 text-surface-600 hover:text-surface-900 transition-colors"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                  <span className="text-sm font-medium">Back to Batches</span>
                 </button>
               ) : (
-                <Link href="/" className="flex items-center gap-2 text-surface-600 hover:text-surface-900">
+                <Link href="/" className="flex items-center gap-2 text-surface-600 hover:text-surface-900 transition-colors">
                   <ArrowLeft className="w-5 h-5" />
-                  <span className="text-sm">Back to Home</span>
+                  <span className="text-sm font-medium">Back to Home</span>
                 </Link>
               )}
               <div className="h-6 w-px bg-surface-200" />
@@ -688,6 +750,26 @@ export default function BulkUploadPage() {
                 Bulk Upload
               </h1>
             </div>
+            
+            {/* Header Actions */}
+            {view === 'batch' && currentBatch && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={exportCsv}
+                  disabled={stats.complete === 0}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                >
+                  <Download className="w-4 h-4" />
+                  Export CSV
+                </button>
+                <button
+                  onClick={() => deleteBatch(selectedBatchId!)}
+                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -742,7 +824,7 @@ export default function BulkUploadPage() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6 hover:shadow-md transition-shadow cursor-pointer"
-                      onClick={() => { setSelectedBatchId(batch.id); setView('batch'); }}
+                      onClick={() => openBatch(batch.id)}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
@@ -772,7 +854,7 @@ export default function BulkUploadPage() {
                             <div className="text-xs text-surface-500">Complete</div>
                           </div>
                           <button
-                            onClick={(e) => { e.stopPropagation(); deleteBatch(batch.id); }}
+                            onClick={(e) => deleteBatch(batch.id, e)}
                             className="p-2 text-surface-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                             title="Delete batch"
                           >
@@ -806,14 +888,6 @@ export default function BulkUploadPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
             >
-              <button
-                onClick={() => setView('list')}
-                className="flex items-center gap-2 text-surface-600 hover:text-surface-900 mb-6"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back to batches
-              </button>
-
               <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-8">
                 <h2 className="text-2xl font-bold text-surface-900 mb-6">Create New Batch</h2>
 
@@ -902,18 +976,12 @@ export default function BulkUploadPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
+              className="space-y-6"
             >
-              <button
-                onClick={() => { setView('list'); setSelectedBatchId(null); }}
-                className="flex items-center gap-2 text-surface-600 hover:text-surface-900 mb-6"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back to batches
-              </button>
-
+              {/* Batch Header */}
               {currentBatch && (
-                <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6 mb-6">
-                  <div className="flex items-start justify-between">
+                <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6">
+                  <div className="flex items-start justify-between mb-6">
                     <div>
                       <h2 className="text-2xl font-bold text-surface-900">{currentBatch.name}</h2>
                       <div className="flex items-center gap-2 mt-1 text-sm text-surface-500">
@@ -921,69 +989,60 @@ export default function BulkUploadPage() {
                         {currentBatch.assignmentName && <span>• {currentBatch.assignmentName}</span>}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={triggerWorker}
-                        className="flex items-center gap-2 px-4 py-2 bg-surface-100 text-surface-700 rounded-lg hover:bg-surface-200 transition-colors"
-                        title="Process queued submissions"
-                      >
-                        <Play className="w-4 h-4" />
-                        Process Now
-                      </button>
-                      <button
-                        onClick={exportCsv}
-                        disabled={submissions.filter(s => s.status === 'ready').length === 0}
-                        className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        <Download className="w-4 h-4" />
-                        Export CSV
-                      </button>
-                      <button
-                        onClick={() => deleteBatch(selectedBatchId)}
-                        className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
                   </div>
 
-                  {/* Progress Stats */}
-                  <div className="grid grid-cols-4 gap-4 mt-6">
-                    <div className="bg-surface-50 rounded-lg p-4 text-center">
+                  {/* Stats Cards - Single Source of Truth */}
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="bg-surface-50 rounded-xl p-4 text-center">
                       <Users className="w-6 h-6 text-surface-400 mx-auto mb-2" />
-                      <div className="text-2xl font-bold text-surface-900">{submissions.length}</div>
-                      <div className="text-xs text-surface-500">Total</div>
+                      <div className="text-2xl font-bold text-surface-900">{stats.total}</div>
+                      <div className="text-xs text-surface-500">Total Files</div>
                     </div>
-                    <div className="bg-amber-50 rounded-lg p-4 text-center">
+                    <div className="bg-amber-50 rounded-xl p-4 text-center">
                       <Clock className="w-6 h-6 text-amber-500 mx-auto mb-2" />
-                      <div className="text-2xl font-bold text-amber-600">
-                        {submissions.filter(s => ['queued', 'transcribing', 'analyzing'].includes(s.status)).length}
-                      </div>
+                      <div className="text-2xl font-bold text-amber-600">{stats.processing}</div>
                       <div className="text-xs text-surface-500">Processing</div>
                     </div>
-                    <div className="bg-emerald-50 rounded-lg p-4 text-center">
+                    <div className="bg-emerald-50 rounded-xl p-4 text-center">
                       <CheckCircle className="w-6 h-6 text-emerald-500 mx-auto mb-2" />
-                      <div className="text-2xl font-bold text-emerald-600">
-                        {submissions.filter(s => s.status === 'ready').length}
-                      </div>
+                      <div className="text-2xl font-bold text-emerald-600">{stats.complete}</div>
                       <div className="text-xs text-surface-500">Complete</div>
                     </div>
-                    <div className="bg-red-50 rounded-lg p-4 text-center">
+                    <div className="bg-red-50 rounded-xl p-4 text-center">
                       <AlertTriangle className="w-6 h-6 text-red-500 mx-auto mb-2" />
-                      <div className="text-2xl font-bold text-red-600">
-                        {submissions.filter(s => s.status === 'failed').length}
-                      </div>
+                      <div className="text-2xl font-bold text-red-600">{stats.failed}</div>
                       <div className="text-xs text-surface-500">Failed</div>
                     </div>
                   </div>
+
+                  {/* End-to-End ETA */}
+                  {hasActiveWork && (
+                    <div className="mt-6 p-4 bg-primary-50 rounded-xl">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-primary-700">
+                          Time until results are ready
+                        </span>
+                        <span className="text-lg font-bold text-primary-600">
+                          ~{etaInfo.eta}
+                        </span>
+                      </div>
+                      <div className="h-2 bg-primary-200 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-primary-600 transition-all duration-500"
+                          style={{ width: `${stats.total > 0 ? (stats.complete / stats.total) * 100 : 0}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-xs text-primary-600 mt-1">
+                        <span>{stats.complete} / {stats.total} complete</span>
+                        <span>{Math.round((stats.complete / Math.max(stats.total, 1)) * 100)}%</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Upload Section */}
-              <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6 mb-6">
-                <h3 className="font-semibold text-surface-900 mb-4">Add Files</h3>
-
-                {/* Drop Zone */}
+              {/* Drop Zone */}
+              <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6">
                 <div
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={handleDrop}
@@ -1003,197 +1062,148 @@ export default function BulkUploadPage() {
                   onChange={(e) => handleFilesSelected(e.target.files)}
                   className="hidden"
                 />
+              </div>
 
-                {/* Files to Upload */}
-                {filesToUpload.length > 0 && (
-                  <div className="mt-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-medium text-surface-700">
-                        Files to Upload ({filesToUpload.length})
-                      </h4>
-                      <div className="flex items-center gap-2">
-                        {uploading && (
-                          <button
-                            onClick={cancelAllUploads}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm"
-                          >
-                            <X className="w-4 h-4" />
-                            Cancel All
-                          </button>
-                        )}
+              {/* Unified Pipeline View */}
+              {pipeline.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-surface-900">
+                      Files ({pipeline.length})
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      {isProcessing && (
                         <button
-                          onClick={uploadFiles}
-                          disabled={uploading || filesToUpload.filter(f => f.status === 'pending').length === 0}
-                          className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                          onClick={cancelAll}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm"
                         >
-                          {uploading ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              Uploading...
-                            </>
-                          ) : (
-                            <>
-                              <Upload className="w-4 h-4" />
-                              Upload All
-                            </>
-                          )}
+                          <X className="w-4 h-4" />
+                          Cancel
                         </button>
-                      </div>
-                    </div>
-
-                    {/* Upload Progress Bar */}
-                    {uploading && (() => {
-                      const progress = getUploadProgress();
-                      const completedCount = filesToUpload.filter(f => f.status === 'uploaded').length;
-                      const totalCount = filesToUpload.filter(f => f.status === 'uploading' || f.status === 'uploaded' || f.status === 'pending').length;
-                      const percentComplete = progress.totalBytes > 0 ? (progress.uploadedBytes / progress.totalBytes) * 100 : 0;
-                      
-                      return (
-                        <div className="mb-4 p-4 bg-primary-50 rounded-xl">
-                          <div className="flex items-center justify-between text-sm mb-2">
-                            <span className="text-primary-700 font-medium">
-                              Uploading {completedCount}/{totalCount} files
-                            </span>
-                            <span className="text-primary-600">
-                              ETA: {calculateETA()} • {formatBytes(progress.averageSpeed)}/s
-                            </span>
-                          </div>
-                          <div className="h-2 bg-primary-200 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-primary-600 transition-all duration-300"
-                              style={{ width: `${Math.min(percentComplete, 100)}%` }}
-                            />
-                          </div>
-                          <div className="text-xs text-primary-600 mt-1 text-right">
-                            {formatBytes(progress.uploadedBytes)} / {formatBytes(progress.totalBytes)}
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/* File List */}
-                    <div className="space-y-2 max-h-80 overflow-y-auto">
-                      {filesToUpload.map(fileData => (
-                        <div 
-                          key={fileData.id} 
-                          className={`flex items-center gap-4 p-3 rounded-lg border ${
-                            fileData.status === 'error' ? 'bg-red-50 border-red-200' :
-                            fileData.status === 'cancelled' ? 'bg-surface-100 border-surface-200 opacity-50' :
-                            fileData.status === 'uploaded' ? 'bg-emerald-50 border-emerald-200' :
-                            'bg-surface-50 border-surface-200'
-                          }`}
+                      )}
+                      {(pendingFiles.length > 0 || stats.queued > 0) && !isProcessing && (
+                        <button
+                          onClick={startPipeline}
+                          className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
                         >
-                          {fileData.file.type.startsWith('video') ? (
-                            <FileVideo className="w-8 h-8 text-primary-500 flex-shrink-0" />
+                          <Play className="w-4 h-4" />
+                          {pendingFiles.length > 0 ? 'Upload & Process' : 'Process Now'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* File List */}
+                  <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                    {pipeline.map(file => {
+                      const stageInfo = getStageInfo(file.stage);
+                      const isClickable = file.stage === 'complete' && file.submissionId;
+                      
+                      const content = (
+                        <div 
+                          className={`flex items-center gap-4 p-4 rounded-xl border transition-colors ${
+                            file.stage === 'failed' ? 'bg-red-50 border-red-200' :
+                            file.stage === 'complete' ? 'bg-emerald-50 border-emerald-200' :
+                            file.stage === 'uploading' || file.stage === 'transcribing' || file.stage === 'analyzing' 
+                              ? 'bg-blue-50 border-blue-200' :
+                            'bg-surface-50 border-surface-200'
+                          } ${isClickable ? 'cursor-pointer hover:shadow-md' : ''}`}
+                        >
+                          {file.fileType.startsWith('video') ? (
+                            <FileVideo className="w-10 h-10 text-primary-500 flex-shrink-0" />
                           ) : (
-                            <FileAudio className="w-8 h-8 text-violet-500 flex-shrink-0" />
+                            <FileAudio className="w-10 h-10 text-violet-500 flex-shrink-0" />
                           )}
+                          
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-surface-900 truncate">
-                              {fileData.file.name}
-                            </p>
-                            <input
-                              type="text"
-                              value={fileData.studentName}
-                              onChange={(e) => updateStudentName(fileData.id, e.target.value)}
-                              disabled={fileData.status !== 'pending'}
-                              className="w-full text-xs text-surface-600 bg-transparent border-none p-0 focus:ring-0 disabled:text-surface-400"
-                              placeholder="Student name"
-                            />
-                            {/* Per-file progress */}
-                            {fileData.status === 'uploading' && (
-                              <div className="mt-1">
-                                <div className="h-1 bg-surface-200 rounded-full overflow-hidden">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-surface-900 truncate">{file.filename}</p>
+                              {file.overallScore !== undefined && (
+                                <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">
+                                  {file.overallScore.toFixed(1)}/5
+                                </span>
+                              )}
+                            </div>
+                            
+                            {file.stage === 'pending' ? (
+                              <input
+                                type="text"
+                                value={file.studentName}
+                                onChange={(e) => updateStudentName(file.id, e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-full text-sm text-surface-600 bg-transparent border-none p-0 focus:ring-0"
+                                placeholder="Student name"
+                              />
+                            ) : (
+                              <p className="text-sm text-surface-500">{file.studentName}</p>
+                            )}
+                            
+                            {/* Progress bar for uploading */}
+                            {file.stage === 'uploading' && (
+                              <div className="mt-2">
+                                <div className="h-1.5 bg-blue-200 rounded-full overflow-hidden">
                                   <div 
-                                    className="h-full bg-primary-500 transition-all duration-300"
-                                    style={{ width: `${fileData.progress}%` }}
+                                    className="h-full bg-blue-500 transition-all duration-300"
+                                    style={{ width: `${file.uploadProgress}%` }}
                                   />
                                 </div>
                                 <div className="flex justify-between text-xs text-surface-500 mt-0.5">
-                                  <span>{fileData.progress}%</span>
-                                  <span>{formatBytes(fileData.uploadSpeed)}/s</span>
+                                  <span>{file.uploadProgress}%</span>
+                                  <span>{formatBytes(file.uploadSpeed)}/s</span>
                                 </div>
                               </div>
                             )}
-                            {fileData.error && (
-                              <p className="text-xs text-red-600 mt-1">{fileData.error}</p>
+                            
+                            {file.errorMessage && (
+                              <p className="text-xs text-red-600 mt-1">{file.errorMessage}</p>
                             )}
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-surface-500">
-                              {formatBytes(fileData.file.size)}
-                            </span>
-                            {fileData.status === 'pending' && (
+                          
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-surface-500">{formatBytes(file.fileSize)}</span>
+                            <div className={`flex items-center gap-1.5 ${stageInfo.color}`}>
+                              {stageInfo.icon}
+                              <span className="text-sm font-medium">{stageInfo.label}</span>
+                            </div>
+                            {file.stage === 'pending' && (
                               <button
-                                onClick={() => removeFile(fileData.id)}
+                                onClick={(e) => { e.stopPropagation(); removeFile(file.id); }}
                                 className="p-1 text-surface-400 hover:text-red-500"
                               >
                                 <X className="w-4 h-4" />
                               </button>
                             )}
-                            {fileData.status === 'uploading' && (
-                              <Loader2 className="w-4 h-4 text-primary-500 animate-spin" />
-                            )}
-                            {fileData.status === 'uploaded' && (
-                              <CheckCircle className="w-4 h-4 text-emerald-500" />
-                            )}
-                            {fileData.status === 'error' && (
-                              <XCircle className="w-4 h-4 text-red-500" />
-                            )}
+                            {isClickable && <ChevronRight className="w-4 h-4 text-surface-400" />}
                           </div>
                         </div>
-                      ))}
-                    </div>
+                      );
+                      
+                      return isClickable ? (
+                        <Link key={file.id} href={`/bulk/submission/${file.submissionId}`}>
+                          {content}
+                        </Link>
+                      ) : (
+                        <div key={file.id}>{content}</div>
+                      );
+                    })}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
-              {/* Submissions List */}
-              <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6">
-                <h3 className="font-semibold text-surface-900 mb-4">Submissions</h3>
+              {/* Empty State */}
+              {!initialLoading && pipeline.length === 0 && (
+                <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-12 text-center">
+                  <FileVideo className="w-16 h-16 text-surface-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-surface-900 mb-2">No files yet</h3>
+                  <p className="text-surface-600">Drag and drop files above to get started</p>
+                </div>
+              )}
 
-                {loadingSubmissions ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-                  </div>
-                ) : submissions.length === 0 ? (
-                  <div className="text-center py-12 text-surface-500">
-                    <FileVideo className="w-12 h-12 text-surface-300 mx-auto mb-3" />
-                    <p>No submissions yet. Upload files above to get started.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {submissions.map(submission => (
-                      <Link
-                        key={submission.id}
-                        href={`/bulk/submission/${submission.id}`}
-                        className="flex items-center justify-between p-4 rounded-xl border border-surface-200 hover:bg-surface-50 transition-colors"
-                      >
-                        <div className="flex items-center gap-4">
-                          {getStatusIcon(submission.status)}
-                          <div>
-                            <p className="font-medium text-surface-900">{submission.studentName}</p>
-                            <p className="text-sm text-surface-500">{submission.originalFilename}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="text-right">
-                            <p className="text-sm font-medium text-surface-700">
-                              {getStatusLabel(submission.status)}
-                            </p>
-                            {submission.overallScore !== undefined && (
-                              <p className="text-xs text-surface-500">
-                                Score: {submission.overallScore}/100
-                              </p>
-                            )}
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-surface-400" />
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {initialLoading && (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
