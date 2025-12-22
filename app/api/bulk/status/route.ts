@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getBatch, getBatchSubmissions, getQueueLength } from '@/lib/batch-store';
+import { getBatch, getBatchSubmissions, getQueueLength, getSubmission } from '@/lib/batch-store';
 import { kv } from '@vercel/kv';
 
 export async function GET(request: NextRequest) {
@@ -22,8 +22,27 @@ export async function GET(request: NextRequest) {
     const rawSubmissionIds = await kv.smembers(`batch_submissions:${batchId}`);
     console.log(`[Status] BatchId=${batchId} Raw submission IDs in set:`, rawSubmissionIds);
 
-    const submissions = await getBatchSubmissions(batchId);
-    console.log(`[Status] BatchId=${batchId} Found ${submissions.length} submissions`);
+    let submissions = await getBatchSubmissions(batchId);
+    console.log(`[Status] BatchId=${batchId} Found ${submissions.length} submissions from set`);
+    
+    // If we have 0 submissions but batch says there are some, try to find them from queue
+    if (submissions.length === 0 && batch.totalSubmissions > 0) {
+      console.log(`[Status] Mismatch detected. Batch has ${batch.totalSubmissions} but found 0 submissions. Checking queue...`);
+      
+      // Try to get submissions from the queue
+      const queueItems = await kv.lrange('submission_queue', 0, -1);
+      console.log(`[Status] Queue items:`, queueItems);
+      
+      for (const subId of queueItems || []) {
+        const sub = await getSubmission(subId as string);
+        if (sub && sub.batchId === batchId) {
+          submissions.push(sub);
+          // Also fix the set
+          await kv.sadd(`batch_submissions:${batchId}`, subId);
+          console.log(`[Status] Recovered submission ${subId} and added to set`);
+        }
+      }
+    }
     
     const queueLength = await getQueueLength();
 

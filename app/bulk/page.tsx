@@ -556,8 +556,24 @@ export default function BulkUploadPage() {
     try {
       console.log('[Bulk] Triggering processing...');
       const res = await fetch('/api/bulk/process-now', { method: 'POST' });
+      
+      // Handle non-OK responses (including timeouts)
+      if (!res.ok) {
+        const text = await res.text();
+        console.error(`[Bulk] Processing failed with status ${res.status}:`, text);
+        alert(`Processing request failed (${res.status}). The server may be timing out. Videos may be too large for the current plan.`);
+        if (selectedBatchId) {
+          loadBatchDetails(selectedBatchId, { silent: true });
+        }
+        return;
+      }
+      
       const data = await res.json();
       console.log('[Bulk] Processing response:', data);
+      
+      if (data.errors && data.errors.length > 0) {
+        console.warn('[Bulk] Some submissions had errors:', data.errors);
+      }
       
       // Refresh after a short delay
       if (selectedBatchId) {
@@ -565,6 +581,10 @@ export default function BulkUploadPage() {
       }
     } catch (error) {
       console.error('[Bulk] Failed to trigger worker:', error);
+      // Still refresh to show current state
+      if (selectedBatchId) {
+        loadBatchDetails(selectedBatchId, { silent: true });
+      }
     }
   };
 
