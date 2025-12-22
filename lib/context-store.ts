@@ -31,6 +31,8 @@ export interface RubricCriterion {
     description: string;
   }>;
   requiredEvidenceTypes?: string[]; // e.g., ["citation", "data", "example"]
+  confidence?: 'high' | 'medium' | 'low'; // Extraction confidence
+  originalText?: string; // Source text this was extracted from
 }
 
 export interface Rubric {
@@ -40,6 +42,9 @@ export interface Rubric {
   name: string;
   criteria: RubricCriterion[];
   rawText?: string; // Original pasted rubric text
+  sourceType?: 'text' | 'pdf'; // How the rubric was provided
+  overallConfidence?: 'high' | 'medium' | 'low'; // AI extraction confidence
+  totalPoints?: number; // Total points if detected
   version: number;
   createdAt: number;
   updatedAt: number;
@@ -272,6 +277,9 @@ export async function createRubric(params: {
   name: string;
   criteria: RubricCriterion[];
   rawText?: string;
+  sourceType?: 'text' | 'pdf';
+  overallConfidence?: 'high' | 'medium' | 'low';
+  totalPoints?: number;
 }): Promise<Rubric> {
   const rubric: Rubric = {
     id: uuidv4(),
@@ -280,6 +288,9 @@ export async function createRubric(params: {
     name: params.name,
     criteria: params.criteria,
     rawText: params.rawText,
+    sourceType: params.sourceType,
+    overallConfidence: params.overallConfidence,
+    totalPoints: params.totalPoints,
     version: 1,
     createdAt: Date.now(),
     updatedAt: Date.now(),

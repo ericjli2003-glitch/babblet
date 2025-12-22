@@ -37,7 +37,16 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { courseId, assignmentId, name, criteria, rawText } = body;
+    const { 
+      courseId, 
+      assignmentId, 
+      name, 
+      criteria, 
+      rawText,
+      sourceType,
+      overallConfidence,
+      totalPoints,
+    } = body;
 
     if (!courseId || !name || !criteria) {
       return NextResponse.json(
@@ -54,6 +63,8 @@ export async function POST(request: NextRequest) {
       weight: c.weight || 1,
       levels: c.levels,
       requiredEvidenceTypes: c.requiredEvidenceTypes,
+      confidence: c.confidence,
+      originalText: c.originalText,
     }));
 
     const rubric = await createRubric({ 
@@ -61,10 +72,13 @@ export async function POST(request: NextRequest) {
       assignmentId, 
       name, 
       criteria: validCriteria, 
-      rawText 
+      rawText,
+      sourceType,
+      overallConfidence,
+      totalPoints,
     });
     
-    console.log(`[Rubrics] Created: ${rubric.id} - ${rubric.name}`);
+    console.log(`[Rubrics] Created: ${rubric.id} - ${rubric.name} (${validCriteria.length} criteria, source: ${sourceType || 'unknown'})`);
 
     return NextResponse.json({ success: true, rubric });
   } catch (error) {

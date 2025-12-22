@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Plus, BookOpen, FileText, ClipboardList, Save,
   Trash2, ChevronRight, Loader2, CheckCircle, Camera, Edit3,
-  GraduationCap, Calendar, Hash, Upload, File
+  GraduationCap, Calendar, Hash, Upload, File, AlertTriangle,
+  ChevronUp, ChevronDown, RefreshCw, Sparkles
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -38,6 +39,13 @@ interface RubricCriterion {
   description: string;
   weight: number;
   requiredEvidenceTypes?: string[];
+  confidence?: 'high' | 'medium' | 'low';
+  originalText?: string;
+  levels?: Array<{
+    score: number;
+    label: string;
+    description: string;
+  }>;
 }
 
 interface Rubric {
@@ -45,6 +53,9 @@ interface Rubric {
   name: string;
   criteria: RubricCriterion[];
   rawText?: string;
+  sourceType?: 'text' | 'pdf';
+  overallConfidence?: 'high' | 'medium' | 'low';
+  totalPoints?: number;
   version: number;
 }
 
@@ -89,11 +100,19 @@ function CourseContextPageContent() {
   const [newAssignmentInstructions, setNewAssignmentInstructions] = useState('');
   const [creatingAssignment, setCreatingAssignment] = useState(false);
 
-  // Rubric editing
+  // Rubric editing - new two-mode flow
+  const [rubricInputMode, setRubricInputMode] = useState<'paste' | 'pdf'>('paste');
   const [rubricText, setRubricText] = useState('');
+  const [rubricFile, setRubricFile] = useState<File | null>(null);
+  const [parsingRubric, setParsingRubric] = useState(false);
+  const [rubricParseWarnings, setRubricParseWarnings] = useState<string[]>([]);
+  const [rubricOverallConfidence, setRubricOverallConfidence] = useState<'high' | 'medium' | 'low' | null>(null);
+  const [rubricTotalPoints, setRubricTotalPoints] = useState<number | undefined>(undefined);
   const [editedCriteria, setEditedCriteria] = useState<RubricCriterion[]>([]);
+  const [showRubricReview, setShowRubricReview] = useState(false);
   const [savingRubric, setSavingRubric] = useState(false);
   const [creatingSnapshot, setCreatingSnapshot] = useState(false);
+  const rubricFileInputRef = useRef<HTMLInputElement>(null);
 
   // Documents
   interface CourseDocument {
@@ -289,62 +308,94 @@ function CourseContextPageContent() {
   };
 
   // ============================================
-  // Rubric Operations
+  // Rubric Operations - AI-powered parsing
   // ============================================
 
-  const parseRubricText = () => {
-    if (!rubricText.trim()) return;
+  const parseRubric = async () => {
+    // Validate input based on mode
+    if (rubricInputMode === 'paste' && !rubricText.trim()) return;
+    if (rubricInputMode === 'pdf' && !rubricFile) return;
 
-    // Simple parsing: split by lines, look for criteria patterns
-    const lines = rubricText.split('\n').filter(l => l.trim());
-    const criteria: RubricCriterion[] = [];
-    
-    type CriterionDraft = { name: string; description: string; weight: number };
-    let currentCriterion: CriterionDraft | null = null;
-
-    // Helper to push current criterion to list
-    const pushCurrent = () => {
-      if (currentCriterion !== null) {
-        criteria.push({
-          id: `criterion-${criteria.length + 1}`,
-          name: currentCriterion.name,
-          description: currentCriterion.description || '',
-          weight: currentCriterion.weight || 1,
+    try {
+      setParsingRubric(true);
+      setRubricParseWarnings([]);
+      setRubricOverallConfidence(null);
+      
+      let response: Response;
+      
+      if (rubricInputMode === 'pdf' && rubricFile) {
+        // PDF mode - use FormData
+        const formData = new FormData();
+        formData.append('file', rubricFile);
+        
+        response = await fetch('/api/context/parse-rubric', {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        // Text mode - use JSON
+        response = await fetch('/api/context/parse-rubric', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: rubricText }),
         });
       }
-    };
-
-    for (const line of lines) {
-      const trimmed = line.trim();
       
-      // Check for criterion header patterns
-      const headerMatch = trimmed.match(/^(?:\d+[\.\)]\s*)?(.+?)(?:\s*[-–:]\s*(\d+)\s*(?:pts?|points?|%)?)?$/i);
+      const data = await response.json();
       
-      if (headerMatch && trimmed.length < 100) {
-        // Looks like a criterion name - push previous if exists
-        pushCurrent();
-        currentCriterion = {
-          name: headerMatch[1].trim(),
-          weight: headerMatch[2] ? parseInt(headerMatch[2]) : 1,
-          description: '',
-        };
-      } else if (currentCriterion !== null) {
-        // Add to description
-        currentCriterion.description = currentCriterion.description 
-          ? `${currentCriterion.description} ${trimmed}`
-          : trimmed;
-      } else {
-        // First line, treat as first criterion
-        currentCriterion = { name: trimmed, description: '', weight: 1 };
+      if (!data.success) {
+        alert(data.error || 'Failed to parse rubric');
+        return;
       }
+      
+      // Update state with parsed results
+      setEditedCriteria(data.criteria);
+      setRubricParseWarnings(data.warnings || []);
+      setRubricOverallConfidence(data.overallConfidence);
+      setRubricTotalPoints(data.totalPoints);
+      
+      // Store raw text if we extracted from PDF
+      if (rubricInputMode === 'pdf' && data.rawText) {
+        setRubricText(data.rawText);
+      }
+      
+      // Show review UI
+      setShowRubricReview(true);
+      
+    } catch (error) {
+      console.error('Failed to parse rubric:', error);
+      alert('Failed to parse rubric. Please try again.');
+    } finally {
+      setParsingRubric(false);
     }
+  };
 
-    // Add last criterion
-    pushCurrent();
-
-    if (criteria.length > 0) {
-      setEditedCriteria(criteria);
+  const handleRubricFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        alert('Please upload a PDF file');
+        return;
+      }
+      setRubricFile(file);
     }
+  };
+
+  const resetRubricInput = () => {
+    setShowRubricReview(false);
+    setEditedCriteria([]);
+    setRubricParseWarnings([]);
+    setRubricOverallConfidence(null);
+    setRubricTotalPoints(undefined);
+  };
+
+  const reorderCriteria = (fromIndex: number, direction: 'up' | 'down') => {
+    const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
+    if (toIndex < 0 || toIndex >= editedCriteria.length) return;
+    
+    const newCriteria = [...editedCriteria];
+    [newCriteria[fromIndex], newCriteria[toIndex]] = [newCriteria[toIndex], newCriteria[fromIndex]];
+    setEditedCriteria(newCriteria);
   };
 
   const saveRubric = async () => {
@@ -353,17 +404,28 @@ function CourseContextPageContent() {
     try {
       setSavingRubric(true);
 
+      const rubricData = {
+        criteria: editedCriteria,
+        rawText: rubricText,
+        sourceType: rubricInputMode,
+        overallConfidence: rubricOverallConfidence,
+        totalPoints: rubricTotalPoints,
+      };
+
       if (rubric) {
         // Update existing rubric
-        await fetch('/api/context/rubrics', {
+        const res = await fetch('/api/context/rubrics', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             rubricId: rubric.id,
-            criteria: editedCriteria,
-            rawText: rubricText,
+            ...rubricData,
           }),
         });
+        const data = await res.json();
+        if (data.success) {
+          setRubric(data.rubric);
+        }
       } else {
         // Create new rubric
         const res = await fetch('/api/context/rubrics', {
@@ -373,8 +435,7 @@ function CourseContextPageContent() {
             courseId: selectedCourse.id,
             assignmentId: selectedAssignment.id,
             name: `${selectedAssignment.name} Rubric`,
-            criteria: editedCriteria,
-            rawText: rubricText,
+            ...rubricData,
           }),
         });
         const data = await res.json();
@@ -393,17 +454,11 @@ function CourseContextPageContent() {
     setEditedCriteria(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
   };
 
-  const addCriterion = () => {
-    const newId = `criterion-${editedCriteria.length + 1}`;
-    setEditedCriteria(prev => [...prev, {
-      id: newId,
-      name: 'New Criterion',
-      description: '',
-      weight: 1,
-    }]);
-  };
-
   const removeCriterion = (id: string) => {
+    if (editedCriteria.length <= 1) {
+      alert('You must have at least one criterion');
+      return;
+    }
     setEditedCriteria(prev => prev.filter(c => c.id !== id));
   };
 
@@ -859,39 +914,97 @@ function CourseContextPageContent() {
                 <p className="text-surface-600 whitespace-pre-wrap">{selectedAssignment.instructions}</p>
               </div>
 
-              {/* Rubric Editor */}
+              {/* Rubric Editor - Two Mode Flow */}
               <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-surface-900">Grading Rubric</h3>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={saveRubric}
-                      disabled={savingRubric || editedCriteria.length === 0}
-                      className="flex items-center gap-2 px-3 py-1.5 text-sm bg-surface-100 text-surface-700 rounded-lg hover:bg-surface-200 disabled:opacity-50"
-                    >
-                      {savingRubric ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      Save
-                    </button>
-                    <button
-                      onClick={createSnapshot}
-                      disabled={creatingSnapshot || editedCriteria.length === 0}
-                      className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
-                    >
-                      {creatingSnapshot ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-                      Create Snapshot
-                    </button>
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-semibold text-surface-900">Grading Rubric</h3>
+                    {rubricOverallConfidence && (
+                      <span className={`px-2 py-0.5 text-xs rounded-full ${
+                        rubricOverallConfidence === 'high' ? 'bg-emerald-100 text-emerald-700' :
+                        rubricOverallConfidence === 'medium' ? 'bg-amber-100 text-amber-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {rubricOverallConfidence === 'high' ? '✓ High confidence' :
+                         rubricOverallConfidence === 'medium' ? '⚠ Medium confidence' :
+                         '⚠ Low confidence'}
+                      </span>
+                    )}
                   </div>
+                  {showRubricReview && editedCriteria.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={saveRubric}
+                        disabled={savingRubric}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-surface-100 text-surface-700 rounded-lg hover:bg-surface-200 disabled:opacity-50"
+                      >
+                        {savingRubric ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        Save
+                      </button>
+                      <button
+                        onClick={createSnapshot}
+                        disabled={creatingSnapshot || (rubricOverallConfidence === 'low' && !window.confirm('The rubric extraction has low confidence. Are you sure you want to create a snapshot?'))}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                      >
+                        {creatingSnapshot ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                        Create Snapshot
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {/* Raw Rubric Input */}
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-surface-700 mb-2">
-                    Paste your rubric (we'll parse it automatically)
-                  </label>
-                  <textarea
-                    value={rubricText}
-                    onChange={(e) => setRubricText(e.target.value)}
-                    placeholder="Paste your rubric text here...
+                {/* Warnings Banner */}
+                {rubricParseWarnings.length > 0 && (
+                  <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-amber-800">
+                        <p className="font-medium mb-1">Please review:</p>
+                        <ul className="list-disc list-inside space-y-0.5">
+                          {rubricParseWarnings.map((warning, idx) => (
+                            <li key={idx}>{warning}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Input Mode Selection - Only shown when not in review */}
+                {!showRubricReview && (
+                  <>
+                    <div className="flex gap-2 mb-4">
+                      <button
+                        onClick={() => setRubricInputMode('paste')}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                          rubricInputMode === 'paste'
+                            ? 'bg-primary-600 text-white shadow-md'
+                            : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
+                        }`}
+                      >
+                        <FileText className="w-4 h-4" />
+                        Paste Rubric Text
+                      </button>
+                      <button
+                        onClick={() => setRubricInputMode('pdf')}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                          rubricInputMode === 'pdf'
+                            ? 'bg-primary-600 text-white shadow-md'
+                            : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
+                        }`}
+                      >
+                        <Upload className="w-4 h-4" />
+                        Upload Rubric PDF
+                      </button>
+                    </div>
+
+                    {/* Paste Mode */}
+                    {rubricInputMode === 'paste' && (
+                      <div className="space-y-3">
+                        <textarea
+                          value={rubricText}
+                          onChange={(e) => setRubricText(e.target.value)}
+                          placeholder="Paste your rubric text here...
 
 Example:
 1. Content Quality - 30 pts
@@ -905,82 +1018,264 @@ Engaging presentation with good eye contact
 
 4. Time Management - 20 pts
 Presentation within time limits"
-                    rows={6}
-                    className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 font-mono text-sm"
-                  />
-                  <button
-                    onClick={parseRubricText}
-                    disabled={!rubricText.trim()}
-                    className="mt-2 text-sm text-primary-600 hover:text-primary-700 disabled:opacity-50"
-                  >
-                    Parse into criteria →
-                  </button>
-                </div>
-
-                {/* Parsed Criteria */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-medium text-surface-700">Criteria ({editedCriteria.length})</h4>
-                    <button
-                      onClick={addCriterion}
-                      className="text-sm text-primary-600 hover:text-primary-700"
-                    >
-                      + Add Criterion
-                    </button>
-                  </div>
-
-                  {editedCriteria.map((criterion, idx) => (
-                    <div key={criterion.id} className="p-4 bg-surface-50 rounded-xl border border-surface-200">
-                      <div className="flex items-start gap-3">
-                        <span className="w-6 h-6 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
-                          {idx + 1}
-                        </span>
-                        <div className="flex-1 space-y-2">
-                          <input
-                            type="text"
-                            value={criterion.name}
-                            onChange={(e) => updateCriterion(criterion.id, { name: e.target.value })}
-                            className="w-full font-medium text-surface-900 bg-transparent border-none p-0 focus:ring-0"
-                            placeholder="Criterion name"
-                          />
-                          <textarea
-                            value={criterion.description}
-                            onChange={(e) => updateCriterion(criterion.id, { description: e.target.value })}
-                            className="w-full text-sm text-surface-600 bg-transparent border-none p-0 focus:ring-0 resize-none"
-                            placeholder="Description of what this criterion evaluates..."
-                            rows={2}
-                          />
-                          <div className="flex items-center gap-4">
-                            <label className="flex items-center gap-2 text-xs text-surface-500">
-                              Weight:
-                              <input
-                                type="number"
-                                value={criterion.weight}
-                                onChange={(e) => updateCriterion(criterion.id, { weight: parseInt(e.target.value) || 1 })}
-                                min={1}
-                                max={100}
-                                className="w-16 px-2 py-1 rounded border border-surface-300 text-center"
-                              />
-                            </label>
-                          </div>
-                        </div>
+                          rows={8}
+                          className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                        />
                         <button
-                          onClick={() => removeCriterion(criterion.id)}
-                          className="p-1 text-surface-400 hover:text-red-500"
+                          onClick={parseRubric}
+                          disabled={!rubricText.trim() || parsingRubric}
+                          className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-50 text-sm font-medium"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          {parsingRubric ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Parsing with AI...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-4 h-4" />
+                              Parse Rubric
+                            </>
+                          )}
                         </button>
                       </div>
-                    </div>
-                  ))}
+                    )}
 
-                  {editedCriteria.length === 0 && (
-                    <div className="text-center py-8 text-surface-500">
-                      <FileText className="w-12 h-12 text-surface-300 mx-auto mb-2" />
-                      <p>No criteria yet. Paste a rubric above or add criteria manually.</p>
+                    {/* PDF Mode */}
+                    {rubricInputMode === 'pdf' && (
+                      <div className="space-y-3">
+                        <input
+                          ref={rubricFileInputRef}
+                          type="file"
+                          accept=".pdf"
+                          onChange={handleRubricFileSelect}
+                          className="hidden"
+                        />
+                        <div
+                          onClick={() => rubricFileInputRef.current?.click()}
+                          className="border-2 border-dashed border-primary-300 rounded-xl p-8 text-center cursor-pointer hover:border-primary-500 hover:bg-primary-50/50 transition-colors"
+                        >
+                          {rubricFile ? (
+                            <div className="flex items-center justify-center gap-3">
+                              <File className="w-10 h-10 text-primary-500" />
+                              <div className="text-left">
+                                <p className="font-medium text-surface-900">{rubricFile.name}</p>
+                                <p className="text-sm text-surface-500">
+                                  {(rubricFile.size / 1024).toFixed(1)} KB • Click to change
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <Upload className="w-10 h-10 text-primary-400 mx-auto mb-3" />
+                              <p className="text-surface-700 font-medium">
+                                Click to upload your rubric PDF
+                              </p>
+                              <p className="text-sm text-surface-500 mt-1">
+                                We'll extract and parse the criteria automatically
+                              </p>
+                            </>
+                          )}
+                        </div>
+                        <button
+                          onClick={parseRubric}
+                          disabled={!rubricFile || parsingRubric}
+                          className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-50 text-sm font-medium"
+                        >
+                          {parsingRubric ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Extracting & Parsing...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-4 h-4" />
+                              Extract & Parse Rubric
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Existing rubric indicator */}
+                    {rubric && rubric.criteria.length > 0 && (
+                      <div className="mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-emerald-700">
+                            <CheckCircle className="w-5 h-5" />
+                            <span className="text-sm font-medium">
+                              Existing rubric: {rubric.criteria.length} criteria
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setEditedCriteria(rubric.criteria);
+                              setRubricText(rubric.rawText || '');
+                              setShowRubricReview(true);
+                            }}
+                            className="text-sm text-emerald-700 hover:text-emerald-800 underline"
+                          >
+                            Edit existing rubric
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Review & Confirm UI */}
+                {showRubricReview && editedCriteria.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <h4 className="text-sm font-medium text-surface-700">
+                          Review Criteria ({editedCriteria.length})
+                          {rubricTotalPoints && (
+                            <span className="ml-2 text-surface-500">• {rubricTotalPoints} total points</span>
+                          )}
+                        </h4>
+                      </div>
+                      <button
+                        onClick={resetRubricInput}
+                        className="flex items-center gap-1 text-sm text-surface-500 hover:text-surface-700"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Start over
+                      </button>
                     </div>
-                  )}
-                </div>
+
+                    <p className="text-sm text-surface-500">
+                      Review the extracted criteria below. You can rename, adjust weights, reorder, or remove items.
+                    </p>
+
+                    {editedCriteria.map((criterion, idx) => (
+                      <div 
+                        key={criterion.id} 
+                        className={`p-4 rounded-xl border transition-colors ${
+                          criterion.confidence === 'low' 
+                            ? 'bg-red-50 border-red-200' 
+                            : criterion.confidence === 'medium'
+                            ? 'bg-amber-50 border-amber-200'
+                            : 'bg-surface-50 border-surface-200'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          {/* Order controls */}
+                          <div className="flex flex-col gap-0.5">
+                            <button
+                              onClick={() => reorderCriteria(idx, 'up')}
+                              disabled={idx === 0}
+                              className="p-1 text-surface-400 hover:text-surface-700 disabled:opacity-30"
+                            >
+                              <ChevronUp className="w-4 h-4" />
+                            </button>
+                            <span className="w-6 h-6 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center text-xs font-bold">
+                              {idx + 1}
+                            </span>
+                            <button
+                              onClick={() => reorderCriteria(idx, 'down')}
+                              disabled={idx === editedCriteria.length - 1}
+                              className="p-1 text-surface-400 hover:text-surface-700 disabled:opacity-30"
+                            >
+                              <ChevronDown className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="flex-1 space-y-2">
+                            {/* Confidence indicator */}
+                            {criterion.confidence && criterion.confidence !== 'high' && (
+                              <span className={`inline-block px-2 py-0.5 text-xs rounded-full mb-1 ${
+                                criterion.confidence === 'low' 
+                                  ? 'bg-red-100 text-red-700' 
+                                  : 'bg-amber-100 text-amber-700'
+                              }`}>
+                                {criterion.confidence === 'low' ? '⚠ Low confidence - please verify' : '⚠ Medium confidence'}
+                              </span>
+                            )}
+                            
+                            <input
+                              type="text"
+                              value={criterion.name}
+                              onChange={(e) => updateCriterion(criterion.id, { name: e.target.value })}
+                              className="w-full font-medium text-surface-900 bg-white border border-surface-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-primary-500"
+                              placeholder="Criterion name"
+                            />
+                            <textarea
+                              value={criterion.description}
+                              onChange={(e) => updateCriterion(criterion.id, { description: e.target.value })}
+                              className="w-full text-sm text-surface-600 bg-white border border-surface-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 resize-none"
+                              placeholder="Description of what this criterion evaluates..."
+                              rows={2}
+                            />
+                            
+                            {/* Score levels if present */}
+                            {criterion.levels && criterion.levels.length > 0 && (
+                              <div className="mt-2 p-2 bg-white/50 rounded-lg">
+                                <p className="text-xs font-medium text-surface-500 mb-1">Score Levels:</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {criterion.levels.map((level, levelIdx) => (
+                                    <span key={levelIdx} className="px-2 py-1 bg-surface-100 rounded text-xs">
+                                      {level.label}: {level.score} pts
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-4">
+                              <label className="flex items-center gap-2 text-xs text-surface-500">
+                                Weight/Points:
+                                <input
+                                  type="number"
+                                  value={criterion.weight}
+                                  onChange={(e) => updateCriterion(criterion.id, { weight: parseInt(e.target.value) || 1 })}
+                                  min={1}
+                                  max={100}
+                                  className="w-16 px-2 py-1 rounded border border-surface-300 text-center bg-white"
+                                />
+                              </label>
+                            </div>
+
+                            {/* Show original text for reference */}
+                            {criterion.originalText && (
+                              <details className="mt-2">
+                                <summary className="text-xs text-surface-400 cursor-pointer hover:text-surface-600">
+                                  View source text
+                                </summary>
+                                <p className="mt-1 text-xs text-surface-500 bg-white/50 p-2 rounded border border-surface-200 font-mono">
+                                  {criterion.originalText}
+                                </p>
+                              </details>
+                            )}
+                          </div>
+                          
+                          <button
+                            onClick={() => removeCriterion(criterion.id)}
+                            className="p-1 text-surface-400 hover:text-red-500"
+                            title="Remove criterion"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Empty state - only shown when no review and no existing rubric */}
+                {!showRubricReview && (!rubric || rubric.criteria.length === 0) && !parsingRubric && (
+                  <div className="text-center py-6 text-surface-500 border-t border-surface-100 mt-4">
+                    <ClipboardList className="w-10 h-10 text-surface-300 mx-auto mb-2" />
+                    <p className="text-sm">
+                      {rubricInputMode === 'paste' 
+                        ? 'Paste your rubric text above and click "Parse Rubric"' 
+                        : 'Upload your rubric PDF and click "Extract & Parse Rubric"'}
+                    </p>
+                    <p className="text-xs text-surface-400 mt-1">
+                      Our AI will automatically extract and structure the criteria
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Course Materials */}
