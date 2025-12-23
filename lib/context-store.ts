@@ -16,6 +16,10 @@ export interface Course {
   courseCode: string;
   term: string; // e.g., "Fall 2025"
   description?: string;
+  // AI-generated or manual summary for context fallback
+  summary?: string;
+  // Key themes/concepts for the course (used in retrieval fallback)
+  keyThemes?: string[];
   createdAt: number;
   updatedAt: number;
 }
@@ -564,6 +568,9 @@ export interface GradingContext {
   assignment: Assignment;
   documents: Document[];
   evaluationGuidance?: string;
+  // Course info for fallback
+  course?: Course;
+  courseSummary?: string;
   // Formatted for AI prompt
   rubricJSON: string;
   assignmentSummary: string;
@@ -575,6 +582,9 @@ export async function getGradingContext(bundleVersionId: string): Promise<Gradin
   if (!version) return null;
 
   const { rubric, assignment, documents, evaluationGuidance } = version.snapshot;
+
+  // Get course for summary fallback
+  const course = await getCourse(assignment.courseId);
 
   // Format rubric for AI
   const rubricJSON = JSON.stringify({
@@ -596,6 +606,16 @@ export async function getGradingContext(bundleVersionId: string): Promise<Gradin
     ? documents.map(d => `[${d.type.toUpperCase()}] ${d.name}:\n${d.rawText.slice(0, 2000)}`).join('\n\n---\n\n')
     : '';
 
+  // Build course summary for fallback (from course.summary or auto-generate from course info)
+  let courseSummary = course?.summary;
+  if (!courseSummary && course) {
+    // Auto-generate a basic summary from course metadata + key themes
+    const themes = course.keyThemes?.join(', ') || '';
+    courseSummary = `Course: ${course.name} (${course.courseCode}) - ${course.term}\n` +
+      (course.description ? `\n${course.description}\n` : '') +
+      (themes ? `\nKey themes: ${themes}` : '');
+  }
+
   return {
     bundleVersionId: version.id,
     bundleVersion: version.version,
@@ -603,6 +623,8 @@ export async function getGradingContext(bundleVersionId: string): Promise<Gradin
     assignment,
     documents,
     evaluationGuidance,
+    course: course || undefined,
+    courseSummary,
     rubricJSON,
     assignmentSummary,
     documentContext,

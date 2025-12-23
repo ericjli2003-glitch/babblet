@@ -20,6 +20,8 @@ interface Course {
   courseCode: string;
   term: string;
   description?: string;
+  summary?: string;
+  keyThemes?: string[];
 }
 
 interface Assignment {
@@ -261,7 +263,13 @@ export default function ClassWorkspace({
   const [documents, setDocuments] = useState<Document[]>([]);
   const [assignmentStats, setAssignmentStats] = useState<Record<string, AssignmentStats>>({});
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'assignments' | 'materials'>('assignments');
+  const [activeTab, setActiveTab] = useState<'assignments' | 'materials' | 'settings'>('assignments');
+  
+  // Course settings state
+  const [editingSummary, setEditingSummary] = useState(false);
+  const [summaryText, setSummaryText] = useState(course.summary || '');
+  const [keyThemesText, setKeyThemesText] = useState(course.keyThemes?.join(', ') || '');
+  const [savingSettings, setSavingSettings] = useState(false);
 
   // Load assignments and documents
   const loadData = useCallback(async () => {
@@ -468,6 +476,25 @@ export default function ClassWorkspace({
               />
             )}
           </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`px-4 py-3 font-medium text-sm transition-colors relative ${
+              activeTab === 'settings'
+                ? 'text-primary-600'
+                : 'text-surface-500 hover:text-surface-700'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Edit3 className="w-4 h-4" />
+              Context Settings
+            </span>
+            {activeTab === 'settings' && (
+              <motion.div
+                layoutId="activeTab"
+                className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600"
+              />
+            )}
+          </button>
         </div>
       </div>
 
@@ -574,6 +601,147 @@ export default function ClassWorkspace({
                 </div>
               </div>
             )}
+          </motion.div>
+        )}
+
+        {/* Settings Tab */}
+        {activeTab === 'settings' && (
+          <motion.div
+            key="settings"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-6"
+          >
+            {/* Course Summary Section */}
+            <div className="bg-white rounded-2xl border border-surface-200 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-semibold text-surface-900 flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-primary-500" />
+                    Course Summary
+                  </h3>
+                  <p className="text-sm text-surface-500 mt-1">
+                    This summary is used as a fallback when specific context retrieval yields low-confidence matches.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 mb-1">
+                    Course Summary
+                  </label>
+                  <textarea
+                    value={summaryText}
+                    onChange={(e) => setSummaryText(e.target.value)}
+                    placeholder="Describe the key objectives, themes, and expectations for this course. This helps the AI provide course-relevant feedback when specific materials don't match."
+                    rows={4}
+                    className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                  />
+                  <p className="text-xs text-surface-400 mt-1">
+                    Example: &quot;This course focuses on persuasive public speaking, emphasizing thesis development, evidence-based arguments, and audience engagement techniques.&quot;
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 mb-1">
+                    Key Themes & Concepts
+                  </label>
+                  <input
+                    type="text"
+                    value={keyThemesText}
+                    onChange={(e) => setKeyThemesText(e.target.value)}
+                    placeholder="e.g., rhetoric, ethos, pathos, logos, audience analysis"
+                    className="w-full px-4 py-2.5 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                  />
+                  <p className="text-xs text-surface-400 mt-1">
+                    Comma-separated list of key terms and concepts taught in this course.
+                  </p>
+                </div>
+                
+                <div className="flex justify-end pt-2">
+                  <button
+                    onClick={async () => {
+                      setSavingSettings(true);
+                      try {
+                        const keyThemes = keyThemesText
+                          .split(',')
+                          .map(t => t.trim())
+                          .filter(t => t.length > 0);
+                        
+                        const res = await fetch(`/api/context/courses?id=${course.id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            summary: summaryText.trim() || undefined,
+                            keyThemes: keyThemes.length > 0 ? keyThemes : undefined,
+                          }),
+                        });
+                        
+                        if (res.ok) {
+                          alert('Course settings saved!');
+                        }
+                      } catch (error) {
+                        console.error('Failed to save settings:', error);
+                        alert('Failed to save settings');
+                      } finally {
+                        setSavingSettings(false);
+                      }
+                    }}
+                    disabled={savingSettings}
+                    className="px-5 py-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {savingSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                    Save Settings
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            {/* Context Quality Explanation */}
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-200 p-6">
+              <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                <BookOpen className="w-5 h-5" />
+                How Context Retrieval Works
+              </h3>
+              <div className="space-y-3 text-sm text-blue-800">
+                <p>
+                  <strong>1. Smart Retrieval:</strong> For each student presentation, we retrieve the most relevant snippets from your course materials based on what they discussed and each rubric criterion.
+                </p>
+                <p>
+                  <strong>2. Per-Criterion Context:</strong> Each rubric criterion gets its own set of relevant materials, so feedback is always grounded in your course content.
+                </p>
+                <p>
+                  <strong>3. Quality Thresholds:</strong> We only include materials with high relevance scores (above 25%). Low-confidence matches are filtered out.
+                </p>
+                <p>
+                  <strong>4. Fallback Summary:</strong> If no high-quality matches are found, we use your course summary to ensure feedback stays course-relevant.
+                </p>
+                <p>
+                  <strong>5. Budget Controls:</strong> We cap context at ~8,000 characters to keep Claude focused and avoid overwhelming it with too much information.
+                </p>
+              </div>
+            </div>
+            
+            {/* Context Stats */}
+            <div className="bg-white rounded-2xl border border-surface-200 shadow-sm p-6">
+              <h3 className="font-semibold text-surface-900 mb-4">Context Coverage</h3>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-center p-4 bg-surface-50 rounded-xl">
+                  <p className="text-3xl font-bold text-primary-600">{documents.length}</p>
+                  <p className="text-sm text-surface-500">Documents</p>
+                </div>
+                <div className="text-center p-4 bg-surface-50 rounded-xl">
+                  <p className="text-3xl font-bold text-violet-600">{assignments.length}</p>
+                  <p className="text-sm text-surface-500">Assignments</p>
+                </div>
+                <div className="text-center p-4 bg-surface-50 rounded-xl">
+                  <p className="text-3xl font-bold text-emerald-600">{course.summary ? '✓' : '—'}</p>
+                  <p className="text-sm text-surface-500">Summary Set</p>
+                </div>
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

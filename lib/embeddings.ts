@@ -454,6 +454,23 @@ export async function hybridSearch(
 }
 
 // ============================================
+// Context Retrieval Configuration
+// ============================================
+
+export const RETRIEVAL_CONFIG = {
+  // Maximum characters of retrieved context to include in prompt
+  maxContextChars: 8000,
+  // Minimum relevance score to include a chunk (0-1)
+  minRelevanceScore: 0.25,
+  // High confidence threshold
+  highConfidenceScore: 0.5,
+  // Maximum chunks per criterion
+  maxChunksPerCriterion: 2,
+  // General context chunks (in addition to per-criterion)
+  generalContextChunks: 3,
+};
+
+// ============================================
 // Context Retrieval for Grading
 // ============================================
 
@@ -464,47 +481,97 @@ export interface RetrievalResult {
     chunkId: string;
     documentName: string;
     snippet: string;
+    relevanceScore?: number;
   }>;
+  // Quality metrics
+  averageRelevance: number;
+  highConfidenceCount: number;
+  usedFallback: boolean;
 }
 
 export async function retrieveContextForGrading(
   transcript: string,
   courseId: string,
   assignmentId?: string,
-  topK: number = 5
+  topK: number = 5,
+  courseSummary?: string // Fallback if retrieval quality is low
 ): Promise<RetrievalResult> {
   // Use hybrid search with the transcript as query
   // Take first 2000 chars as query (summary of content)
   const query = transcript.slice(0, 2000);
 
-  const chunks = await hybridSearch(query, courseId, assignmentId, topK);
+  const allChunks = await hybridSearch(query, courseId, assignmentId, topK * 2);
+  
+  // Filter by minimum relevance score
+  const relevantChunks = allChunks.filter(c => c.score >= RETRIEVAL_CONFIG.minRelevanceScore);
+  
+  // Calculate quality metrics
+  const averageRelevance = relevantChunks.length > 0
+    ? relevantChunks.reduce((sum, c) => sum + c.score, 0) / relevantChunks.length
+    : 0;
+  const highConfidenceCount = relevantChunks.filter(c => c.score >= RETRIEVAL_CONFIG.highConfidenceScore).length;
+  
+  // Check if we should use fallback
+  const shouldUseFallback = relevantChunks.length === 0 || 
+    (averageRelevance < RETRIEVAL_CONFIG.minRelevanceScore && courseSummary);
+  
+  if (shouldUseFallback && courseSummary) {
+    console.log(`[Retrieval] Low confidence (avg=${averageRelevance.toFixed(2)}), using course summary fallback`);
+    return {
+      chunks: [],
+      formattedContext: `[Course Overview]\n${courseSummary}`,
+      citations: [],
+      averageRelevance: 0,
+      highConfidenceCount: 0,
+      usedFallback: true,
+    };
+  }
 
-  if (chunks.length === 0) {
+  if (relevantChunks.length === 0) {
     return {
       chunks: [],
       formattedContext: '',
       citations: [],
+      averageRelevance: 0,
+      highConfidenceCount: 0,
+      usedFallback: false,
     };
   }
 
+  // Apply context budget - take chunks until we hit the limit
+  const budgetedChunks: RetrievedChunk[] = [];
+  let totalChars = 0;
+  
+  for (const chunk of relevantChunks.slice(0, topK)) {
+    const chunkChars = chunk.chunk.content.length + chunk.chunk.documentName.length + 20; // overhead
+    if (totalChars + chunkChars <= RETRIEVAL_CONFIG.maxContextChars) {
+      budgetedChunks.push(chunk);
+      totalChars += chunkChars;
+    } else {
+      break;
+    }
+  }
+
   // Format context for AI
-  const formattedContext = chunks
-    .map((r, i) => {
-      return `[Document: ${r.chunk.documentName}]\n${r.chunk.content}`;
-    })
+  const formattedContext = budgetedChunks
+    .map((r) => `[Document: ${r.chunk.documentName}]\n${r.chunk.content}`)
     .join('\n\n---\n\n');
 
-  // Build citations
-  const citations = chunks.map(r => ({
+  // Build citations with relevance scores
+  const citations = budgetedChunks.map(r => ({
     chunkId: r.chunk.id,
     documentName: r.chunk.documentName,
     snippet: r.chunk.content.slice(0, 200) + '...',
+    relevanceScore: r.score,
   }));
 
   return {
-    chunks,
+    chunks: budgetedChunks,
     formattedContext,
     citations,
+    averageRelevance,
+    highConfidenceCount,
+    usedFallback: false,
   };
 }
 
@@ -526,6 +593,12 @@ export interface CriterionCitation {
 export interface CriterionRetrievalResult {
   criterionCitations: CriterionCitation[];
   allCitations: RetrievalResult['citations'];
+  formattedContext: string;
+  // Quality metrics
+  totalChunksRetrieved: number;
+  averageRelevance: number;
+  highConfidenceCount: number;
+  contextCharsUsed: number;
 }
 
 export async function retrieveContextByCriterion(
@@ -533,44 +606,73 @@ export async function retrieveContextByCriterion(
   rubricCriteria: Array<{ id: string; name: string; description: string }>,
   courseId: string,
   assignmentId?: string,
-  chunksPerCriterion: number = 2
+  chunksPerCriterion: number = RETRIEVAL_CONFIG.maxChunksPerCriterion,
+  courseSummary?: string // Fallback if retrieval quality is low
 ): Promise<CriterionRetrievalResult> {
   const criterionCitations: CriterionCitation[] = [];
   const allChunkIds = new Set<string>();
   const allCitations: RetrievalResult['citations'] = [];
+  const allScores: number[] = [];
+  let totalChars = 0;
 
-  // For each criterion, retrieve relevant chunks
+  // For each criterion, retrieve relevant chunks (with budget awareness)
   for (const criterion of rubricCriteria) {
+    // Check if we've exceeded budget
+    if (totalChars >= RETRIEVAL_CONFIG.maxContextChars) {
+      console.log(`[Retrieval] Budget exceeded at criterion ${criterion.name}, skipping remaining`);
+      criterionCitations.push({
+        criterionId: criterion.id,
+        criterionName: criterion.name,
+        citations: [],
+      });
+      continue;
+    }
+
     // Build a query that combines transcript context with criterion
     const query = `${criterion.name}: ${criterion.description}\n\nStudent said: ${transcript.slice(0, 1000)}`;
 
     try {
-      const results = await hybridSearch(query, courseId, assignmentId, chunksPerCriterion);
+      const results = await hybridSearch(query, courseId, assignmentId, chunksPerCriterion * 2);
+      
+      // Filter by minimum relevance
+      const relevantResults = results.filter(r => r.score >= RETRIEVAL_CONFIG.minRelevanceScore);
 
-      const citations = results.map(r => ({
-        chunkId: r.chunk.id,
-        documentName: r.chunk.documentName,
-        snippet: r.chunk.content.slice(0, 200),
-        relevanceScore: r.score,
-      }));
+      const citations: CriterionCitation['citations'] = [];
+      
+      for (const r of relevantResults.slice(0, chunksPerCriterion)) {
+        // Check budget before adding
+        const chunkChars = r.chunk.content.length;
+        if (totalChars + chunkChars > RETRIEVAL_CONFIG.maxContextChars) {
+          break;
+        }
+        
+        citations.push({
+          chunkId: r.chunk.id,
+          documentName: r.chunk.documentName,
+          snippet: r.chunk.content.slice(0, 200),
+          relevanceScore: r.score,
+        });
+        
+        allScores.push(r.score);
+        totalChars += chunkChars;
+
+        // Add to all citations (deduplicated)
+        if (!allChunkIds.has(r.chunk.id)) {
+          allChunkIds.add(r.chunk.id);
+          allCitations.push({
+            chunkId: r.chunk.id,
+            documentName: r.chunk.documentName,
+            snippet: r.chunk.content.slice(0, 200),
+            relevanceScore: r.score,
+          });
+        }
+      }
 
       criterionCitations.push({
         criterionId: criterion.id,
         criterionName: criterion.name,
         citations,
       });
-
-      // Add to all citations (deduplicated)
-      for (const c of citations) {
-        if (!allChunkIds.has(c.chunkId)) {
-          allChunkIds.add(c.chunkId);
-          allCitations.push({
-            chunkId: c.chunkId,
-            documentName: c.documentName,
-            snippet: c.snippet,
-          });
-        }
-      }
     } catch (error) {
       console.error(`[Embeddings] Failed to retrieve for criterion ${criterion.name}:`, error);
       criterionCitations.push({
@@ -581,7 +683,37 @@ export async function retrieveContextByCriterion(
     }
   }
 
-  return { criterionCitations, allCitations };
+  // Calculate quality metrics
+  const averageRelevance = allScores.length > 0
+    ? allScores.reduce((sum, s) => sum + s, 0) / allScores.length
+    : 0;
+  const highConfidenceCount = allScores.filter(s => s >= RETRIEVAL_CONFIG.highConfidenceScore).length;
+  
+  // Check if we should use fallback
+  const shouldUseFallback = allCitations.length === 0 || 
+    (averageRelevance < RETRIEVAL_CONFIG.minRelevanceScore && courseSummary);
+  
+  let formattedContext: string;
+  
+  if (shouldUseFallback && courseSummary) {
+    console.log(`[Retrieval] Low criterion relevance (avg=${averageRelevance.toFixed(2)}), adding course summary`);
+    formattedContext = `[Course Overview]\n${courseSummary}\n\n---\n\n` +
+      allCitations.map(c => `[${c.documentName}]: ${c.snippet}`).join('\n\n');
+  } else {
+    formattedContext = allCitations
+      .map(c => `[${c.documentName}]: ${c.snippet}`)
+      .join('\n\n');
+  }
+
+  return { 
+    criterionCitations, 
+    allCitations,
+    formattedContext,
+    totalChunksRetrieved: allCitations.length,
+    averageRelevance,
+    highConfidenceCount,
+    contextCharsUsed: totalChars,
+  };
 }
 
 // ============================================

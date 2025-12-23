@@ -61,14 +61,20 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PATCH /api/context/courses - Update course
+// PATCH /api/context/courses?id=xxx - Update course
 export async function PATCH(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const courseIdFromQuery = searchParams.get('id');
+    
     const body = await request.json();
-    const { courseId, ...updates } = body;
+    const { courseId: courseIdFromBody, ...updates } = body;
+    
+    // Accept courseId from either query string or body
+    const courseId = courseIdFromQuery || courseIdFromBody;
 
     if (!courseId) {
-      return NextResponse.json({ error: 'courseId is required' }, { status: 400 });
+      return NextResponse.json({ error: 'courseId is required (via ?id=xxx or in body)' }, { status: 400 });
     }
 
     const course = await updateCourse(courseId, updates);
@@ -76,6 +82,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Course not found' }, { status: 404 });
     }
 
+    console.log(`[Courses] Updated: ${courseId} - summary=${!!updates.summary}, keyThemes=${!!updates.keyThemes}`);
     return NextResponse.json({ success: true, course });
   } catch (error) {
     console.error('[Courses] PATCH Error:', error);

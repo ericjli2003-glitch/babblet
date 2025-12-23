@@ -61,7 +61,15 @@ interface Submission {
     chunkId: string;
     documentName: string;
     snippet: string;
+    relevanceScore?: number;
   }>;
+  retrievalMetrics?: {
+    chunksRetrieved: number;
+    averageRelevance: number;
+    highConfidenceCount: number;
+    usedFallback: boolean;
+    contextCharsUsed: number;
+  };
   transcript?: string;
   transcriptSegments?: Array<{
     id: string;
@@ -637,7 +645,7 @@ export default function SubmissionDetailPage() {
             )}
 
             {/* Context Citations */}
-            {submission.contextCitations && submission.contextCitations.length > 0 && (
+            {(submission.contextCitations && submission.contextCitations.length > 0) || submission.retrievalMetrics ? (
               <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6 lg:col-span-2">
                 <div className="flex items-center gap-2 mb-4">
                   <FileText className="w-5 h-5 text-violet-500" />
@@ -648,29 +656,87 @@ export default function SubmissionDetailPage() {
                     </span>
                   )}
                 </div>
+                
+                {/* Retrieval Quality Metrics */}
+                {submission.retrievalMetrics && (
+                  <div className="mb-4 p-3 bg-surface-50 rounded-lg">
+                    <div className="flex items-center gap-4 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-surface-500">Chunks:</span>
+                        <span className="font-medium text-surface-700">
+                          {submission.retrievalMetrics.chunksRetrieved}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-surface-500">Avg Relevance:</span>
+                        <span className={`font-medium ${
+                          submission.retrievalMetrics.averageRelevance >= 0.5 
+                            ? 'text-emerald-600' 
+                            : submission.retrievalMetrics.averageRelevance >= 0.25 
+                              ? 'text-amber-600' 
+                              : 'text-red-500'
+                        }`}>
+                          {(submission.retrievalMetrics.averageRelevance * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-surface-500">High Confidence:</span>
+                        <span className="font-medium text-emerald-600">
+                          {submission.retrievalMetrics.highConfidenceCount}
+                        </span>
+                      </div>
+                      {submission.retrievalMetrics.usedFallback && (
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">
+                          Used Course Summary Fallback
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
                 <p className="text-sm text-surface-500 mb-4">
                   These course materials were retrieved and used by the AI during evaluation.
                 </p>
-                <div className="space-y-3">
-                  {submission.contextCitations.map((citation, idx) => (
-                    <div 
-                      key={citation.chunkId} 
-                      className="p-4 bg-violet-50 rounded-lg border border-violet-200"
-                    >
-                      <div className="flex items-start gap-3">
-                        <span className="w-6 h-6 bg-violet-200 text-violet-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
-                          {idx + 1}
-                        </span>
-                        <div>
-                          <p className="text-sm font-medium text-violet-900">{citation.documentName}</p>
-                          <p className="text-sm text-surface-600 mt-1 italic">"{citation.snippet}"</p>
+                
+                {submission.contextCitations && submission.contextCitations.length > 0 ? (
+                  <div className="space-y-3">
+                    {submission.contextCitations.map((citation, idx) => (
+                      <div 
+                        key={citation.chunkId} 
+                        className="p-4 bg-violet-50 rounded-lg border border-violet-200"
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="w-6 h-6 bg-violet-200 text-violet-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
+                            {idx + 1}
+                          </span>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-medium text-violet-900">{citation.documentName}</p>
+                              {citation.relevanceScore && (
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                  citation.relevanceScore >= 0.5 
+                                    ? 'bg-emerald-100 text-emerald-700' 
+                                    : citation.relevanceScore >= 0.25 
+                                      ? 'bg-amber-100 text-amber-700'
+                                      : 'bg-surface-100 text-surface-600'
+                                }`}>
+                                  {(citation.relevanceScore * 100).toFixed(0)}% match
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-surface-600 mt-1 italic">&quot;{citation.snippet}&quot;</p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-surface-400 italic">
+                    No specific document excerpts were retrieved. Course summary was used for context.
+                  </p>
+                )}
               </div>
-            )}
+            ) : null}
           </motion.div>
         )}
 

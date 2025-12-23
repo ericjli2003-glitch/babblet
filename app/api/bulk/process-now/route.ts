@@ -135,8 +135,20 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
       // Criterion-level retrieval for better context mapping
       let criterionRetrievalResult: CriterionRetrievalResult | null = null;
       
+      // Retrieval quality metrics for logging
+      let retrievalMetrics = {
+        chunksRetrieved: 0,
+        averageRelevance: 0,
+        highConfidenceCount: 0,
+        usedFallback: false,
+        contextCharsUsed: 0,
+      };
+      
       if (gradingContext) {
         assignmentContext = `${gradingContext.assignmentSummary}\n\n${gradingContext.evaluationGuidance || ''}`;
+        
+        // Get course summary for fallback
+        const courseSummary = gradingContext.courseSummary;
         
         // Retrieve relevant document chunks using embeddings
         if (isEmbeddingsConfigured() && batch?.courseId) {
@@ -152,27 +164,51 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
                 })),
                 batch.courseId,
                 batch.assignmentId,
-                2 // 2 chunks per criterion
+                undefined, // Use default chunks per criterion
+                courseSummary // Pass course summary for fallback
               );
               
-              // Use all citations for context
-              retrievedContext = {
-                chunks: [],
-                formattedContext: criterionRetrievalResult.allCitations
-                  .map(c => `[${c.documentName}]: ${c.snippet}`)
-                  .join('\n\n'),
-                citations: criterionRetrievalResult.allCitations,
+              // Track retrieval metrics
+              retrievalMetrics = {
+                chunksRetrieved: criterionRetrievalResult.totalChunksRetrieved,
+                averageRelevance: criterionRetrievalResult.averageRelevance,
+                highConfidenceCount: criterionRetrievalResult.highConfidenceCount,
+                usedFallback: criterionRetrievalResult.averageRelevance < 0.25 && !!courseSummary,
+                contextCharsUsed: criterionRetrievalResult.contextCharsUsed,
               };
               
-              console.log(`[ProcessNow] Retrieved ${criterionRetrievalResult.allCitations.length} chunks across ${gradingContext.rubric.criteria.length} criteria`);
+              // Use formatted context from enhanced retrieval
+              retrievedContext = {
+                chunks: [],
+                formattedContext: criterionRetrievalResult.formattedContext,
+                citations: criterionRetrievalResult.allCitations,
+                averageRelevance: criterionRetrievalResult.averageRelevance,
+                highConfidenceCount: criterionRetrievalResult.highConfidenceCount,
+                usedFallback: retrievalMetrics.usedFallback,
+              };
+              
+              console.log(`[ProcessNow] Context retrieval: ${retrievalMetrics.chunksRetrieved} chunks, ` +
+                `avg relevance=${retrievalMetrics.averageRelevance.toFixed(2)}, ` +
+                `high-confidence=${retrievalMetrics.highConfidenceCount}, ` +
+                `chars=${retrievalMetrics.contextCharsUsed}, ` +
+                `fallback=${retrievalMetrics.usedFallback}`);
             } else {
-              // Fallback to general retrieval
+              // Fallback to general retrieval with course summary
               retrievedContext = await retrieveContextForGrading(
                 transcript,
                 batch.courseId,
                 batch.assignmentId,
-                5
+                5,
+                courseSummary // Pass course summary for fallback
               );
+              
+              retrievalMetrics = {
+                chunksRetrieved: retrievedContext.chunks.length,
+                averageRelevance: retrievedContext.averageRelevance,
+                highConfidenceCount: retrievedContext.highConfidenceCount,
+                usedFallback: retrievedContext.usedFallback,
+                contextCharsUsed: retrievedContext.formattedContext.length,
+              };
             }
             
             if (retrievedContext?.formattedContext) {
@@ -180,6 +216,12 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
             }
           } catch (retrievalError) {
             console.error('[ProcessNow] Document retrieval failed:', retrievalError);
+            // If retrieval fails but we have course summary, use it as fallback
+            if (courseSummary) {
+              assignmentContext += `\n\n--- COURSE OVERVIEW ---\n${courseSummary}`;
+              retrievalMetrics.usedFallback = true;
+              console.log('[ProcessNow] Using course summary fallback due to retrieval error');
+            }
           }
         }
       }
@@ -207,6 +249,10 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
         bundleVersionId: bundleVersionId,
         // Store citations from retrieved documents
         contextCitations: retrievedContext?.citations || undefined,
+        // Store retrieval quality metrics for transparency
+        retrievalMetrics: retrievalMetrics.chunksRetrieved > 0 || retrievalMetrics.usedFallback
+          ? retrievalMetrics
+          : undefined,
         analysis: {
           keyClaims: analysis.keyClaims.map(c => ({ id: c.id, claim: c.claim, evidence: c.evidence })),
           logicalGaps: analysis.logicalGaps.map(g => ({ id: g.id, description: g.description, severity: g.severity })),

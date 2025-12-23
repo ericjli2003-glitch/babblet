@@ -35,7 +35,16 @@ export interface Submission {
     chunkId: string;
     documentName: string;
     snippet: string;
+    relevanceScore?: number;
   }>;
+  // Retrieval quality metrics (for transparency)
+  retrievalMetrics?: {
+    chunksRetrieved: number;
+    averageRelevance: number;
+    highConfidenceCount: number;
+    usedFallback: boolean;
+    contextCharsUsed: number;
+  };
   // Processing status
   status: SubmissionStatus;
   errorMessage?: string;
