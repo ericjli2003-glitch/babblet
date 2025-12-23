@@ -193,7 +193,7 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
         : rubricCriteria;
       
       const [rubricResult, questionsResult, verifyResult] = await Promise.allSettled([
-        evaluateWithClaude(transcript, fullRubricContext, undefined, analysis),
+        evaluateWithClaude(transcript, fullRubricContext, undefined, analysis, segments),
         generateQuestionsWithClaude(transcript, analysis, undefined, { maxQuestions: config.limits.defaultMaxQuestions }),
         claims.length > 0 ? verifyWithClaude(transcript, claims) : Promise.resolve([]),
       ]);
@@ -222,13 +222,37 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
                    cc.criterionName.includes(c.criterion) ||
                    c.criterion.includes(cc.criterionName)
             );
+            // Include all enhanced data (criterionId, transcriptRefs, etc.)
             return {
-              ...c,
+              criterionId: (c as any).criterionId,
+              criterion: c.criterion,
+              score: c.score,
+              feedback: c.feedback,
+              transcriptRefs: (c as any).transcriptRefs,
               citations: criterionCites?.citations || undefined,
             };
           }),
-          strengths: rubricEvaluation.criteriaBreakdown?.flatMap(c => c.strengths || []) || [],
-          improvements: rubricEvaluation.criteriaBreakdown?.flatMap(c => c.improvements || []) || [],
+          // Collect strengths and improvements with their deep-linking data
+          strengths: rubricEvaluation.criteriaBreakdown?.flatMap(c => 
+            ((c as any).strengths || []).map((s: any) => 
+              typeof s === 'string' ? s : { 
+                text: s.text, 
+                criterionId: s.criterionId || (c as any).criterionId,
+                criterionName: s.criterionName || c.criterion,
+                transcriptRefs: s.transcriptRefs,
+              }
+            )
+          ) || [],
+          improvements: rubricEvaluation.criteriaBreakdown?.flatMap(c => 
+            ((c as any).improvements || []).map((s: any) => 
+              typeof s === 'string' ? s : { 
+                text: s.text, 
+                criterionId: s.criterionId || (c as any).criterionId,
+                criterionName: s.criterionName || c.criterion,
+                transcriptRefs: s.transcriptRefs,
+              }
+            )
+          ) || [],
         } : undefined,
         questions: questions.slice(0, 8).map(q => ({ id: q.id, question: q.question, category: q.category })),
         verificationFindings: findings.map(f => ({ id: f.id, statement: f.statement, status: f.verdict, explanation: f.explanation })),

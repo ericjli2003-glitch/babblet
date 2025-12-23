@@ -56,10 +56,17 @@ export interface Submission {
   rubricEvaluation?: {
     overallScore: number;
     criteriaBreakdown?: Array<{
+      criterionId?: string; // Links to rubric criterion ID
       criterion: string;
       score: number;
       feedback: string;
-      // Criterion-level citations (Stage 4)
+      // Transcript segment references for this criterion
+      transcriptRefs?: Array<{
+        segmentId: string;
+        timestamp: number;
+        snippet: string;
+      }>;
+      // Document citations (Stage 4)
       citations?: Array<{
         chunkId: string;
         documentName: string;
@@ -67,8 +74,28 @@ export interface Submission {
         relevanceScore?: number;
       }>;
     }>;
-    strengths: string[];
-    improvements: string[];
+    // Strengths with deep linking
+    strengths: Array<string | {
+      text: string;
+      criterionId?: string;
+      criterionName?: string;
+      transcriptRefs?: Array<{
+        segmentId: string;
+        timestamp: number;
+        snippet: string;
+      }>;
+    }>;
+    // Improvements with deep linking
+    improvements: Array<string | {
+      text: string;
+      criterionId?: string;
+      criterionName?: string;
+      transcriptRefs?: Array<{
+        segmentId: string;
+        timestamp: number;
+        snippet: string;
+      }>;
+    }>;
   };
   questions?: Array<{
     id: string;

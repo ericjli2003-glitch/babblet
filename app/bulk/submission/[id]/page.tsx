@@ -5,14 +5,46 @@ import { motion } from 'framer-motion';
 import { 
   ArrowLeft, CheckCircle, XCircle, AlertTriangle, Lightbulb,
   MessageCircleQuestion, FileText, BarChart3, Clock, Loader2, Download,
-  RefreshCw, X
+  RefreshCw, X, ChevronRight, Play
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import RubricDetailDrawer from '@/components/RubricDetailDrawer';
+import TranscriptViewer from '@/components/TranscriptViewer';
 
 // ============================================
 // Types
 // ============================================
+
+// Enhanced types with deep linking support
+interface TranscriptRef {
+  segmentId: string;
+  timestamp: number;
+  snippet: string;
+}
+
+interface StrengthOrImprovement {
+  text: string;
+  criterionId?: string;
+  criterionName?: string;
+  transcriptRefs?: TranscriptRef[];
+}
+
+interface CriterionBreakdown {
+  criterionId?: string;
+  criterion: string;
+  score: number;
+  feedback: string;
+  transcriptRefs?: TranscriptRef[];
+  strengths?: StrengthOrImprovement[];
+  improvements?: StrengthOrImprovement[];
+  citations?: Array<{
+    chunkId: string;
+    documentName: string;
+    snippet: string;
+    relevanceScore?: number;
+  }>;
+}
 
 interface Submission {
   id: string;
@@ -21,6 +53,8 @@ interface Submission {
   studentName: string;
   status: string;
   errorMessage?: string;
+  // File access
+  fileKey?: string;
   // Context reference
   bundleVersionId?: string;
   contextCitations?: Array<{
@@ -43,19 +77,10 @@ interface Submission {
   };
   rubricEvaluation?: {
     overallScore: number;
-    criteriaBreakdown?: Array<{
-      criterion: string;
-      score: number;
-      feedback: string;
-      citations?: Array<{
-        chunkId: string;
-        documentName: string;
-        snippet: string;
-        relevanceScore?: number;
-      }>;
-    }>;
-    strengths: string[];
-    improvements: string[];
+    criteriaBreakdown?: CriterionBreakdown[];
+    // Strengths/improvements can be strings (legacy) or objects (new)
+    strengths: Array<string | StrengthOrImprovement>;
+    improvements: Array<string | StrengthOrImprovement>;
   };
   questions?: Array<{
     id: string;
@@ -130,6 +155,50 @@ export default function SubmissionDetailPage() {
   const [availableVersions, setAvailableVersions] = useState<VersionOption[]>([]);
   const [selectedVersion, setSelectedVersion] = useState('');
   const [regrading, setRegrading] = useState(false);
+
+  // Rubric detail drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedCriterion, setSelectedCriterion] = useState<CriterionBreakdown | undefined>(undefined);
+  const [selectedItem, setSelectedItem] = useState<StrengthOrImprovement | undefined>(undefined);
+  const [selectedItemType, setSelectedItemType] = useState<'strength' | 'improvement' | undefined>(undefined);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+
+  // Open drawer for a criterion
+  const openCriterionDrawer = (criterion: CriterionBreakdown) => {
+    setSelectedCriterion(criterion);
+    setSelectedItem(undefined);
+    setSelectedItemType(undefined);
+    setDrawerOpen(true);
+  };
+
+  // Open drawer for a strength/improvement
+  const openItemDrawer = (item: string | StrengthOrImprovement, type: 'strength' | 'improvement') => {
+    const itemObj = typeof item === 'string' ? { text: item } : item;
+    // Find the related criterion if available
+    let criterion: CriterionBreakdown | undefined;
+    if (itemObj.criterionId && submission?.rubricEvaluation?.criteriaBreakdown) {
+      criterion = submission.rubricEvaluation.criteriaBreakdown.find(
+        c => c.criterionId === itemObj.criterionId
+      );
+    }
+    setSelectedCriterion(criterion);
+    setSelectedItem(itemObj);
+    setSelectedItemType(type);
+    setDrawerOpen(true);
+  };
+
+  // Get video URL for the submission
+  useEffect(() => {
+    if (submission?.fileKey) {
+      // Fetch presigned URL for the video
+      fetch(`/api/bulk/presign?key=${encodeURIComponent(submission.fileKey)}&action=download`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.url) setVideoUrl(data.url);
+        })
+        .catch(err => console.error('Failed to get video URL:', err));
+    }
+  }, [submission?.fileKey]);
 
   const loadSubmission = useCallback(async () => {
     try {
@@ -342,18 +411,33 @@ export default function SubmissionDetailPage() {
                   <h3 className="font-semibold text-surface-900">Rubric Evaluation</h3>
                 </div>
 
-                {/* Criteria Breakdown */}
+                {/* Criteria Breakdown - Clickable */}
                 {submission.rubricEvaluation.criteriaBreakdown && (
                   <div className="space-y-3 mb-6">
                     {submission.rubricEvaluation.criteriaBreakdown.map((c, i) => (
-                      <div key={i} className="p-3 bg-surface-50 rounded-lg">
+                      <button
+                        key={i}
+                        onClick={() => openCriterionDrawer(c)}
+                        className="w-full p-3 bg-surface-50 rounded-lg hover:bg-surface-100 hover:shadow-sm transition-all text-left group"
+                      >
                         <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium text-surface-900">{c.criterion}</span>
+                          <span className="font-medium text-surface-900 group-hover:text-primary-700 flex items-center gap-1">
+                            {c.criterion}
+                            <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </span>
                           <span className={`font-bold ${getScoreColor(c.score)}`}>
                             {c.score.toFixed(1)}/5
                           </span>
                         </div>
-                        <p className="text-sm text-surface-600">{c.feedback}</p>
+                        <p className="text-sm text-surface-600 line-clamp-2">{c.feedback}</p>
+                        
+                        {/* Transcript link indicator */}
+                        {c.transcriptRefs && c.transcriptRefs.length > 0 && (
+                          <div className="mt-2 flex items-center gap-1 text-xs text-primary-600">
+                            <Play className="w-3 h-3" />
+                            {c.transcriptRefs.length} transcript moment{c.transcriptRefs.length !== 1 ? 's' : ''}
+                          </div>
+                        )}
                         
                         {/* Criterion-level citations */}
                         {c.citations && c.citations.length > 0 && (
@@ -366,37 +450,87 @@ export default function SubmissionDetailPage() {
                             ))}
                           </div>
                         )}
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
 
-                {/* Strengths */}
+                {/* Strengths - Clickable */}
                 {submission.rubricEvaluation.strengths.length > 0 && (
                   <div className="mb-4">
                     <h4 className="text-sm font-medium text-emerald-700 mb-2">Strengths</h4>
                     <ul className="space-y-1">
-                      {submission.rubricEvaluation.strengths.map((s, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-surface-700">
-                          <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
-                          {s}
-                        </li>
-                      ))}
+                      {submission.rubricEvaluation.strengths.map((s, i) => {
+                        const text = typeof s === 'string' ? s : s.text;
+                        const hasRefs = typeof s !== 'string' && s.transcriptRefs && s.transcriptRefs.length > 0;
+                        const criterionName = typeof s !== 'string' ? s.criterionName : undefined;
+                        return (
+                          <li key={i}>
+                            <button
+                              onClick={() => openItemDrawer(s, 'strength')}
+                              className="flex items-start gap-2 text-sm text-surface-700 w-full text-left p-2 -m-2 rounded-lg hover:bg-emerald-50 transition-colors group"
+                            >
+                              <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                              <div className="flex-1">
+                                <span className="group-hover:text-emerald-700">{text}</span>
+                                {(hasRefs || criterionName) && (
+                                  <div className="flex items-center gap-2 mt-1">
+                                    {criterionName && (
+                                      <span className="text-xs text-surface-400">From: {criterionName}</span>
+                                    )}
+                                    {hasRefs && (
+                                      <span className="text-xs text-primary-500 flex items-center gap-0.5">
+                                        <Play className="w-3 h-3" /> See in video
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              <ChevronRight className="w-4 h-4 text-surface-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                            </button>
+                          </li>
+                        );
+                      })}
                     </ul>
                   </div>
                 )}
 
-                {/* Improvements */}
+                {/* Improvements - Clickable */}
                 {submission.rubricEvaluation.improvements.length > 0 && (
                   <div>
                     <h4 className="text-sm font-medium text-amber-700 mb-2">Areas for Improvement</h4>
                     <ul className="space-y-1">
-                      {submission.rubricEvaluation.improvements.map((s, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-surface-700">
-                          <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                          {s}
-                        </li>
-                      ))}
+                      {submission.rubricEvaluation.improvements.map((s, i) => {
+                        const text = typeof s === 'string' ? s : s.text;
+                        const hasRefs = typeof s !== 'string' && s.transcriptRefs && s.transcriptRefs.length > 0;
+                        const criterionName = typeof s !== 'string' ? s.criterionName : undefined;
+                        return (
+                          <li key={i}>
+                            <button
+                              onClick={() => openItemDrawer(s, 'improvement')}
+                              className="flex items-start gap-2 text-sm text-surface-700 w-full text-left p-2 -m-2 rounded-lg hover:bg-amber-50 transition-colors group"
+                            >
+                              <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                              <div className="flex-1">
+                                <span className="group-hover:text-amber-700">{text}</span>
+                                {(hasRefs || criterionName) && (
+                                  <div className="flex items-center gap-2 mt-1">
+                                    {criterionName && (
+                                      <span className="text-xs text-surface-400">From: {criterionName}</span>
+                                    )}
+                                    {hasRefs && (
+                                      <span className="text-xs text-primary-500 flex items-center gap-0.5">
+                                        <Play className="w-3 h-3" /> See in video
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              <ChevronRight className="w-4 h-4 text-surface-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                            </button>
+                          </li>
+                        );
+                      })}
                     </ul>
                   </div>
                 )}
@@ -540,7 +674,7 @@ export default function SubmissionDetailPage() {
           </motion.div>
         )}
 
-        {/* Transcript Tab */}
+        {/* Transcript Tab - Using shared TranscriptViewer */}
         {activeTab === 'transcript' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -550,24 +684,25 @@ export default function SubmissionDetailPage() {
             <div className="flex items-center gap-2 mb-4">
               <FileText className="w-5 h-5 text-surface-500" />
               <h3 className="font-semibold text-surface-900">Transcript</h3>
+              {submission.transcriptSegments && (
+                <span className="text-xs text-surface-400">
+                  {submission.transcriptSegments.length} segments
+                </span>
+              )}
             </div>
 
             {submission.transcriptSegments && submission.transcriptSegments.length > 0 ? (
-              <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                {submission.transcriptSegments.map(seg => (
-                  <div key={seg.id} className="flex gap-4">
-                    <span className="text-xs text-surface-400 font-mono w-16 flex-shrink-0">
-                      {formatTimestamp(seg.timestamp)}
-                    </span>
-                    {seg.speaker && (
-                      <span className="text-xs font-medium text-primary-600 w-20 flex-shrink-0">
-                        {seg.speaker}
-                      </span>
-                    )}
-                    <p className="text-sm text-surface-700 flex-1">{seg.text}</p>
-                  </div>
-                ))}
-              </div>
+              <TranscriptViewer
+                segments={submission.transcriptSegments}
+                onSegmentClick={(seg) => {
+                  // Could open video at this timestamp
+                  if (videoUrl) {
+                    // TODO: Open mini player modal
+                    console.log('Clicked segment:', seg.id, 'at', seg.timestamp);
+                  }
+                }}
+                className="max-h-[600px]"
+              />
             ) : submission.transcript ? (
               <p className="text-sm text-surface-700 whitespace-pre-wrap">{submission.transcript}</p>
             ) : (
@@ -694,6 +829,23 @@ export default function SubmissionDetailPage() {
           </motion.div>
         </div>
       )}
+
+      {/* Rubric Detail Drawer - Deep linking between rubric, transcript, and video */}
+      <RubricDetailDrawer
+        isOpen={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setSelectedCriterion(undefined);
+          setSelectedItem(undefined);
+          setSelectedItemType(undefined);
+        }}
+        criterion={selectedCriterion}
+        item={selectedItem}
+        itemType={selectedItemType}
+        transcript={submission.transcript}
+        transcriptSegments={submission.transcriptSegments}
+        videoUrl={videoUrl || undefined}
+      />
     </div>
   );
 }

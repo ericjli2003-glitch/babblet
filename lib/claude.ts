@@ -551,11 +551,56 @@ interface CustomRubricCriteria {
 }
 
 // Evaluate presentation using Claude with optional custom rubric
+// Transcript segment for linking
+interface TranscriptSegmentInput {
+  id: string;
+  text: string;
+  timestamp: number;
+  speaker?: string;
+}
+
+// Find the best matching segment for a quote
+function findMatchingSegment(
+  quote: string,
+  segments: TranscriptSegmentInput[]
+): { segmentId: string; timestamp: number; snippet: string } | null {
+  if (!quote || !segments.length) return null;
+  
+  const normalizedQuote = quote.toLowerCase().trim();
+  if (normalizedQuote.length < 10) return null;
+  
+  // Try exact substring match first
+  for (const seg of segments) {
+    if (seg.text.toLowerCase().includes(normalizedQuote)) {
+      return { segmentId: seg.id, timestamp: seg.timestamp, snippet: quote };
+    }
+  }
+  
+  // Try fuzzy matching using Dice coefficient
+  let bestMatch: TranscriptSegmentInput | null = null;
+  let bestScore = 0;
+  
+  for (const seg of segments) {
+    const score = diceCoefficient(quote, seg.text);
+    if (score > bestScore && score > 0.3) {
+      bestScore = score;
+      bestMatch = seg;
+    }
+  }
+  
+  if (bestMatch) {
+    return { segmentId: bestMatch.id, timestamp: bestMatch.timestamp, snippet: quote };
+  }
+  
+  return null;
+}
+
 export async function evaluateWithClaude(
   transcript: string,
   customRubric?: string,
   customCriteria?: CustomRubricCriteria[],
-  analysis?: AnalysisSummary | null
+  analysis?: AnalysisSummary | null,
+  transcriptSegments?: TranscriptSegmentInput[]
 ): Promise<RubricEvaluation> {
   const client = getAnthropicClient();
 
@@ -632,34 +677,42 @@ JSON format:
   "contentQuality": {
     "score": number,
     "feedback": "Specific feedback about content",
-    "strengths": ["Strength 1", "Strength 2"],
-    "improvements": ["Improvement 1", "Improvement 2"]
+    "strengths": [
+      { "text": "Strength description", "quote": "Exact words from transcript that demonstrate this" }
+    ],
+    "improvements": [
+      { "text": "Improvement needed", "quote": "Exact words from transcript showing where this applies" }
+    ]
   },
   "delivery": {
     "score": number,
     "feedback": "Specific feedback about delivery",
-    "strengths": ["Strength 1", "Strength 2"],
-    "improvements": ["Improvement 1", "Improvement 2"]
+    "strengths": [{ "text": "...", "quote": "..." }],
+    "improvements": [{ "text": "...", "quote": "..." }]
   },
   "evidenceStrength": {
     "score": number,
     "feedback": "Specific feedback about evidence",
-    "strengths": ["Strength 1", "Strength 2"],
-    "improvements": ["Improvement 1", "Improvement 2"]
+    "strengths": [{ "text": "...", "quote": "..." }],
+    "improvements": [{ "text": "...", "quote": "..." }]
   },
   "overallScore": number,
   "overallFeedback": "Summary evaluation",
   "criteriaBreakdown": [
     {
+      "criterionId": "unique-id-for-criterion",
       "criterion": "Short label from rubric",
       "score": number,
       "feedback": "Specific feedback tied to transcript",
-      "strengths": ["Strength 1"],
-      "improvements": ["Improvement 1"],
+      "relevantQuotes": ["Exact quote 1", "Exact quote 2"],
+      "strengths": [{ "text": "Strength", "quote": "Supporting quote" }],
+      "improvements": [{ "text": "Improvement", "quote": "Relevant quote" }],
       "missingEvidence": ["Specific evidence missing (if any)"]
     }
   ]
 }
+
+IMPORTANT: For each strength and improvement, include "quote" with the exact words from the transcript (5-20 words) that support your assessment. This enables deep-linking to the video timestamp.
 
 Respond ONLY with valid JSON.`;
 
@@ -691,37 +744,88 @@ Respond ONLY with valid JSON.`;
 
     const parsed = JSON.parse(jsonMatch[0]);
 
+    // Helper to extract strengths/improvements with transcript references
+    const extractWithRefs = (items: any[], criterionId?: string, criterionName?: string) => {
+      if (!Array.isArray(items)) return [];
+      
+      return items.map((item: any) => {
+        // Handle both old string format and new object format
+        const text = typeof item === 'string' ? item : (item.text || item);
+        const quote = typeof item === 'object' ? item.quote : null;
+        
+        // Find matching segment if we have segments and a quote
+        const transcriptRefs: Array<{ segmentId: string; timestamp: number; snippet: string }> = [];
+        if (quote && transcriptSegments?.length) {
+          const match = findMatchingSegment(quote, transcriptSegments);
+          if (match) {
+            transcriptRefs.push(match);
+          }
+        }
+        
+        return {
+          text: String(text),
+          criterionId,
+          criterionName,
+          transcriptRefs: transcriptRefs.length > 0 ? transcriptRefs : undefined,
+        };
+      });
+    };
+
+    // Helper for simple string extraction (backwards compatible)
+    const extractStrings = (items: any[]) => {
+      if (!Array.isArray(items)) return [];
+      return items.map((item: any) => typeof item === 'string' ? item : (item.text || String(item)));
+    };
+
     const rubric: RubricEvaluation = {
       contentQuality: {
         score: parsed.contentQuality?.score || 3,
         feedback: parsed.contentQuality?.feedback || 'Content evaluation',
-        strengths: parsed.contentQuality?.strengths || [],
-        improvements: parsed.contentQuality?.improvements || [],
+        strengths: extractStrings(parsed.contentQuality?.strengths),
+        improvements: extractStrings(parsed.contentQuality?.improvements),
       },
       delivery: {
         score: parsed.delivery?.score || 3,
         feedback: parsed.delivery?.feedback || 'Delivery evaluation',
-        strengths: parsed.delivery?.strengths || [],
-        improvements: parsed.delivery?.improvements || [],
+        strengths: extractStrings(parsed.delivery?.strengths),
+        improvements: extractStrings(parsed.delivery?.improvements),
       },
       evidenceStrength: {
         score: parsed.evidenceStrength?.score || 3,
         feedback: parsed.evidenceStrength?.feedback || 'Evidence evaluation',
-        strengths: parsed.evidenceStrength?.strengths || [],
-        improvements: parsed.evidenceStrength?.improvements || [],
+        strengths: extractStrings(parsed.evidenceStrength?.strengths),
+        improvements: extractStrings(parsed.evidenceStrength?.improvements),
       },
       overallScore: parsed.overallScore || 3,
       overallFeedback: parsed.overallFeedback || 'Evaluation complete',
       criteriaBreakdown: Array.isArray(parsed.criteriaBreakdown)
         ? parsed.criteriaBreakdown
-          .map((c: any) => ({
-            criterion: typeof c.criterion === 'string' ? c.criterion : 'Criterion',
-            score: typeof c.score === 'number' ? c.score : 3,
-            feedback: typeof c.feedback === 'string' ? c.feedback : '',
-            strengths: Array.isArray(c.strengths) ? c.strengths.map((s: any) => String(s)) : [],
-            improvements: Array.isArray(c.improvements) ? c.improvements.map((s: any) => String(s)) : [],
-            missingEvidence: Array.isArray(c.missingEvidence) ? c.missingEvidence.map((s: any) => String(s)) : [],
-          }))
+          .map((c: any) => {
+            const criterionId = c.criterionId || `criterion-${Math.random().toString(36).slice(2, 8)}`;
+            const criterionName = typeof c.criterion === 'string' ? c.criterion : 'Criterion';
+            
+            // Extract transcript references from relevant quotes
+            const transcriptRefs: Array<{ segmentId: string; timestamp: number; snippet: string }> = [];
+            if (Array.isArray(c.relevantQuotes) && transcriptSegments?.length) {
+              for (const quote of c.relevantQuotes) {
+                const match = findMatchingSegment(String(quote), transcriptSegments);
+                if (match) {
+                  transcriptRefs.push(match);
+                }
+              }
+            }
+            
+            return {
+              criterionId,
+              criterion: criterionName,
+              score: typeof c.score === 'number' ? c.score : 3,
+              feedback: typeof c.feedback === 'string' ? c.feedback : '',
+              transcriptRefs: transcriptRefs.length > 0 ? transcriptRefs : undefined,
+              strengths: extractWithRefs(c.strengths || [], criterionId, criterionName),
+              improvements: extractWithRefs(c.improvements || [], criterionId, criterionName),
+              missingEvidence: Array.isArray(c.missingEvidence) ? c.missingEvidence.map((s: any) => String(s)) : [],
+            };
+          })
           .filter((c: any) => c.criterion && c.feedback !== '')
         : undefined,
       timestamp: Date.now(),
