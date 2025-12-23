@@ -13,11 +13,15 @@ async function parsePDF(buffer: Buffer): Promise<{ text: string; numpages: numbe
     const uint8Array = new Uint8Array(buffer);
     
     // Use unpdf which is designed for serverless environments
-    const { text, totalPages } = await extractPdfText(uint8Array, { mergePages: true });
+    const result = await extractPdfText(uint8Array, { mergePages: true });
+    
+    // With mergePages: true, text is a string; otherwise it's string[]
+    const textContent = result.text;
+    const finalText = Array.isArray(textContent) ? textContent.join('\n') : textContent;
     
     return { 
-      text: typeof text === 'string' ? text : text.join('\n'), 
-      numpages: totalPages 
+      text: finalText, 
+      numpages: result.totalPages 
     };
   } catch (error) {
     console.error('unpdf extraction failed:', error);

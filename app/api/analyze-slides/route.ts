@@ -23,8 +23,13 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
   try {
     const { extractText } = await import('unpdf');
     const uint8Array = new Uint8Array(buffer);
-    const { text } = await extractText(uint8Array, { mergePages: true });
-    return typeof text === 'string' ? text : text.join('\n');
+    const result = await extractText(uint8Array, { mergePages: true });
+    // With mergePages: true, text is a string; otherwise it's string[]
+    const text = result.text;
+    if (Array.isArray(text)) {
+      return text.join('\n');
+    }
+    return text;
   } catch (error) {
     console.error('[PDF] Extraction error:', error);
     throw new Error('Failed to extract PDF text');
