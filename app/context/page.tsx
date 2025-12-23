@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import ClassWorkspace from '@/components/ClassWorkspace';
 
 // ============================================
 // Types
@@ -130,6 +131,14 @@ function CourseContextPageContent() {
   const [uploadMode, setUploadMode] = useState<'paste' | 'file'>('file');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Class Workspace document upload modal
+  const [showDocumentUpload, setShowDocumentUpload] = useState(false);
+  const [uploadDocName, setUploadDocName] = useState('');
+  const [uploadDocType, setUploadDocType] = useState<'lecture_notes' | 'slides' | 'reading' | 'policy' | 'example' | 'other'>('lecture_notes');
+  const [uploadDocFile, setUploadDocFile] = useState<File | null>(null);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const documentInputRef = useRef<HTMLInputElement>(null);
 
   // ============================================
   // Load Courses
@@ -554,6 +563,53 @@ function CourseContextPageContent() {
     }
   };
 
+  // Class Workspace document upload handlers
+  const handleDocumentFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setUploadDocFile(file);
+      // Auto-set doc name from filename if empty
+      if (!uploadDocName) {
+        const nameWithoutExt = file.name.replace(/\.[^.]+$/, '');
+        setUploadDocName(nameWithoutExt);
+      }
+    }
+  };
+
+  const uploadDocument = async () => {
+    if (!selectedCourse || !uploadDocFile || !uploadDocName.trim()) return;
+
+    try {
+      setUploadingDoc(true);
+
+      const formData = new FormData();
+      formData.append('file', uploadDocFile);
+      formData.append('courseId', selectedCourse.id);
+      formData.append('type', uploadDocType);
+
+      const res = await fetch('/api/context/upload-document', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setShowDocumentUpload(false);
+        setUploadDocName('');
+        setUploadDocFile(null);
+        setUploadDocType('lecture_notes');
+        alert(`Document uploaded! Extracted ${data.document.wordCount || 0} words, created ${data.chunkCount} chunks.`);
+      } else {
+        alert(`Error: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to upload document:', error);
+      alert('Failed to upload document. Please try again.');
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
   // ============================================
   // Snapshot Operations
   // ============================================
@@ -635,7 +691,7 @@ function CourseContextPageContent() {
               <div className="h-6 w-px bg-surface-200" />
               <h1 className="text-xl font-bold bg-gradient-to-r from-primary-600 to-violet-600 bg-clip-text text-transparent">
                 {view === 'list' && 'Course Notebooks'}
-                {view === 'course' && selectedCourse?.name}
+                {view === 'course' && 'Class Workspace'}
                 {view === 'assignment' && selectedAssignment?.name}
               </h1>
             </div>
@@ -791,7 +847,7 @@ function CourseContextPageContent() {
             </motion.div>
           )}
 
-          {/* Course Detail (Assignments) */}
+          {/* Class Workspace View */}
           {view === 'course' && selectedCourse && (
             <motion.div
               key="course"
@@ -799,103 +855,155 @@ function CourseContextPageContent() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
             >
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <p className="text-surface-600">{selectedCourse.courseCode} • {selectedCourse.term}</p>
-                </div>
-                <button
-                  onClick={() => setShowCreateAssignment(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-xl hover:bg-primary-700"
-                >
-                  <Plus className="w-5 h-5" />
-                  New Assignment
-                </button>
-              </div>
-
-              {/* Create Assignment Form */}
-              {showCreateAssignment && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6 mb-6"
-                >
-                  <h3 className="font-semibold text-surface-900 mb-4">Create New Assignment</h3>
-                  <div className="space-y-4">
-                    <input
-                      type="text"
-                      value={newAssignmentName}
-                      onChange={(e) => setNewAssignmentName(e.target.value)}
-                      placeholder="Assignment Name (e.g., Persuasive Speech)"
-                      className="w-full px-4 py-2 rounded-lg border border-surface-300 focus:ring-2 focus:ring-primary-500"
-                    />
-                    <textarea
-                      value={newAssignmentInstructions}
-                      onChange={(e) => setNewAssignmentInstructions(e.target.value)}
-                      placeholder="Assignment instructions and requirements..."
-                      rows={4}
-                      className="w-full px-4 py-2 rounded-lg border border-surface-300 focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2 mt-4">
-                    <button
-                      onClick={() => setShowCreateAssignment(false)}
-                      className="px-4 py-2 text-surface-600 hover:bg-surface-100 rounded-lg"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={createAssignment}
-                      disabled={!newAssignmentName.trim() || !newAssignmentInstructions.trim() || creatingAssignment}
-                      className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
-                    >
-                      {creatingAssignment ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create'}
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Assignment List */}
-              {assignments.length === 0 ? (
-                <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-12 text-center">
-                  <ClipboardList className="w-16 h-16 text-surface-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-surface-900 mb-2">No assignments yet</h3>
-                  <p className="text-surface-600">Create an assignment to add rubrics and grading context</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {assignments.map(assignment => (
+              <ClassWorkspace
+                course={selectedCourse}
+                onSelectAssignment={selectAssignment}
+                onCreateAssignment={() => setShowCreateAssignment(true)}
+                onUploadDocument={() => setShowDocumentUpload(true)}
+              />
+              
+              {/* Create Assignment Modal */}
+              <AnimatePresence>
+                {showCreateAssignment && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+                    onClick={() => setShowCreateAssignment(false)}
+                  >
                     <motion.div
-                      key={assignment.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      onClick={() => selectAssignment(assignment)}
-                      className="bg-white rounded-xl shadow-sm border border-surface-200 p-5 hover:shadow-md cursor-pointer transition-shadow"
+                      initial={{ scale: 0.95, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.95, opacity: 0 }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="bg-white rounded-2xl shadow-xl border border-surface-200 p-6 w-full max-w-lg"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center">
-                            <ClipboardList className="w-6 h-6 text-violet-600" />
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-surface-900">{assignment.name}</h3>
-                            <p className="text-sm text-surface-500 line-clamp-1">
-                              {assignment.instructions.slice(0, 100)}...
-                            </p>
-                          </div>
+                      <h3 className="font-semibold text-xl text-surface-900 mb-4">Create New Assignment</h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-surface-700 mb-1">Assignment Name</label>
+                          <input
+                            type="text"
+                            value={newAssignmentName}
+                            onChange={(e) => setNewAssignmentName(e.target.value)}
+                            placeholder="e.g., Persuasive Speech"
+                            className="w-full px-4 py-2.5 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
                         </div>
-                        <div className="flex items-center gap-2">
-                          {assignment.rubricId && (
-                            <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">
-                              Rubric ✓
-                            </span>
-                          )}
-                          <ChevronRight className="w-5 h-5 text-surface-400" />
+                        <div>
+                          <label className="block text-sm font-medium text-surface-700 mb-1">Instructions</label>
+                          <textarea
+                            value={newAssignmentInstructions}
+                            onChange={(e) => setNewAssignmentInstructions(e.target.value)}
+                            placeholder="Assignment instructions and requirements..."
+                            rows={5}
+                            className="w-full px-4 py-2.5 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
                         </div>
                       </div>
+                      <div className="flex justify-end gap-3 mt-6">
+                        <button
+                          onClick={() => setShowCreateAssignment(false)}
+                          className="px-4 py-2.5 text-surface-600 hover:bg-surface-100 rounded-xl"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={createAssignment}
+                          disabled={!newAssignmentName.trim() || !newAssignmentInstructions.trim() || creatingAssignment}
+                          className="px-5 py-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+                        >
+                          {creatingAssignment ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create Assignment'}
+                        </button>
+                      </div>
                     </motion.div>
-                  ))}
-                </div>
-              )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Document Upload Modal */}
+              <AnimatePresence>
+                {showDocumentUpload && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+                    onClick={() => setShowDocumentUpload(false)}
+                  >
+                    <motion.div
+                      initial={{ scale: 0.95, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.95, opacity: 0 }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="bg-white rounded-2xl shadow-xl border border-surface-200 p-6 w-full max-w-lg"
+                    >
+                      <h3 className="font-semibold text-xl text-surface-900 mb-4">Upload Course Materials</h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-surface-700 mb-1">Material Type</label>
+                          <select
+                            value={uploadDocType}
+                            onChange={(e) => setUploadDocType(e.target.value as typeof uploadDocType)}
+                            className="w-full px-4 py-2.5 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          >
+                            <option value="lecture_notes">Lecture Notes</option>
+                            <option value="slides">Slides</option>
+                            <option value="reading">Reading</option>
+                            <option value="policy">Policy</option>
+                            <option value="example">Example</option>
+                            <option value="other">Other</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-surface-700 mb-1">Document Name</label>
+                          <input
+                            type="text"
+                            value={uploadDocName}
+                            onChange={(e) => setUploadDocName(e.target.value)}
+                            placeholder="e.g., Week 1 Lecture Notes"
+                            className="w-full px-4 py-2.5 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-surface-700 mb-1">Upload File</label>
+                          <input
+                            ref={documentInputRef}
+                            type="file"
+                            accept=".pdf,.doc,.docx,.txt,.md,.ppt,.pptx"
+                            onChange={handleDocumentFileSelect}
+                            className="w-full text-sm text-surface-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                          />
+                          <p className="text-xs text-surface-500 mt-1">
+                            Supported: PDF, DOC, DOCX, TXT, MD, PPT, PPTX
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-3 mt-6">
+                        <button
+                          onClick={() => {
+                            setShowDocumentUpload(false);
+                            setUploadDocName('');
+                            setUploadDocFile(null);
+                          }}
+                          className="px-4 py-2.5 text-surface-600 hover:bg-surface-100 rounded-xl"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={uploadDocument}
+                          disabled={!uploadDocName.trim() || !uploadDocFile || uploadingDoc}
+                          className="px-5 py-2.5 bg-violet-600 text-white rounded-xl hover:bg-violet-700 disabled:opacity-50 flex items-center gap-2"
+                        >
+                          {uploadingDoc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                          Upload Material
+                        </button>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           )}
 
