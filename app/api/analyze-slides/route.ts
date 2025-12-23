@@ -18,15 +18,13 @@ function getAnthropicClient(): Anthropic | null {
   return anthropicClient;
 }
 
-// Extract text from PDF using pdf-parse
+// Extract text from PDF using unpdf (serverless-compatible)
 async function extractPdfText(buffer: Buffer): Promise<string> {
   try {
-    // Dynamic import to avoid build issues
-    const pdfParseModule = await import('pdf-parse');
-    // pdf-parse export shape differs between CJS/ESM; handle both safely
-    const pdfParse: any = (pdfParseModule as any).default ?? (pdfParseModule as any);
-    const data = await pdfParse(buffer);
-    return data.text;
+    const { extractText } = await import('unpdf');
+    const uint8Array = new Uint8Array(buffer);
+    const { text } = await extractText(uint8Array, { mergePages: true });
+    return typeof text === 'string' ? text : text.join('\n');
   } catch (error) {
     console.error('[PDF] Extraction error:', error);
     throw new Error('Failed to extract PDF text');
