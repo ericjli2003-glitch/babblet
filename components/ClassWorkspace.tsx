@@ -85,11 +85,13 @@ const MATERIAL_TYPES = {
 function AssignmentCard({ 
   assignment, 
   stats,
+  courseId,
   onClick,
   onDelete
 }: { 
   assignment: Assignment;
   stats?: AssignmentStats;
+  courseId: string;
   onClick: () => void;
   onDelete: () => void;
 }) {
@@ -204,6 +206,17 @@ function AssignmentCard({
               exit={{ opacity: 0, scale: 0.95 }}
               className="absolute right-0 top-full mt-1 w-40 bg-white rounded-xl shadow-lg border border-surface-200 py-1 z-10"
             >
+              <Link
+                href={`/bulk?courseId=${courseId}&assignmentId=${assignment.id}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMenu(false);
+                }}
+                className="w-full px-3 py-2 text-left text-sm text-emerald-600 hover:bg-emerald-50 flex items-center gap-2"
+              >
+                <Upload className="w-4 h-4" />
+                Upload Submissions
+              </Link>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -642,6 +655,7 @@ export default function ClassWorkspace({
                     key={assignment.id}
                     assignment={assignment}
                     stats={assignmentStats[assignment.id]}
+                    courseId={course.id}
                     onClick={() => onSelectAssignment(assignment)}
                     onDelete={() => setAssignmentToDelete(assignment)}
                   />

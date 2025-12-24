@@ -205,6 +205,10 @@ function BulkUploadPageContent() {
   // Batches
   const [batches, setBatches] = useState<BatchSummary[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(true);
+  
+  // Course filter for global view
+  const [courseFilter, setCourseFilter] = useState<string>('');
+  const [availableCourses, setAvailableCourses] = useState<Array<{ id: string; name: string; courseCode?: string }>>([]);
 
   // Create batch form
   const [batchName, setBatchName] = useState('');
@@ -388,7 +392,20 @@ function BulkUploadPageContent() {
       const res = await fetch('/api/bulk/batches');
       const data = await res.json();
       if (data.success) {
-        setBatches(data.batches || []);
+        const batchList = data.batches || [];
+        setBatches(batchList);
+        
+        // Extract unique courses for filter dropdown
+        const coursesMap = new Map<string, { id: string; name: string; courseCode?: string }>();
+        batchList.forEach((b: BatchSummary) => {
+          if (b.courseId && b.courseName) {
+            coursesMap.set(b.courseId, { 
+              id: b.courseId, 
+              name: b.courseName,
+            });
+          }
+        });
+        setAvailableCourses(Array.from(coursesMap.values()));
       }
     } catch (error) {
       console.error('[Bulk] Failed to load batches:', error);
@@ -1165,35 +1182,82 @@ function BulkUploadPageContent() {
                   <h2 className="text-2xl font-bold text-surface-900">Your Batches</h2>
                   <p className="text-surface-600 mt-1">Upload and process student presentation videos in bulk</p>
                 </div>
-                <button
-                  onClick={() => setView('create')}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors"
-                >
-                  <Plus className="w-5 h-5" />
-                  New Batch
-                </button>
-              </div>
-
-              {loadingBatches ? (
-                <div className="flex items-center justify-center h-64">
-                  <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-                </div>
-              ) : batches.length === 0 ? (
-                <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-12 text-center">
-                  <FolderOpen className="w-16 h-16 text-surface-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-surface-900 mb-2">No batches yet</h3>
-                  <p className="text-surface-600 mb-6">Create your first batch to start uploading presentations</p>
+                <div className="flex items-center gap-3">
+                  {/* Course Filter */}
+                  {availableCourses.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm text-surface-600">Filter:</label>
+                      <select
+                        value={courseFilter}
+                        onChange={(e) => setCourseFilter(e.target.value)}
+                        className="px-3 py-2 bg-white border border-surface-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      >
+                        <option value="">All Courses</option>
+                        {availableCourses.map(course => (
+                          <option key={course.id} value={course.id}>
+                            {course.name}{course.courseCode ? ` (${course.courseCode})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      {courseFilter && (
+                        <button
+                          onClick={() => setCourseFilter('')}
+                          className="p-1 text-surface-400 hover:text-surface-600"
+                          title="Clear filter"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <button
                     onClick={() => setView('create')}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors"
                   >
                     <Plus className="w-5 h-5" />
-                    Create Batch
+                    New Batch
                   </button>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {batches.map(batch => (
+              </div>
+
+              {/* Filtered batches */}
+              {(() => {
+                const filteredBatches = courseFilter 
+                  ? batches.filter(b => b.courseId === courseFilter)
+                  : batches;
+                
+                return loadingBatches ? (
+                  <div className="flex items-center justify-center h-64">
+                    <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+                  </div>
+                ) : batches.length === 0 ? (
+                  <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-12 text-center">
+                    <FolderOpen className="w-16 h-16 text-surface-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-surface-900 mb-2">No batches yet</h3>
+                    <p className="text-surface-600 mb-6">Create your first batch to start uploading presentations</p>
+                    <button
+                      onClick={() => setView('create')}
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors"
+                    >
+                      <Plus className="w-5 h-5" />
+                      Create Batch
+                    </button>
+                  </div>
+                ) : filteredBatches.length === 0 ? (
+                  <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-12 text-center">
+                    <FolderOpen className="w-16 h-16 text-surface-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-surface-900 mb-2">No batches for this course</h3>
+                    <p className="text-surface-600 mb-6">No batches found for the selected course filter</p>
+                    <button
+                      onClick={() => setCourseFilter('')}
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-surface-100 text-surface-700 rounded-xl hover:bg-surface-200 transition-colors"
+                    >
+                      Clear Filter
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                  {filteredBatches.map(batch => (
                     <motion.div
                       key={batch.id}
                       initial={{ opacity: 0, y: 10 }}
@@ -1249,8 +1313,9 @@ function BulkUploadPageContent() {
                       )}
                     </motion.div>
                   ))}
-                </div>
-              )}
+                  </div>
+                );
+              })()}
             </motion.div>
           )}
 
