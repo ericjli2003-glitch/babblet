@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Upload, FolderOpen, Plus, Trash2, Download,
   CheckCircle, XCircle, Clock, Loader2, FileVideo, FileAudio,
-  ChevronRight, ArrowLeft, Users, AlertTriangle, X, Play, BookOpen
+  ChevronRight, ArrowLeft, Users, AlertTriangle, X, Play, BookOpen,
+  GraduationCap, FileText, Eye
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -154,10 +156,48 @@ function serverStatusToStage(status: string): PipelineStage {
 }
 
 // ============================================
-// Main Component
+// Main Component (with Suspense wrapper for useSearchParams)
 // ============================================
 
 export default function BulkUploadPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gradient-to-br from-surface-50 via-surface-100 to-primary-50 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary-600" /></div>}>
+      <BulkUploadPageContent />
+    </Suspense>
+  );
+}
+
+// ============================================
+// Class-Scoped Context Info
+// ============================================
+
+interface ClassScopedInfo {
+  isClassScoped: boolean;
+  courseId: string;
+  courseName: string;
+  courseCode: string;
+  term: string;
+  assignmentId: string;
+  assignmentName: string;
+  hasRubric: boolean;
+  hasPrompt: boolean;
+  hasMaterials: boolean;
+  bundleVersionId?: string;
+}
+
+function BulkUploadPageContent() {
+  const searchParams = useSearchParams();
+  const urlCourseId = searchParams.get('courseId');
+  const urlAssignmentId = searchParams.get('assignmentId');
+  
+  // Class-scoped state
+  const [classScopedInfo, setClassScopedInfo] = useState<ClassScopedInfo | null>(null);
+  const [loadingClassContext, setLoadingClassContext] = useState(false);
+  const [showContextPanel, setShowContextPanel] = useState(false);
+  
+  // Determine if this is a class-scoped upload
+  const isClassScoped = !!(urlCourseId && urlAssignmentId) || !!classScopedInfo?.isClassScoped;
+  
   // View state
   const [view, setView] = useState<'list' | 'create' | 'batch'>('list');
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
@@ -366,6 +406,75 @@ export default function BulkUploadPage() {
       loadAvailableContexts();
     }
   }, [view, loadBatches, loadAvailableContexts]);
+  
+  // ============================================
+  // Load Class Context from URL Params
+  // ============================================
+  
+  useEffect(() => {
+    const loadClassContext = async () => {
+      if (!urlCourseId || !urlAssignmentId) return;
+      
+      try {
+        setLoadingClassContext(true);
+        
+        // Fetch course info
+        const courseRes = await fetch(`/api/context/courses?id=${urlCourseId}`);
+        const courseData = await courseRes.json();
+        
+        // Fetch assignment info
+        const assignmentRes = await fetch(`/api/context/assignments?id=${urlAssignmentId}`);
+        const assignmentData = await assignmentRes.json();
+        
+        if (courseData.success && assignmentData.success) {
+          const course = courseData.course;
+          const assignment = assignmentData.assignment;
+          const latestVersion = assignmentData.latestVersion;
+          
+          // Set class-scoped info
+          setClassScopedInfo({
+            isClassScoped: true,
+            courseId: course.id,
+            courseName: course.name,
+            courseCode: course.courseCode || '',
+            term: course.term || '',
+            assignmentId: assignment.id,
+            assignmentName: assignment.name,
+            hasRubric: !!assignment.rubricId,
+            hasPrompt: !!(assignment.instructions && assignment.instructions.trim()),
+            hasMaterials: true, // Assume true for now
+            bundleVersionId: latestVersion?.id,
+          });
+          
+          // Pre-populate form fields
+          setCourseName(course.name);
+          setAssignmentName(assignment.name);
+          setBatchName(`${assignment.name} - ${new Date().toLocaleDateString()}`);
+          
+          // Pre-select context
+          if (latestVersion) {
+            setSelectedContextVersion({ id: latestVersion.id, version: latestVersion.version });
+            setSelectedContextCourse({ 
+              id: course.id, 
+              name: course.name, 
+              courseCode: course.courseCode || '', 
+              term: course.term || '' 
+            });
+            setSelectedContextAssignment({ id: assignment.id, name: assignment.name });
+          }
+          
+          // Go directly to create view for class-scoped uploads
+          setView('create');
+        }
+      } catch (error) {
+        console.error('[Bulk] Failed to load class context:', error);
+      } finally {
+        setLoadingClassContext(false);
+      }
+    };
+    
+    loadClassContext();
+  }, [urlCourseId, urlAssignmentId]);
 
   // ============================================
   // Create Batch
@@ -882,14 +991,96 @@ export default function BulkUploadPage() {
   const hasActiveWork = stats.inProgress > 0;
   const pendingFiles = pipeline.filter(f => f.stage === 'pending');
 
+  // Accent colors based on scope
+  const accentColor = isClassScoped ? 'teal' : 'primary';
+  
   return (
-    <div className="min-h-screen bg-gradient-to-br from-surface-50 via-surface-100 to-primary-50">
+    <div className={`min-h-screen ${isClassScoped 
+      ? 'bg-gradient-to-br from-teal-50 via-surface-50 to-cyan-50' 
+      : 'bg-gradient-to-br from-surface-50 via-surface-100 to-primary-50'
+    }`}>
+      {/* Class Context Header - Persistent when class-scoped */}
+      {isClassScoped && classScopedInfo && (
+        <div className="bg-gradient-to-r from-teal-600 to-cyan-600 text-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                  <GraduationCap className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">{classScopedInfo.courseName}</span>
+                    {classScopedInfo.courseCode && (
+                      <span className="text-teal-200">({classScopedInfo.courseCode})</span>
+                    )}
+                    {classScopedInfo.term && (
+                      <span className="text-teal-200">· {classScopedInfo.term}</span>
+                    )}
+                  </div>
+                  <div className="text-teal-100 text-sm">
+                    {classScopedInfo.assignmentName}
+                  </div>
+                </div>
+                <span className="ml-2 px-2 py-0.5 bg-white/20 text-xs font-medium rounded-full">
+                  Class-scoped upload
+                </span>
+              </div>
+              
+              {/* Context Status Indicators */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className={`flex items-center gap-1 ${classScopedInfo.hasRubric ? 'text-white' : 'text-teal-300'}`}>
+                    {classScopedInfo.hasRubric ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                    Rubric
+                  </span>
+                  <span className={`flex items-center gap-1 ${classScopedInfo.hasPrompt ? 'text-white' : 'text-teal-300'}`}>
+                    {classScopedInfo.hasPrompt ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                    Prompt
+                  </span>
+                  <span className={`flex items-center gap-1 ${classScopedInfo.hasMaterials ? 'text-white' : 'text-teal-300'}`}>
+                    {classScopedInfo.hasMaterials ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                    Materials
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowContextPanel(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm transition-colors"
+                >
+                  <Eye className="w-4 h-4" />
+                  View Context
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-lg border-b border-surface-200">
+      <header className={`sticky ${isClassScoped ? 'top-0' : 'top-0'} z-50 bg-white/90 backdrop-blur-lg border-b ${isClassScoped ? 'border-teal-200' : 'border-surface-200'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
-              {view === 'batch' ? (
+              {/* Navigation - Different destinations based on scope */}
+              {isClassScoped ? (
+                view === 'batch' || view === 'create' ? (
+                  <Link
+                    href={`/context?courseId=${classScopedInfo?.courseId}&assignmentId=${classScopedInfo?.assignmentId}`}
+                    className="flex items-center gap-2 text-teal-600 hover:text-teal-800 transition-colors"
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                    <span className="text-sm font-medium">Back to Assignment</span>
+                  </Link>
+                ) : (
+                  <Link
+                    href={`/context?courseId=${classScopedInfo?.courseId}`}
+                    className="flex items-center gap-2 text-teal-600 hover:text-teal-800 transition-colors"
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                    <span className="text-sm font-medium">Back to Class Notebook</span>
+                  </Link>
+                )
+              ) : view === 'batch' ? (
                 <button
                   onClick={goToBatchList}
                   className="flex items-center gap-2 text-surface-600 hover:text-surface-900 transition-colors"
@@ -908,13 +1099,31 @@ export default function BulkUploadPage() {
               ) : (
                 <Link href="/" className="flex items-center gap-2 text-surface-600 hover:text-surface-900 transition-colors">
                   <ArrowLeft className="w-5 h-5" />
-                  <span className="text-sm font-medium">Back to Home</span>
+                  <span className="text-sm font-medium">Back to Dashboard</span>
                 </Link>
               )}
-              <div className="h-6 w-px bg-surface-200" />
-              <h1 className="text-xl font-bold bg-gradient-to-r from-primary-600 to-violet-600 bg-clip-text text-transparent">
-                Bulk Upload
-              </h1>
+              <div className={`h-6 w-px ${isClassScoped ? 'bg-teal-200' : 'bg-surface-200'}`} />
+              
+              {/* Title - Different based on scope */}
+              {isClassScoped ? (
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-teal-100 flex items-center justify-center">
+                    <BookOpen className="w-5 h-5 text-teal-600" />
+                  </div>
+                  <div>
+                    <h1 className="text-lg font-bold text-teal-800">
+                      Upload Submissions for {classScopedInfo?.assignmentName || 'Assignment'}
+                    </h1>
+                    <p className="text-xs text-teal-600">
+                      Graded using class rubric and materials
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <h1 className="text-xl font-bold bg-gradient-to-r from-primary-600 to-violet-600 bg-clip-text text-transparent">
+                  Bulk Upload Submissions
+                </h1>
+              )}
             </div>
 
             {/* Header Actions */}
@@ -1305,16 +1514,36 @@ export default function BulkUploadPage() {
               )}
 
               {/* Drop Zone */}
-              <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6">
+              <div className={`bg-white rounded-2xl shadow-sm border p-6 ${isClassScoped ? 'border-teal-200' : 'border-surface-200'}`}>
+                {/* Class-scoped context reminder */}
+                {isClassScoped && classScopedInfo && (
+                  <div className="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-xl flex items-center gap-3">
+                    <GraduationCap className="w-5 h-5 text-teal-600 flex-shrink-0" />
+                    <p className="text-sm text-teal-800">
+                      These submissions will be graded using the class rubric and materials from <strong>{classScopedInfo.assignmentName}</strong>.
+                    </p>
+                  </div>
+                )}
+                
                 <div
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-surface-300 rounded-xl p-8 text-center cursor-pointer hover:border-primary-400 hover:bg-primary-50/50 transition-colors"
+                  className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                    isClassScoped 
+                      ? 'border-teal-300 hover:border-teal-500 hover:bg-teal-50/50' 
+                      : 'border-surface-300 hover:border-primary-400 hover:bg-primary-50/50'
+                  }`}
                 >
-                  <Upload className="w-12 h-12 text-surface-400 mx-auto mb-4" />
-                  <p className="text-surface-700 font-medium">Drag & drop video or audio files here</p>
-                  <p className="text-sm text-surface-500 mt-1">or click to browse</p>
+                  {isClassScoped ? (
+                    <BookOpen className="w-12 h-12 text-teal-400 mx-auto mb-4" />
+                  ) : (
+                    <Upload className="w-12 h-12 text-surface-400 mx-auto mb-4" />
+                  )}
+                  <p className={`font-medium ${isClassScoped ? 'text-teal-700' : 'text-surface-700'}`}>
+                    Drag & drop video or audio files here
+                  </p>
+                  <p className={`text-sm mt-1 ${isClassScoped ? 'text-teal-600' : 'text-surface-500'}`}>or click to browse</p>
                   <p className="text-xs text-surface-400 mt-2">Supports MP4, MOV, WebM, MP3, WAV</p>
                 </div>
                 <input
@@ -1486,6 +1715,130 @@ export default function BulkUploadPage() {
           )}
         </AnimatePresence>
       </main>
+      
+      {/* Context Panel (Side Drawer) - Class-scoped only */}
+      <AnimatePresence>
+        {showContextPanel && isClassScoped && classScopedInfo && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/30 z-50"
+              onClick={() => setShowContextPanel(false)}
+            />
+            
+            {/* Panel */}
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-white shadow-2xl z-50 overflow-y-auto"
+            >
+              <div className="sticky top-0 bg-gradient-to-r from-teal-600 to-cyan-600 text-white p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <GraduationCap className="w-6 h-6" />
+                    <h2 className="text-lg font-semibold">Class Context</h2>
+                  </div>
+                  <button
+                    onClick={() => setShowContextPanel(false)}
+                    className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              
+              <div className="p-4 space-y-6">
+                {/* Course Info */}
+                <div className="bg-teal-50 rounded-xl p-4">
+                  <h3 className="text-sm font-medium text-teal-600 uppercase tracking-wider mb-2">Course</h3>
+                  <p className="font-semibold text-teal-900">{classScopedInfo.courseName}</p>
+                  {classScopedInfo.courseCode && (
+                    <p className="text-sm text-teal-700">{classScopedInfo.courseCode}</p>
+                  )}
+                  {classScopedInfo.term && (
+                    <p className="text-sm text-teal-600">{classScopedInfo.term}</p>
+                  )}
+                </div>
+                
+                {/* Assignment Info */}
+                <div className="bg-surface-50 rounded-xl p-4">
+                  <h3 className="text-sm font-medium text-surface-600 uppercase tracking-wider mb-2">Assignment</h3>
+                  <p className="font-semibold text-surface-900">{classScopedInfo.assignmentName}</p>
+                </div>
+                
+                {/* Context Status */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium text-surface-600 uppercase tracking-wider">Context Attached</h3>
+                  
+                  <div className={`flex items-center gap-3 p-3 rounded-xl ${classScopedInfo.hasRubric ? 'bg-emerald-50' : 'bg-amber-50'}`}>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${classScopedInfo.hasRubric ? 'bg-emerald-200' : 'bg-amber-200'}`}>
+                      {classScopedInfo.hasRubric ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-amber-600" />}
+                    </div>
+                    <div>
+                      <p className={`font-medium ${classScopedInfo.hasRubric ? 'text-emerald-900' : 'text-amber-900'}`}>
+                        Grading Rubric
+                      </p>
+                      <p className={`text-xs ${classScopedInfo.hasRubric ? 'text-emerald-600' : 'text-amber-600'}`}>
+                        {classScopedInfo.hasRubric ? 'Attached and ready' : 'Not configured'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className={`flex items-center gap-3 p-3 rounded-xl ${classScopedInfo.hasPrompt ? 'bg-emerald-50' : 'bg-amber-50'}`}>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${classScopedInfo.hasPrompt ? 'bg-emerald-200' : 'bg-amber-200'}`}>
+                      {classScopedInfo.hasPrompt ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-amber-600" />}
+                    </div>
+                    <div>
+                      <p className={`font-medium ${classScopedInfo.hasPrompt ? 'text-emerald-900' : 'text-amber-900'}`}>
+                        Assignment Instructions
+                      </p>
+                      <p className={`text-xs ${classScopedInfo.hasPrompt ? 'text-emerald-600' : 'text-amber-600'}`}>
+                        {classScopedInfo.hasPrompt ? 'Attached and ready' : 'Not configured'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className={`flex items-center gap-3 p-3 rounded-xl ${classScopedInfo.hasMaterials ? 'bg-emerald-50' : 'bg-surface-50'}`}>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${classScopedInfo.hasMaterials ? 'bg-emerald-200' : 'bg-surface-200'}`}>
+                      {classScopedInfo.hasMaterials ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <FileText className="w-4 h-4 text-surface-400" />}
+                    </div>
+                    <div>
+                      <p className={`font-medium ${classScopedInfo.hasMaterials ? 'text-emerald-900' : 'text-surface-700'}`}>
+                        Class Materials
+                      </p>
+                      <p className={`text-xs ${classScopedInfo.hasMaterials ? 'text-emerald-600' : 'text-surface-500'}`}>
+                        {classScopedInfo.hasMaterials ? 'Available for context' : 'None uploaded'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Info Box */}
+                <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
+                  <p className="text-sm text-teal-800">
+                    <strong>How it works:</strong> Submissions uploaded here will be graded using the rubric 
+                    and context from this class. Babblet will reference class materials when providing feedback.
+                  </p>
+                </div>
+                
+                {/* Edit Context Link */}
+                <Link
+                  href={`/context?courseId=${classScopedInfo.courseId}&assignmentId=${classScopedInfo.assignmentId}`}
+                  className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-colors"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  Edit Class Context
+                </Link>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
