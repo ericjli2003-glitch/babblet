@@ -1231,11 +1231,10 @@ function BulkUploadPageContent() {
                   )}
                   <button
                     onClick={() => setView('create')}
-                    className={`flex items-center gap-2 px-4 py-2 text-white rounded-xl transition-colors ${
-                      isClassScoped 
-                        ? 'bg-teal-600 hover:bg-teal-700' 
-                        : 'bg-primary-600 hover:bg-primary-700'
-                    }`}
+                    className={`flex items-center gap-2 px-4 py-2 text-white rounded-xl transition-colors ${isClassScoped
+                      ? 'bg-teal-600 hover:bg-teal-700'
+                      : 'bg-primary-600 hover:bg-primary-700'
+                      }`}
                   >
                     <Plus className="w-5 h-5" />
                     {isClassScoped ? 'New Batch for Assignment' : 'New Batch'}
@@ -1378,7 +1377,7 @@ function BulkUploadPageContent() {
             >
               <div className={`bg-white rounded-2xl shadow-sm border p-8 ${isClassScoped ? 'border-teal-200' : 'border-surface-200'}`}>
                 <h2 className="text-2xl font-bold text-surface-900 mb-6">
-                  {isClassScoped && classScopedInfo 
+                  {isClassScoped && classScopedInfo
                     ? `Create Batch for ${classScopedInfo.assignmentName}`
                     : 'Create New Batch'}
                 </h2>
