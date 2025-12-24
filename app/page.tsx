@@ -130,14 +130,15 @@ export default function HomePage() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {/* Upload Option */}
+            {/* Upload Video Option - Primary Blue */}
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => setSelectedMode('upload')}
-              className={`relative p-8 rounded-3xl text-left transition-all duration-300 ${
+              className={`relative p-8 rounded-3xl text-left transition-all duration-300 border-2 ${
                 selectedMode === 'upload'
-                  ? 'bg-white shadow-soft-lg ring-2 ring-primary-500'
-                  : 'bg-white/60 shadow-soft hover:bg-white hover:shadow-soft-lg'
+                  ? 'bg-white shadow-soft-lg ring-2 ring-primary-500 border-primary-400'
+                  : 'bg-white/60 shadow-soft hover:bg-white hover:shadow-soft-lg border-primary-200 hover:border-primary-400'
               }`}
             >
               {selectedMode === 'upload' && (
@@ -145,7 +146,7 @@ export default function HomePage() {
                   <CheckCircle2 className="w-6 h-6 text-primary-500" />
                 </div>
               )}
-              <div className="w-14 h-14 rounded-2xl bg-gradient-subtle flex items-center justify-center mb-4">
+              <div className="w-14 h-14 rounded-2xl bg-primary-100 flex items-center justify-center mb-4 group-hover:bg-primary-500 transition-colors">
                 <Upload className="w-7 h-7 text-primary-600" />
               </div>
               <h3 className="text-xl font-semibold text-surface-900 mb-2">Upload Video</h3>
@@ -154,23 +155,23 @@ export default function HomePage() {
               </p>
             </motion.button>
 
-            {/* Live Recording Option */}
+            {/* Live Recording Option - Coral/Accent */}
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => setSelectedMode('live')}
-              className={`relative p-8 rounded-3xl text-left transition-all duration-300 ${
+              className={`relative p-8 rounded-3xl text-left transition-all duration-300 border-2 ${
                 selectedMode === 'live'
-                  ? 'bg-white shadow-soft-lg ring-2 ring-primary-500'
-                  : 'bg-white/60 shadow-soft hover:bg-white hover:shadow-soft-lg'
+                  ? 'bg-white shadow-soft-lg ring-2 ring-accent-500 border-accent-400'
+                  : 'bg-white/60 shadow-soft hover:bg-white hover:shadow-soft-lg border-accent-200 hover:border-accent-400'
               }`}
             >
               {selectedMode === 'live' && (
                 <div className="absolute top-4 right-4">
-                  <CheckCircle2 className="w-6 h-6 text-primary-500" />
+                  <CheckCircle2 className="w-6 h-6 text-accent-500" />
                 </div>
               )}
-              <div className="w-14 h-14 rounded-2xl bg-gradient-subtle flex items-center justify-center mb-4">
+              <div className="w-14 h-14 rounded-2xl bg-accent-100 flex items-center justify-center mb-4">
                 <Mic className="w-7 h-7 text-accent-600" />
               </div>
               <h3 className="text-xl font-semibold text-surface-900 mb-2">Record Live</h3>
@@ -179,10 +180,10 @@ export default function HomePage() {
               </p>
             </motion.button>
 
-            {/* Bulk Upload Option - Direct link */}
+            {/* Bulk Upload Option - Emerald Green */}
             <Link
               href="/bulk"
-              className="relative p-8 rounded-3xl text-left transition-all duration-300 bg-white/60 shadow-soft hover:bg-white hover:shadow-soft-lg hover:ring-2 hover:ring-emerald-500 group"
+              className="relative p-8 rounded-3xl text-left transition-all duration-300 bg-white/60 shadow-soft hover:bg-white hover:shadow-soft-lg border-2 border-emerald-200 hover:border-emerald-400 group"
             >
               <div className="absolute top-4 right-4">
                 <div className="flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium">
@@ -199,10 +200,10 @@ export default function HomePage() {
               </p>
             </Link>
 
-            {/* Course Notebooks Option - Direct link */}
+            {/* Course Notebooks Option - Violet Purple */}
             <Link
               href="/context"
-              className="relative p-8 rounded-3xl text-left transition-all duration-300 bg-white/60 shadow-soft hover:bg-white hover:shadow-soft-lg hover:ring-2 hover:ring-violet-500 group"
+              className="relative p-8 rounded-3xl text-left transition-all duration-300 bg-white/60 shadow-soft hover:bg-white hover:shadow-soft-lg border-2 border-violet-200 hover:border-violet-400 group"
             >
               <div className="absolute top-4 right-4">
                 <div className="flex items-center gap-1 px-2 py-1 bg-violet-100 text-violet-700 rounded-full text-xs font-medium">
@@ -214,7 +215,7 @@ export default function HomePage() {
               </div>
               <h3 className="text-xl font-semibold text-surface-900 mb-2">Course Notebooks</h3>
               <p className="text-surface-600 text-sm">
-                Set up rubrics, assignments, and course materials for better AI grading
+                Set up rubrics, assignments, and course materials for Babblet grading
               </p>
             </Link>
           </div>

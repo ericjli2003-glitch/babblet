@@ -6,7 +6,8 @@ import {
   ClipboardList, FileText, Book, Presentation, ScrollText,
   Plus, Upload, ChevronRight, Clock, Users, CheckCircle,
   AlertCircle, Play, Calendar, Loader2, Trash2, Edit3,
-  BookOpen, GraduationCap, FolderOpen, Sparkles
+  BookOpen, GraduationCap, FolderOpen, Sparkles, MoreVertical,
+  AlertTriangle
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -84,12 +85,16 @@ const MATERIAL_TYPES = {
 function AssignmentCard({ 
   assignment, 
   stats,
-  onClick 
+  onClick,
+  onDelete
 }: { 
   assignment: Assignment;
   stats?: AssignmentStats;
   onClick: () => void;
+  onDelete: () => void;
 }) {
+  const [showMenu, setShowMenu] = useState(false);
+  
   const getStatus = () => {
     if (!stats || stats.submissionCount === 0) {
       return { label: 'No submissions', color: 'bg-surface-100 text-surface-600', icon: AlertCircle };
@@ -107,75 +112,125 @@ function AssignmentCard({
   const StatusIcon = status.icon;
 
   return (
-    <motion.button
+    <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      onClick={onClick}
-      className="w-full bg-white rounded-2xl shadow-sm border border-surface-200 p-5 hover:shadow-lg hover:border-primary-200 transition-all text-left group"
+      className="w-full bg-white rounded-2xl shadow-sm border border-surface-200 p-5 hover:shadow-lg hover:border-primary-200 transition-all text-left group relative"
     >
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-4 flex-1">
-          {/* Icon */}
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-primary-500 flex items-center justify-center flex-shrink-0 shadow-md">
-            <ClipboardList className="w-7 h-7 text-white" />
-          </div>
-          
-          {/* Info */}
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-lg text-surface-900 group-hover:text-primary-700 transition-colors">
-              {assignment.name}
-            </h3>
-            <p className="text-sm text-surface-500 line-clamp-2 mt-1">
-              {assignment.instructions}
-            </p>
+      {/* Main clickable area */}
+      <button onClick={onClick} className="w-full text-left">
+        <div className="flex items-start justify-between">
+          <div className="flex items-start gap-4 flex-1">
+            {/* Icon */}
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-primary-500 flex items-center justify-center flex-shrink-0 shadow-md">
+              <ClipboardList className="w-7 h-7 text-white" />
+            </div>
             
-            {/* Meta row */}
-            <div className="flex items-center gap-3 mt-3 flex-wrap">
-              {/* Status badge */}
-              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${status.color}`}>
-                <StatusIcon className="w-3 h-3" />
-                {status.label}
-              </span>
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-lg text-surface-900 group-hover:text-primary-700 transition-colors">
+                {assignment.name}
+              </h3>
+              <p className="text-sm text-surface-500 line-clamp-2 mt-1">
+                {assignment.instructions}
+              </p>
               
-              {/* Due date */}
-              {assignment.dueDate && (
-                <span className="inline-flex items-center gap-1 text-xs text-surface-500">
-                  <Calendar className="w-3 h-3" />
-                  Due: {assignment.dueDate}
+              {/* Meta row */}
+              <div className="flex items-center gap-3 mt-3 flex-wrap">
+                {/* Status badge */}
+                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${status.color}`}>
+                  <StatusIcon className="w-3 h-3" />
+                  {status.label}
                 </span>
-              )}
-              
-              {/* Submission count */}
-              {stats && stats.submissionCount > 0 && (
-                <span className="inline-flex items-center gap-1 text-xs text-surface-500">
-                  <Users className="w-3 h-3" />
-                  {stats.processedCount}/{stats.submissionCount} graded
-                </span>
-              )}
-              
-              {/* Context version */}
-              {stats?.bundleVersion && (
-                <span className="inline-flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                  <Sparkles className="w-3 h-3" />
-                  Context v{stats.bundleVersion}
-                </span>
-              )}
-              
-              {/* Rubric indicator */}
-              {assignment.rubricId && (
-                <span className="inline-flex items-center gap-1 text-xs text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
-                  <CheckCircle className="w-3 h-3" />
-                  Rubric
-                </span>
-              )}
+                
+                {/* Due date */}
+                {assignment.dueDate && (
+                  <span className="inline-flex items-center gap-1 text-xs text-surface-500">
+                    <Calendar className="w-3 h-3" />
+                    Due: {assignment.dueDate}
+                  </span>
+                )}
+                
+                {/* Submission count */}
+                {stats && stats.submissionCount > 0 && (
+                  <span className="inline-flex items-center gap-1 text-xs text-surface-500">
+                    <Users className="w-3 h-3" />
+                    {stats.processedCount}/{stats.submissionCount} graded
+                  </span>
+                )}
+                
+                {/* Context version */}
+                {stats?.bundleVersion && (
+                  <span className="inline-flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                    <Sparkles className="w-3 h-3" />
+                    Context v{stats.bundleVersion}
+                  </span>
+                )}
+                
+                {/* Rubric indicator */}
+                {assignment.rubricId && (
+                  <span className="inline-flex items-center gap-1 text-xs text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
+                    <CheckCircle className="w-3 h-3" />
+                    Rubric
+                  </span>
+                )}
+              </div>
             </div>
           </div>
+          
+          {/* Arrow */}
+          <ChevronRight className="w-5 h-5 text-surface-300 group-hover:text-primary-500 transition-colors flex-shrink-0 mt-2 mr-8" />
         </div>
+      </button>
+      
+      {/* Context Menu Button */}
+      <div className="absolute top-4 right-4">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowMenu(!showMenu);
+          }}
+          className="p-1.5 rounded-lg hover:bg-surface-100 text-surface-400 hover:text-surface-600 transition-colors"
+        >
+          <MoreVertical className="w-5 h-5" />
+        </button>
         
-        {/* Arrow */}
-        <ChevronRight className="w-5 h-5 text-surface-300 group-hover:text-primary-500 transition-colors flex-shrink-0 mt-2" />
+        {/* Dropdown Menu */}
+        <AnimatePresence>
+          {showMenu && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="absolute right-0 top-full mt-1 w-40 bg-white rounded-xl shadow-lg border border-surface-200 py-1 z-10"
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMenu(false);
+                  onClick();
+                }}
+                className="w-full px-3 py-2 text-left text-sm text-surface-700 hover:bg-surface-50 flex items-center gap-2"
+              >
+                <Edit3 className="w-4 h-4" />
+                Edit Assignment
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMenu(false);
+                  onDelete();
+                }}
+                className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete Assignment
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-    </motion.button>
+    </motion.div>
   );
 }
 
@@ -262,6 +317,10 @@ export default function ClassWorkspace({
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [assignmentStats, setAssignmentStats] = useState<Record<string, AssignmentStats>>({});
+  
+  // Delete confirmation state
+  const [assignmentToDelete, setAssignmentToDelete] = useState<Assignment | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'assignments' | 'materials' | 'settings'>('assignments');
   
@@ -343,6 +402,35 @@ export default function ClassWorkspace({
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Delete assignment with cascade
+  const deleteAssignment = async (assignment: Assignment) => {
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/context/assignments?id=${assignment.id}&cascade=true`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        // Remove from local state
+        setAssignments(prev => prev.filter(a => a.id !== assignment.id));
+        setAssignmentToDelete(null);
+        
+        // Update stats
+        const newStats = { ...assignmentStats };
+        delete newStats[assignment.id];
+        setAssignmentStats(newStats);
+      } else {
+        alert(`Failed to delete: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to delete assignment:', error);
+      alert('Failed to delete assignment. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Group documents by type
   const groupedDocuments = documents.reduce((acc, doc) => {
@@ -527,6 +615,7 @@ export default function ClassWorkspace({
                     assignment={assignment}
                     stats={assignmentStats[assignment.id]}
                     onClick={() => onSelectAssignment(assignment)}
+                    onDelete={() => setAssignmentToDelete(assignment)}
                   />
                 ))}
               </div>
@@ -742,6 +831,84 @@ export default function ClassWorkspace({
                 </div>
               </div>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {assignmentToDelete && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={() => !isDeleting && setAssignmentToDelete(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-xl border border-surface-200 p-6 w-full max-w-md"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                  <AlertTriangle className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg text-surface-900">Delete Assignment</h3>
+                  <p className="text-sm text-surface-500">This action cannot be undone</p>
+                </div>
+              </div>
+              
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+                <p className="text-sm text-red-800 font-medium mb-2">
+                  Deleting &quot;{assignmentToDelete.name}&quot; will also delete:
+                </p>
+                <ul className="text-sm text-red-700 space-y-1">
+                  <li className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                    All uploaded batches and submissions
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                    All grading results and feedback
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                    Associated rubrics and context versions
+                  </li>
+                </ul>
+              </div>
+              
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setAssignmentToDelete(null)}
+                  disabled={isDeleting}
+                  className="px-4 py-2.5 text-surface-600 hover:bg-surface-100 rounded-xl disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => deleteAssignment(assignmentToDelete)}
+                  disabled={isDeleting}
+                  className="px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      Delete Assignment
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

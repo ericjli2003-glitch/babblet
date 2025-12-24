@@ -103,20 +103,78 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-// DELETE /api/context/assignments?id=xxx - Delete assignment
+// DELETE /api/context/assignments?id=xxx&cascade=true - Delete assignment with cascade
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const assignmentId = searchParams.get('id');
+    const cascade = searchParams.get('cascade') === 'true';
 
     if (!assignmentId) {
       return NextResponse.json({ error: 'Assignment ID required' }, { status: 400 });
     }
 
-    await deleteAssignment(assignmentId);
-    console.log(`[Assignments] Deleted: ${assignmentId}`);
+    // Track what was deleted for reporting
+    const deleted = {
+      assignment: false,
+      batches: 0,
+      submissions: 0,
+      files: 0,
+    };
 
-    return NextResponse.json({ success: true });
+    // If cascade, delete related batches and submissions first
+    if (cascade) {
+      const { kv } = await import('@vercel/kv');
+      const { deleteFile, isR2Configured } = await import('@/lib/r2');
+      
+      // Find all batches for this assignment
+      const batchIds = await kv.smembers('all_batches') || [];
+      
+      for (const batchId of batchIds) {
+        const batch = await kv.get<{ assignmentId?: string }>(`batch:${batchId}`);
+        if (batch?.assignmentId === assignmentId) {
+          // Get submissions for this batch
+          const submissionIds = await kv.smembers(`batch_submissions:${batchId}`) || [];
+          
+          for (const submissionId of submissionIds) {
+            const submission = await kv.get<{ fileKey?: string }>(`submission:${submissionId}`);
+            
+            // Delete file from R2 if exists
+            if (submission?.fileKey && isR2Configured()) {
+              try {
+                await deleteFile(submission.fileKey);
+                deleted.files++;
+              } catch (e) {
+                console.error(`Failed to delete file ${submission.fileKey}:`, e);
+              }
+            }
+            
+            // Delete submission
+            await kv.del(`submission:${submissionId}`);
+            deleted.submissions++;
+          }
+          
+          // Delete batch
+          await kv.del(`batch_submissions:${batchId}`);
+          await kv.del(`batch:${batchId}`);
+          await kv.srem('all_batches', batchId);
+          deleted.batches++;
+        }
+      }
+      
+      console.log(`[Assignments] Cascade deleted: ${deleted.batches} batches, ${deleted.submissions} submissions, ${deleted.files} files`);
+    }
+
+    // Delete the assignment itself (this also deletes bundle versions, rubrics, documents via context-store)
+    await deleteAssignment(assignmentId);
+    deleted.assignment = true;
+    
+    console.log(`[Assignments] Deleted assignment: ${assignmentId}`);
+
+    return NextResponse.json({ 
+      success: true,
+      deleted,
+    });
   } catch (error) {
     console.error('[Assignments] DELETE Error:', error);
     return NextResponse.json(
