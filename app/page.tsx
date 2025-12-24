@@ -311,22 +311,43 @@ export default function HomePage() {
           <h2 className="text-2xl font-semibold text-surface-900 text-center mb-12">
             Everything you need to evaluate presentations
           </h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {features.map((feature, index) => (
-              <motion.div
-                key={feature.title}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.5 + index * 0.1 }}
-                className="card-neumorphic p-6 hover:shadow-soft-lg transition-all duration-300"
-              >
-                <div className="w-12 h-12 rounded-xl bg-gradient-subtle flex items-center justify-center mb-4">
-                  <feature.icon className="w-6 h-6 text-primary-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-surface-900 mb-2">{feature.title}</h3>
-                <p className="text-surface-600 text-sm">{feature.description}</p>
-              </motion.div>
-            ))}
+          <div className="max-w-5xl mx-auto">
+            {/* First row - 3 items */}
+            <div className="grid md:grid-cols-3 gap-6 mb-6">
+              {features.slice(0, 3).map((feature, index) => (
+                <motion.div
+                  key={feature.title}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.5 + index * 0.1 }}
+                  className="card-neumorphic p-6 hover:shadow-soft-lg transition-all duration-300"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-gradient-subtle flex items-center justify-center mb-4">
+                    <feature.icon className="w-6 h-6 text-primary-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-surface-900 mb-2">{feature.title}</h3>
+                  <p className="text-surface-600 text-sm">{feature.description}</p>
+                </motion.div>
+              ))}
+            </div>
+            {/* Second row - 2 items centered */}
+            <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+              {features.slice(3, 5).map((feature, index) => (
+                <motion.div
+                  key={feature.title}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.5 + (index + 3) * 0.1 }}
+                  className="card-neumorphic p-6 hover:shadow-soft-lg transition-all duration-300"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-gradient-subtle flex items-center justify-center mb-4">
+                    <feature.icon className="w-6 h-6 text-primary-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-surface-900 mb-2">{feature.title}</h3>
+                  <p className="text-surface-600 text-sm">{feature.description}</p>
+                </motion.div>
+              ))}
+            </div>
           </div>
         </motion.div>
 
