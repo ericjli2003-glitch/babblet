@@ -1408,14 +1408,9 @@ function BulkUploadPageContent() {
                     </div>
                   ) : availableContexts.length > 0 ? (
                     <div className="p-4 bg-violet-50 rounded-xl border border-violet-200">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <BookOpen className="w-5 h-5 text-violet-600" />
-                          <span className="font-medium text-violet-900">Select Class Context</span>
-                        </div>
-                        <Link href="/context" className="text-xs text-violet-600 hover:text-violet-700">
-                          Manage Courses →
-                        </Link>
+                      <div className="flex items-center gap-2 mb-3">
+                        <BookOpen className="w-5 h-5 text-violet-600" />
+                        <span className="font-medium text-violet-900">Select Class Context</span>
                       </div>
                       <select
                         value={selectedContextId}
