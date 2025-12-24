@@ -41,9 +41,9 @@ export async function POST(request: NextRequest) {
 
     let rubric: RubricEvaluation;
 
-    // Try Claude first (preferred), then OpenAI, then mock
+    // Try Babblet AI first (preferred), then alternatives, then mock
     if (isClaudeConfigured()) {
-      console.log('[Evaluate] Using Claude for rubric evaluation');
+      console.log('[Evaluate] Using Babblet AI for rubric evaluation');
       rubric = await evaluateWithClaude(transcript, customRubric, undefined, analysis);
     } else if (isOpenAIConfigured()) {
       console.log('[Evaluate] Using OpenAI for rubric evaluation');

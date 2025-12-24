@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Transcript required' }, { status: 400 });
         }
 
-        // If no Claude configured, return lightweight heuristic findings
+        // If no AI configured, return lightweight heuristic findings
         if (!isClaudeConfigured()) {
             const findings: VerificationFinding[] = (claims || []).slice(0, 5).map((c) => ({
                 id: uuidv4(),

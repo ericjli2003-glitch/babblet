@@ -102,7 +102,7 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
 
     await updateSubmission(submissionId, { transcript, transcriptSegments: segments, status: 'analyzing' });
 
-    // Analyze with Claude
+    // Analyze with Babblet AI
     if (isClaudeConfigured()) {
       console.log(`[ProcessNow] Analyzing ${submissionId}...`);
       

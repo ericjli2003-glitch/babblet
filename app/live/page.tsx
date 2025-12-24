@@ -308,7 +308,7 @@ function LiveDashboardContent() {
 
         // Add markers for logical gaps
         analysisData.analysis.logicalGaps?.forEach((gap: { id: string; description: string; severity?: string; relevantSnippet?: string }) => {
-          // Prefer Claude's relevantSnippet, fallback to search
+          // Prefer AI's relevantSnippet, fallback to search
           const snippet = (gap.relevantSnippet && gap.relevantSnippet.length >= 5)
             ? gap.relevantSnippet
             : findAnchorSnippet(gap.description, capturedTime);
@@ -325,7 +325,7 @@ function LiveDashboardContent() {
 
         // Add markers for key claims (as insights)
         analysisData.analysis.keyClaims?.slice(0, config.limits.maxClaimMarkers).forEach((claim: { id: string; claim: string; evidence?: string; relevantSnippet?: string }) => {
-          // Prefer Claude's relevantSnippet, fallback to search
+          // Prefer AI's relevantSnippet, fallback to search
           const snippet = (claim.relevantSnippet && claim.relevantSnippet.length >= 5)
             ? claim.relevantSnippet
             : findAnchorSnippet(claim.claim, capturedTime);
@@ -342,7 +342,7 @@ function LiveDashboardContent() {
 
         // Add markers for missing evidence
         analysisData.analysis.missingEvidence?.forEach((evidence: { id: string; description: string; importance?: string; relevantSnippet?: string }) => {
-          // Prefer Claude's relevantSnippet, fallback to search
+          // Prefer AI's relevantSnippet, fallback to search
           const snippet = (evidence.relevantSnippet && evidence.relevantSnippet.length >= 5)
             ? evidence.relevantSnippet
             : findAnchorSnippet(evidence.description, capturedTime);
@@ -494,7 +494,7 @@ function LiveDashboardContent() {
           });
 
           // Then, separately add timeline markers for new questions
-          // Try to find the timestamp based on relevantSnippet from Claude
+          // Try to find the timestamp based on relevantSnippet from AI
           const questionMarkers: TimelineMarker[] = questionsData.questions.map((q: GeneratedQuestion) => {
             let markerTimestamp = currentVideoTime;
             let anchorSnippet = q.relevantSnippet || '';

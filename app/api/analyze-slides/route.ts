@@ -5,7 +5,7 @@ import { config } from '@/lib/config';
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
 
-// Initialize Claude client lazily
+// Initialize AI client lazily
 let anthropicClient: Anthropic | null = null;
 
 function getAnthropicClient(): Anthropic | null {
@@ -157,7 +157,7 @@ async function extractPptxContent(buffer: Buffer): Promise<{
   }
 }
 
-// Analyze images with Claude Vision (batch up to 5 at a time)
+// Analyze images with AI Vision (batch up to 5 at a time)
 async function analyzeImagesWithClaude(
   client: Anthropic,
   images: ExtractedImage[]
@@ -218,7 +218,7 @@ Be concise but informative. Format as:
   return descriptions;
 }
 
-// Analyze extracted text with Claude to get structured data
+// Analyze extracted text with AI to get structured data
 async function analyzeTextWithClaude(
   client: Anthropic,
   text: string,
@@ -255,7 +255,7 @@ Respond ONLY with valid JSON.`,
 
   const textContent = response.content.find(c => c.type === 'text');
   if (!textContent || textContent.type !== 'text') {
-    throw new Error('No text response from Claude');
+    throw new Error('No text response from AI');
   }
 
   const jsonMatch = textContent.text.match(/\{[\s\S]*\}/);
@@ -293,8 +293,8 @@ export async function POST(request: NextRequest) {
     const client = getAnthropicClient();
 
     if (!client) {
-      // Return mock data if Claude not configured
-      console.log('[Analyze Slides] Claude not configured, returning mock data');
+      // Return mock data if AI not configured
+      console.log('[Analyze Slides] AI not configured, returning mock data');
       return NextResponse.json({
         success: true,
         analysis: {
@@ -330,7 +330,7 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        // Analyze the extracted text with Claude
+        // Analyze the extracted text with AI
         const analysis = await analyzeTextWithClaude(client, pdfText, slidesFile.name);
 
         return NextResponse.json({
@@ -355,7 +355,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // For images, we can send directly to Claude's vision
+    // For images, we can send directly to AI vision
     if (slidesFile.type.startsWith('image/')) {
       const arrayBuffer = await slidesFile.arrayBuffer();
       const base64 = Buffer.from(arrayBuffer).toString('base64');
@@ -401,7 +401,7 @@ Format your response as JSON:
 
       const textContent = response.content.find(c => c.type === 'text');
       if (!textContent || textContent.type !== 'text') {
-        throw new Error('No text response from Claude');
+        throw new Error('No text response from AI');
       }
 
       // Parse JSON from response
@@ -440,12 +440,12 @@ Format your response as JSON:
 
         console.log('[Analyze Slides] Extracted', pptxText.length, 'chars from', slideCount, 'slides,', images.length, 'images');
 
-        // Analyze images with Claude Vision
+        // Analyze images with AI Vision
         let imageDescriptions: string[] = [];
         let visualElements: string[] = [];
 
         if (images.length > 0) {
-          console.log('[Analyze Slides] Analyzing', images.length, 'images with Claude Vision...');
+          console.log('[Analyze Slides] Analyzing', images.length, 'images with AI Vision...');
           imageDescriptions = await analyzeImagesWithClaude(client, images);
           visualElements = imageDescriptions.flatMap(desc => {
             // Extract key visual descriptions
@@ -473,7 +473,7 @@ Format your response as JSON:
           });
         }
 
-        // Analyze the combined content with Claude
+        // Analyze the combined content with AI
         const analysis = await analyzeTextWithClaude(client, combinedContent, slidesFile.name);
 
         // Build response with optional warning for large image counts

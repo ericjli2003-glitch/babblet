@@ -35,13 +35,13 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Analyze] Processing transcript: ${transcript.slice(0, 100)}...`);
 
-    // Use Claude for analysis (preferred), fall back to Gemini, then mock
+    // Use Babblet AI for analysis (preferred), fall back to alternatives, then mock
     let analysis: AnalysisSummary;
 
     if (isClaudeConfigured()) {
-      console.log('[Analyze] Using Claude Sonnet 4 for analysis...');
+      console.log('[Analyze] Using Babblet AI for analysis...');
       analysis = await analyzeWithClaude(transcript);
-      console.log('[Analyze] Claude analysis complete');
+      console.log('[Analyze] Babblet AI analysis complete');
     } else if (isGeminiConfigured()) {
       console.log('[Analyze] Using Gemini for analysis...');
       const events = await detectSemanticEvents(transcript);

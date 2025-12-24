@@ -719,7 +719,7 @@ export default function ClassWorkspace({
                   <strong>4. Fallback Summary:</strong> If no high-quality matches are found, we use your course summary to ensure feedback stays course-relevant.
                 </p>
                 <p>
-                  <strong>5. Budget Controls:</strong> We cap context at ~8,000 characters to keep Claude focused and avoid overwhelming it with too much information.
+                  <strong>5. Budget Controls:</strong> We cap context at ~8,000 characters to keep the AI focused and avoid overwhelming it with too much information.
                 </p>
               </div>
             </div>

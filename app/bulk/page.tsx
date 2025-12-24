@@ -27,7 +27,7 @@ type PipelineStage =
   | 'uploading'     // Currently uploading to R2
   | 'queued'        // Uploaded, waiting in queue
   | 'transcribing'  // Being transcribed by Deepgram
-  | 'analyzing'     // Being analyzed by Claude
+  | 'analyzing'     // Being analyzed by Babblet AI
   | 'complete'      // Fully processed
   | 'failed';       // Error at any stage
 

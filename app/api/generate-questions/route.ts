@@ -77,11 +77,11 @@ export async function POST(request: NextRequest) {
 
     let questions: GeneratedQuestion[];
 
-    // Prefer Claude, fall back to OpenAI, then mock
+    // Prefer Babblet AI, fall back to alternatives, then mock
     if (isClaudeConfigured()) {
-      console.log('[generate-questions] Calling Claude Sonnet 4 for question generation...');
+      console.log('[generate-questions] Calling Babblet AI for question generation...');
       questions = await generateQuestionsWithClaude(transcript, analysisContext, slideContent, settings);
-      console.log('[generate-questions] Claude returned', questions.length, 'questions');
+      console.log('[generate-questions] Babblet AI returned', questions.length, 'questions');
     } else if (isOpenAIConfigured()) {
       console.log('[generate-questions] Calling OpenAI for question generation...');
       questions = await generateQuestionsFromTranscript(transcript, analysisContext);

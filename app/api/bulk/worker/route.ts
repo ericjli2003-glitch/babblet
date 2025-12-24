@@ -138,7 +138,7 @@ async function processSubmission(submissionId: string, batchId: string): Promise
     const batch = await getBatch(submission.batchId);
     const rubricCriteria = batch?.rubricCriteria;
 
-    // Run analysis pipeline (if Claude is configured)
+    // Run analysis pipeline (if AI is configured)
     if (isClaudeConfigured()) {
       console.log(`[Worker] Analyzing ${submissionId}...`);
       const analyzeStart = Date.now();
@@ -208,7 +208,7 @@ async function processSubmission(submissionId: string, batchId: string): Promise
         completedAt: Date.now(),
       });
     } else {
-      // No Claude - just save transcript
+      // No AI - just save transcript
       await updateSubmission(submissionId, {
         status: 'ready',
         completedAt: Date.now(),

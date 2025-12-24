@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { GeneratedQuestion, AnalysisSummary, KeyClaim, LogicalGap, MissingEvidence, RubricEvaluation, RubricScore } from './types';
 import { config } from './config';
 
-// Lazy-load Claude client to avoid build-time errors
+// Lazy-load AI client to avoid build-time errors
 let anthropicClient: Anthropic | null = null;
 
 function getAnthropicClient(): Anthropic {
@@ -183,7 +183,7 @@ function selectDiverseTop(
   return picked.slice(0, count);
 }
 
-// Generate questions using Claude Sonnet 4
+// Generate questions using Babblet AI
 export async function generateQuestionsWithClaude(
   transcript: string,
   analysis?: AnalysisSummary,
@@ -331,7 +331,7 @@ JSON format:
 Respond ONLY with JSON.`;
 
   try {
-    console.log('[Claude] Generating questions...');
+    console.log('[Babblet AI] Generating questions...');
 
     const response = await client.messages.create({
       model: config.models.claude,
@@ -382,15 +382,15 @@ Respond ONLY with JSON.`;
     const deduped = dedupeQuestions(rawQuestions, existing);
     const selected = selectDiverseTop(deduped, returnCount, settings?.priorities, wantsEvidence);
 
-    console.log('[Claude] Generated', selected.length, 'questions');
+    console.log('[Babblet AI] Generated', selected.length, 'questions');
     return selected;
   } catch (error) {
-    console.error('[Claude] Question generation error:', error);
+    console.error('[Babblet AI] Question generation error:', error);
     throw error;
   }
 }
 
-// Analyze transcript using Claude
+// Analyze transcript using Babblet AI
 export async function analyzeWithClaude(transcript: string): Promise<AnalysisSummary> {
   const client = getAnthropicClient();
 
@@ -474,7 +474,7 @@ Remember: logicalGaps and missingEvidence can be empty arrays if the presentatio
 Respond ONLY with the JSON.`;
 
   try {
-    console.log('[Claude] Analyzing transcript...');
+    console.log('[Babblet AI] Analyzing transcript...');
 
     const response = await client.messages.create({
       model: config.models.claude,
@@ -535,10 +535,10 @@ Respond ONLY with the JSON.`;
       timestamp: Date.now(),
     };
 
-    console.log('[Claude] Analysis complete:', keyClaims.length, 'claims,', logicalGaps.length, 'gaps');
+    console.log('[Babblet AI] Analysis complete:', keyClaims.length, 'claims,', logicalGaps.length, 'gaps');
     return analysis;
   } catch (error) {
-    console.error('[Claude] Analysis error:', error);
+    console.error('[Babblet AI] Analysis error:', error);
     throw error;
   }
 }
@@ -550,7 +550,7 @@ interface CustomRubricCriteria {
   weight?: number; // 1-5, default 1
 }
 
-// Evaluate presentation using Claude with optional custom rubric
+// Evaluate presentation using Babblet AI with optional custom rubric
 // Transcript segment for linking
 interface TranscriptSegmentInput {
   id: string;
@@ -717,7 +717,7 @@ IMPORTANT: For each strength and improvement, include "quote" with the exact wor
 Respond ONLY with valid JSON.`;
 
   try {
-    console.log('[Claude] Evaluating presentation with rubric...');
+    console.log('[Babblet AI] Evaluating presentation with rubric...');
 
     const response = await client.messages.create({
       model: config.models.claude,
@@ -831,10 +831,10 @@ Respond ONLY with valid JSON.`;
       timestamp: Date.now(),
     };
 
-    console.log('[Claude] Rubric evaluation complete, overall:', rubric.overallScore);
+    console.log('[Babblet AI] Rubric evaluation complete, overall:', rubric.overallScore);
     return rubric;
   } catch (error) {
-    console.error('[Claude] Rubric evaluation error:', error);
+    console.error('[Babblet AI] Rubric evaluation error:', error);
     throw error;
   }
 }

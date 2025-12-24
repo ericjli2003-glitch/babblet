@@ -98,7 +98,7 @@ export const config = {
     // MODELS
     // ==========================================
     models: {
-        /** Claude model for questions and analysis */
+        /** AI model for questions and analysis */
         claude: 'claude-sonnet-4-20250514',
         /** OpenAI model for fallback */
         openai: 'gpt-4o-mini',

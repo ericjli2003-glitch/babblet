@@ -38,7 +38,7 @@ interface ParseResult {
 }
 
 // ============================================
-// Claude prompt for rubric parsing
+// AI prompt for rubric parsing
 // ============================================
 
 const RUBRIC_PARSE_PROMPT = `You are an expert at parsing academic rubrics into structured data.
@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
       ? rawText.slice(0, maxLength) + '\n\n[Text truncated due to length]'
       : rawText;
     
-    // Call Claude to parse the rubric
+    // Call AI to parse the rubric
     const anthropic = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
     });
@@ -187,14 +187,14 @@ export async function POST(request: NextRequest) {
     };
     
     try {
-      // Find JSON in the response (Claude might wrap it in markdown code blocks)
+      // Find JSON in the response (AI might wrap it in markdown code blocks)
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         throw new Error('No JSON found in response');
       }
       parseResult = JSON.parse(jsonMatch[0]);
     } catch (parseError) {
-      console.error('Failed to parse Claude response:', responseText);
+      console.error('Failed to parse AI response:', responseText);
       return NextResponse.json({
         success: false,
         error: 'Failed to parse rubric. The format may be too unusual. Please try reformatting.',
