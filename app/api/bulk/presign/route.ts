@@ -1,9 +1,55 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getPresignedUploadUrl, generateFileKey, isR2Configured } from '@/lib/r2';
+import { getPresignedUploadUrl, getPresignedDownloadUrl, generateFileKey, isR2Configured } from '@/lib/r2';
 import { v4 as uuidv4 } from 'uuid';
 
+// GET - Get presigned download URL for a file
+export async function GET(request: NextRequest) {
+  try {
+    if (!isR2Configured()) {
+      return NextResponse.json(
+        { error: 'R2 storage not configured' },
+        { status: 500 }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const fileKey = searchParams.get('key');
+    const action = searchParams.get('action') || 'download';
+
+    if (!fileKey) {
+      return NextResponse.json(
+        { error: 'key parameter is required' },
+        { status: 400 }
+      );
+    }
+
+    if (action !== 'download') {
+      return NextResponse.json(
+        { error: 'Only action=download is supported for GET requests' },
+        { status: 400 }
+      );
+    }
+
+    // Get presigned download URL
+    const url = await getPresignedDownloadUrl(fileKey);
+
+    return NextResponse.json({
+      success: true,
+      url,
+      fileKey,
+    });
+  } catch (error) {
+    console.error('[Presign GET] Error:', error);
+    return NextResponse.json(
+      { error: 'Failed to generate presigned download URL', details: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
+}
+
+// POST - Get presigned upload URL
 export async function POST(request: NextRequest) {
   try {
     if (!isR2Configured()) {

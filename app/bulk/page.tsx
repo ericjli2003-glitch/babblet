@@ -189,15 +189,15 @@ function BulkUploadPageContent() {
   const searchParams = useSearchParams();
   const urlCourseId = searchParams.get('courseId');
   const urlAssignmentId = searchParams.get('assignmentId');
-  
+
   // Class-scoped state
   const [classScopedInfo, setClassScopedInfo] = useState<ClassScopedInfo | null>(null);
   const [loadingClassContext, setLoadingClassContext] = useState(false);
   const [showContextPanel, setShowContextPanel] = useState(false);
-  
+
   // Determine if this is a class-scoped upload
   const isClassScoped = !!(urlCourseId && urlAssignmentId) || !!classScopedInfo?.isClassScoped;
-  
+
   // View state
   const [view, setView] = useState<'list' | 'create' | 'batch'>('list');
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
@@ -406,31 +406,31 @@ function BulkUploadPageContent() {
       loadAvailableContexts();
     }
   }, [view, loadBatches, loadAvailableContexts]);
-  
+
   // ============================================
   // Load Class Context from URL Params
   // ============================================
-  
+
   useEffect(() => {
     const loadClassContext = async () => {
       if (!urlCourseId || !urlAssignmentId) return;
-      
+
       try {
         setLoadingClassContext(true);
-        
+
         // Fetch course info
         const courseRes = await fetch(`/api/context/courses?id=${urlCourseId}`);
         const courseData = await courseRes.json();
-        
+
         // Fetch assignment info
         const assignmentRes = await fetch(`/api/context/assignments?id=${urlAssignmentId}`);
         const assignmentData = await assignmentRes.json();
-        
+
         if (courseData.success && assignmentData.success) {
           const course = courseData.course;
           const assignment = assignmentData.assignment;
           const latestVersion = assignmentData.latestVersion;
-          
+
           // Set class-scoped info
           setClassScopedInfo({
             isClassScoped: true,
@@ -445,24 +445,24 @@ function BulkUploadPageContent() {
             hasMaterials: true, // Assume true for now
             bundleVersionId: latestVersion?.id,
           });
-          
+
           // Pre-populate form fields
           setCourseName(course.name);
           setAssignmentName(assignment.name);
           setBatchName(`${assignment.name} - ${new Date().toLocaleDateString()}`);
-          
+
           // Pre-select context
           if (latestVersion) {
             setSelectedContextVersion({ id: latestVersion.id, version: latestVersion.version });
-            setSelectedContextCourse({ 
-              id: course.id, 
-              name: course.name, 
-              courseCode: course.courseCode || '', 
-              term: course.term || '' 
+            setSelectedContextCourse({
+              id: course.id,
+              name: course.name,
+              courseCode: course.courseCode || '',
+              term: course.term || ''
             });
             setSelectedContextAssignment({ id: assignment.id, name: assignment.name });
           }
-          
+
           // Go directly to create view for class-scoped uploads
           setView('create');
         }
@@ -472,7 +472,7 @@ function BulkUploadPageContent() {
         setLoadingClassContext(false);
       }
     };
-    
+
     loadClassContext();
   }, [urlCourseId, urlAssignmentId]);
 
@@ -993,12 +993,12 @@ function BulkUploadPageContent() {
 
   // Accent colors based on scope
   const accentColor = isClassScoped ? 'teal' : 'primary';
-  
+
   return (
-    <div className={`min-h-screen ${isClassScoped 
-      ? 'bg-gradient-to-br from-teal-50 via-surface-50 to-cyan-50' 
+    <div className={`min-h-screen ${isClassScoped
+      ? 'bg-gradient-to-br from-teal-50 via-surface-50 to-cyan-50'
       : 'bg-gradient-to-br from-surface-50 via-surface-100 to-primary-50'
-    }`}>
+      }`}>
       {/* Class Context Header - Persistent when class-scoped */}
       {isClassScoped && classScopedInfo && (
         <div className="bg-gradient-to-r from-teal-600 to-cyan-600 text-white">
@@ -1026,7 +1026,7 @@ function BulkUploadPageContent() {
                   Class-scoped upload
                 </span>
               </div>
-              
+
               {/* Context Status Indicators */}
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 text-sm">
@@ -1055,7 +1055,7 @@ function BulkUploadPageContent() {
           </div>
         </div>
       )}
-      
+
       {/* Header */}
       <header className={`sticky ${isClassScoped ? 'top-0' : 'top-0'} z-50 bg-white/90 backdrop-blur-lg border-b ${isClassScoped ? 'border-teal-200' : 'border-surface-200'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -1103,7 +1103,7 @@ function BulkUploadPageContent() {
                 </Link>
               )}
               <div className={`h-6 w-px ${isClassScoped ? 'bg-teal-200' : 'bg-surface-200'}`} />
-              
+
               {/* Title - Different based on scope */}
               {isClassScoped ? (
                 <div className="flex items-center gap-3">
@@ -1524,16 +1524,15 @@ function BulkUploadPageContent() {
                     </p>
                   </div>
                 )}
-                
+
                 <div
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
-                  className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
-                    isClassScoped 
-                      ? 'border-teal-300 hover:border-teal-500 hover:bg-teal-50/50' 
-                      : 'border-surface-300 hover:border-primary-400 hover:bg-primary-50/50'
-                  }`}
+                  className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${isClassScoped
+                    ? 'border-teal-300 hover:border-teal-500 hover:bg-teal-50/50'
+                    : 'border-surface-300 hover:border-primary-400 hover:bg-primary-50/50'
+                    }`}
                 >
                   {isClassScoped ? (
                     <BookOpen className="w-12 h-12 text-teal-400 mx-auto mb-4" />
@@ -1715,7 +1714,7 @@ function BulkUploadPageContent() {
           )}
         </AnimatePresence>
       </main>
-      
+
       {/* Context Panel (Side Drawer) - Class-scoped only */}
       <AnimatePresence>
         {showContextPanel && isClassScoped && classScopedInfo && (
@@ -1728,7 +1727,7 @@ function BulkUploadPageContent() {
               className="fixed inset-0 bg-black/30 z-50"
               onClick={() => setShowContextPanel(false)}
             />
-            
+
             {/* Panel */}
             <motion.div
               initial={{ x: '100%' }}
@@ -1751,7 +1750,7 @@ function BulkUploadPageContent() {
                   </button>
                 </div>
               </div>
-              
+
               <div className="p-4 space-y-6">
                 {/* Course Info */}
                 <div className="bg-teal-50 rounded-xl p-4">
@@ -1764,17 +1763,17 @@ function BulkUploadPageContent() {
                     <p className="text-sm text-teal-600">{classScopedInfo.term}</p>
                   )}
                 </div>
-                
+
                 {/* Assignment Info */}
                 <div className="bg-surface-50 rounded-xl p-4">
                   <h3 className="text-sm font-medium text-surface-600 uppercase tracking-wider mb-2">Assignment</h3>
                   <p className="font-semibold text-surface-900">{classScopedInfo.assignmentName}</p>
                 </div>
-                
+
                 {/* Context Status */}
                 <div className="space-y-3">
                   <h3 className="text-sm font-medium text-surface-600 uppercase tracking-wider">Context Attached</h3>
-                  
+
                   <div className={`flex items-center gap-3 p-3 rounded-xl ${classScopedInfo.hasRubric ? 'bg-emerald-50' : 'bg-amber-50'}`}>
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${classScopedInfo.hasRubric ? 'bg-emerald-200' : 'bg-amber-200'}`}>
                       {classScopedInfo.hasRubric ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-amber-600" />}
@@ -1788,7 +1787,7 @@ function BulkUploadPageContent() {
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className={`flex items-center gap-3 p-3 rounded-xl ${classScopedInfo.hasPrompt ? 'bg-emerald-50' : 'bg-amber-50'}`}>
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${classScopedInfo.hasPrompt ? 'bg-emerald-200' : 'bg-amber-200'}`}>
                       {classScopedInfo.hasPrompt ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-amber-600" />}
@@ -1802,7 +1801,7 @@ function BulkUploadPageContent() {
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className={`flex items-center gap-3 p-3 rounded-xl ${classScopedInfo.hasMaterials ? 'bg-emerald-50' : 'bg-surface-50'}`}>
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${classScopedInfo.hasMaterials ? 'bg-emerald-200' : 'bg-surface-200'}`}>
                       {classScopedInfo.hasMaterials ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <FileText className="w-4 h-4 text-surface-400" />}
@@ -1817,15 +1816,15 @@ function BulkUploadPageContent() {
                     </div>
                   </div>
                 </div>
-                
+
                 {/* Info Box */}
                 <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
                   <p className="text-sm text-teal-800">
-                    <strong>How it works:</strong> Submissions uploaded here will be graded using the rubric 
+                    <strong>How it works:</strong> Submissions uploaded here will be graded using the rubric
                     and context from this class. Babblet will reference class materials when providing feedback.
                   </p>
                 </div>
-                
+
                 {/* Edit Context Link */}
                 <Link
                   href={`/context?courseId=${classScopedInfo.courseId}&assignmentId=${classScopedInfo.assignmentId}`}
