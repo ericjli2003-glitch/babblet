@@ -311,7 +311,7 @@ export default function HomePage() {
           <h2 className="text-2xl font-semibold text-surface-900 text-center mb-12">
             Everything you need to evaluate presentations
           </h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
             {features.map((feature, index) => (
               <motion.div
                 key={feature.title}
