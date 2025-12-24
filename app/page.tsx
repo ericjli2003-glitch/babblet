@@ -128,11 +128,11 @@ export default function HomePage() {
             Choose how to capture the presentation
           </h2>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 items-stretch">
             {/* Upload Video Option - Primary Blue */}
             <button
               onClick={() => setSelectedMode('upload')}
-              className={`group relative p-8 rounded-3xl text-left transition-colors duration-200 border-2 ${
+              className={`group relative p-8 rounded-3xl text-left transition-colors duration-200 border-2 flex flex-col h-full ${
                 selectedMode === 'upload'
                   ? 'bg-white shadow-soft-lg ring-2 ring-primary-500 border-primary-400'
                   : 'bg-white/60 shadow-soft border-primary-200 hover:bg-primary-50 hover:border-primary-400'
@@ -151,15 +151,15 @@ export default function HomePage() {
                 }`} />
               </div>
               <h3 className="text-xl font-semibold text-surface-900 mb-2">Upload Video</h3>
-              <p className="text-surface-600 text-sm">
-                Upload a pre-recorded presentation video (MP4, MOV, WebM)
+              <p className="text-surface-600 text-sm flex-1">
+                Upload a pre-recorded presentation video
               </p>
             </button>
 
             {/* Live Recording Option - Coral/Accent */}
             <button
               onClick={() => setSelectedMode('live')}
-              className={`group relative p-8 rounded-3xl text-left transition-colors duration-200 border-2 ${
+              className={`group relative p-8 rounded-3xl text-left transition-colors duration-200 border-2 flex flex-col h-full ${
                 selectedMode === 'live'
                   ? 'bg-white shadow-soft-lg ring-2 ring-accent-500 border-accent-400'
                   : 'bg-white/60 shadow-soft border-accent-200 hover:bg-accent-50 hover:border-accent-400'
@@ -178,7 +178,7 @@ export default function HomePage() {
                 }`} />
               </div>
               <h3 className="text-xl font-semibold text-surface-900 mb-2">Record Live</h3>
-              <p className="text-surface-600 text-sm">
+              <p className="text-surface-600 text-sm flex-1">
                 Capture audio in real-time using your microphone
               </p>
             </button>
@@ -186,7 +186,7 @@ export default function HomePage() {
             {/* Bulk Upload Option - Emerald Green */}
             <Link
               href="/bulk"
-              className="group relative p-8 rounded-3xl text-left transition-colors duration-200 bg-white/60 shadow-soft border-2 border-emerald-200 hover:bg-emerald-50 hover:border-emerald-400"
+              className="group relative p-8 rounded-3xl text-left transition-colors duration-200 bg-white/60 shadow-soft border-2 border-emerald-200 hover:bg-emerald-50 hover:border-emerald-400 flex flex-col h-full"
             >
               <div className="absolute top-4 right-4">
                 <div className="flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium">
@@ -198,7 +198,7 @@ export default function HomePage() {
                 <FolderOpen className="w-7 h-7 text-emerald-600 group-hover:text-white transition-colors duration-200" />
               </div>
               <h3 className="text-xl font-semibold text-surface-900 mb-2">Bulk Upload</h3>
-              <p className="text-surface-600 text-sm">
+              <p className="text-surface-600 text-sm flex-1">
                 Grade multiple student videos at once with batch processing
               </p>
             </Link>
@@ -206,7 +206,7 @@ export default function HomePage() {
             {/* Course Notebooks Option - Violet Purple */}
             <Link
               href="/context"
-              className="group relative p-8 rounded-3xl text-left transition-colors duration-200 bg-white/60 shadow-soft border-2 border-violet-200 hover:bg-violet-50 hover:border-violet-400"
+              className="group relative p-8 rounded-3xl text-left transition-colors duration-200 bg-white/60 shadow-soft border-2 border-violet-200 hover:bg-violet-50 hover:border-violet-400 flex flex-col h-full"
             >
               <div className="absolute top-4 right-4">
                 <div className="flex items-center gap-1 px-2 py-1 bg-violet-100 text-violet-700 rounded-full text-xs font-medium">
@@ -217,7 +217,7 @@ export default function HomePage() {
                 <BookOpen className="w-7 h-7 text-violet-600 group-hover:text-white transition-colors duration-200" />
               </div>
               <h3 className="text-xl font-semibold text-surface-900 mb-2">Course Notebooks</h3>
-              <p className="text-surface-600 text-sm">
+              <p className="text-surface-600 text-sm flex-1">
                 Set up rubrics, assignments, and course materials for Babblet grading
               </p>
             </Link>
