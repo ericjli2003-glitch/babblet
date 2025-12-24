@@ -6,6 +6,7 @@ import {
   getRubric, 
   updateRubric,
   type RubricCriterion,
+  type GradingScale,
 } from '@/lib/context-store';
 
 // GET /api/context/rubrics?id=xxx - Get rubric
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
       sourceType,
       overallConfidence,
       totalPoints,
+      gradingScale,
     } = body;
 
     if (!courseId || !name || !criteria) {
@@ -67,6 +69,18 @@ export async function POST(request: NextRequest) {
       originalText: c.originalText,
     }));
 
+    // Validate grading scale if provided
+    let validGradingScale: GradingScale | undefined;
+    if (gradingScale) {
+      const validTypes = ['points', 'percentage', 'letter', 'bands', 'none'] as const;
+      validGradingScale = {
+        type: validTypes.includes(gradingScale.type) ? gradingScale.type : 'none',
+        maxScore: gradingScale.maxScore || totalPoints,
+        letterGrades: gradingScale.letterGrades,
+        bands: gradingScale.bands,
+      };
+    }
+
     const rubric = await createRubric({ 
       courseId, 
       assignmentId, 
@@ -76,9 +90,10 @@ export async function POST(request: NextRequest) {
       sourceType,
       overallConfidence,
       totalPoints,
+      gradingScale: validGradingScale,
     });
     
-    console.log(`[Rubrics] Created: ${rubric.id} - ${rubric.name} (${validCriteria.length} criteria, source: ${sourceType || 'unknown'})`);
+    console.log(`[Rubrics] Created: ${rubric.id} - ${rubric.name} (${validCriteria.length} criteria, source: ${sourceType || 'unknown'}, scale: ${validGradingScale?.type || 'none'})`);
 
     return NextResponse.json({ success: true, rubric });
   } catch (error) {

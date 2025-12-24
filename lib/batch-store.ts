@@ -64,10 +64,16 @@ export interface Submission {
   };
   rubricEvaluation?: {
     overallScore: number;
+    // Grading scale metadata (from rubric)
+    gradingScaleUsed?: 'points' | 'percentage' | 'letter' | 'bands' | 'none';
+    maxPossibleScore?: number;
+    letterGrade?: string; // e.g., "A", "B+"
+    bandLabel?: string; // e.g., "Excellent", "Good"
     criteriaBreakdown?: Array<{
       criterionId?: string; // Links to rubric criterion ID
       criterion: string;
       score: number;
+      maxScore?: number; // Maximum for this criterion (from rubric)
       feedback: string;
       // Transcript segment references for this criterion
       transcriptRefs?: Array<{

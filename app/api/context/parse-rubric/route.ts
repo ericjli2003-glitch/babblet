@@ -28,6 +28,21 @@ interface ParsedCriterion {
   originalText?: string; // The source text this was extracted from
 }
 
+interface GradingScale {
+  type: 'points' | 'percentage' | 'letter' | 'bands' | 'none';
+  maxScore?: number;
+  letterGrades?: Array<{
+    letter: string;
+    minScore: number;
+    maxScore: number;
+  }>;
+  bands?: Array<{
+    label: string;
+    minScore: number;
+    maxScore: number;
+  }>;
+}
+
 interface ParseResult {
   success: boolean;
   criteria: ParsedCriterion[];
@@ -35,6 +50,7 @@ interface ParseResult {
   warnings: string[];
   rawText: string;
   totalPoints?: number;
+  gradingScale?: GradingScale;
 }
 
 // ============================================
@@ -43,15 +59,29 @@ interface ParseResult {
 
 const RUBRIC_PARSE_PROMPT = `You are an expert at parsing academic rubrics into structured data.
 
-Given the rubric text below, extract each evaluation criterion with the following information:
-- name: The criterion name/title
-- description: What this criterion evaluates
-- weight: Point value or percentage weight (if not specified, estimate relative importance 1-5)
-- levels: Score bands/levels if present (e.g., Excellent/Good/Fair/Poor with point values)
-- confidence: How confident you are in this extraction (high/medium/low)
-- originalText: The exact text fragment this criterion was extracted from
+Given the rubric text below, extract:
+1. Each evaluation criterion with:
+   - name: The criterion name/title
+   - description: What this criterion evaluates
+   - weight: Point value or percentage weight (if not specified, estimate relative importance 1-5)
+   - levels: Score bands/levels if present (e.g., Excellent/Good/Fair/Poor with point values)
+   - confidence: How confident you are in this extraction (high/medium/low)
+   - originalText: The exact text fragment this criterion was extracted from
 
-Rules:
+2. The grading scale used by this rubric:
+   - type: One of "points", "percentage", "letter", "bands", or "none"
+   - maxScore: The maximum possible score (if applicable)
+   - letterGrades: If letter grades are used (e.g., A = 90-100, B = 80-89)
+   - bands: If qualitative bands are used (e.g., Excellent = 90-100, Good = 70-89)
+
+Grading Scale Detection Rules:
+- "points": Rubric uses explicit point values (e.g., "30 pts", "15/20 points")
+- "percentage": Rubric uses percentages (e.g., "25%", "scored out of 100%")
+- "letter": Rubric uses letter grades (A, B, C, D, F or similar)
+- "bands": Rubric uses qualitative bands (Excellent, Good, Satisfactory, Needs Improvement)
+- "none": No explicit grading scale found - weights will be normalized to 100
+
+Criteria Extraction Rules:
 1. Extract ALL criteria, even if formatting is inconsistent
 2. If point values are specified (e.g., "30 pts"), use those as weights
 3. If percentages are used (e.g., "25%"), convert to points out of 100
@@ -85,12 +115,22 @@ Return your response as a JSON object with this exact structure:
     }
   ],
   "totalPoints": 100,
+  "gradingScale": {
+    "type": "points",
+    "maxScore": 100,
+    "letterGrades": null,
+    "bands": null
+  },
   "overallConfidence": "high",
   "warnings": ["Any issues or ambiguities found"]
 }
 
-If levels/score bands are not present in the rubric, omit the "levels" field entirely.
-If you cannot parse anything meaningful, return an empty criteria array with warnings explaining why.
+IMPORTANT:
+- gradingScale.type must be one of: "points", "percentage", "letter", "bands", "none"
+- If letter grades are detected, include letterGrades array: [{ "letter": "A", "minScore": 90, "maxScore": 100 }, ...]
+- If bands are detected, include bands array: [{ "label": "Excellent", "minScore": 90, "maxScore": 100 }, ...]
+- If levels/score bands are not present per criterion, omit the "levels" field entirely.
+- If you cannot parse anything meaningful, return an empty criteria array with warnings explaining why.
 
 RUBRIC TEXT:
 `;
@@ -182,6 +222,7 @@ export async function POST(request: NextRequest) {
     let parseResult: {
       criteria: ParsedCriterion[];
       totalPoints?: number;
+      gradingScale?: GradingScale;
       overallConfidence: 'high' | 'medium' | 'low';
       warnings: string[];
     };
@@ -231,6 +272,28 @@ export async function POST(request: NextRequest) {
       overallConfidence = 'medium';
     }
     
+    // Process grading scale - ensure valid type
+    let gradingScale: GradingScale | undefined;
+    if (parseResult.gradingScale) {
+      const validTypes = ['points', 'percentage', 'letter', 'bands', 'none'] as const;
+      const scaleType = validTypes.includes(parseResult.gradingScale.type as typeof validTypes[number])
+        ? parseResult.gradingScale.type
+        : 'none';
+      
+      gradingScale = {
+        type: scaleType as GradingScale['type'],
+        maxScore: parseResult.gradingScale.maxScore || parseResult.totalPoints,
+        letterGrades: parseResult.gradingScale.letterGrades,
+        bands: parseResult.gradingScale.bands,
+      };
+    } else {
+      // Default: if totalPoints detected, assume points scale; otherwise none
+      gradingScale = {
+        type: parseResult.totalPoints ? 'points' : 'none',
+        maxScore: parseResult.totalPoints || 100,
+      };
+    }
+    
     const result: ParseResult = {
       success: true,
       criteria: parseResult.criteria,
@@ -238,6 +301,7 @@ export async function POST(request: NextRequest) {
       warnings: parseResult.warnings || [],
       rawText,
       totalPoints: parseResult.totalPoints,
+      gradingScale,
     };
     
     // Add warnings based on analysis

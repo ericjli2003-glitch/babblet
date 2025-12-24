@@ -595,94 +595,207 @@ function findMatchingSegment(
   return null;
 }
 
+// Context for professor-mode evaluation
+export interface ProfessorContext {
+  courseName?: string;
+  courseCode?: string;
+  term?: string;
+  subjectArea?: string;
+  academicLevel?: string;
+  assignmentName?: string;
+  assignmentInstructions?: string;
+  classMaterials?: string; // Concatenated relevant materials
+  evaluationGuidance?: string; // Instructor's additional guidance
+}
+
+// Grading scale configuration
+export interface GradingScaleConfig {
+  type: 'points' | 'percentage' | 'letter' | 'bands' | 'none';
+  maxScore?: number;
+  letterGrades?: Array<{ letter: string; minScore: number; maxScore: number }>;
+  bands?: Array<{ label: string; minScore: number; maxScore: number }>;
+}
+
 export async function evaluateWithClaude(
   transcript: string,
   customRubric?: string,
   customCriteria?: CustomRubricCriteria[],
   analysis?: AnalysisSummary | null,
-  transcriptSegments?: TranscriptSegmentInput[]
+  transcriptSegments?: TranscriptSegmentInput[],
+  professorContext?: ProfessorContext,
+  gradingScale?: GradingScaleConfig
 ): Promise<RubricEvaluation> {
   const client = getAnthropicClient();
 
-  // Build rubric context based on user input
+  // =========================================================
+  // PROFESSOR ROLE PRIMER - Makes Babblet behave like a professor
+  // =========================================================
+  const subjectContext = professorContext?.subjectArea 
+    ? `${professorContext.subjectArea}${professorContext.academicLevel ? ` at the ${professorContext.academicLevel} level` : ''}`
+    : 'the relevant academic subject';
+  
+  const courseContext = professorContext?.courseName
+    ? `\nYou are teaching "${professorContext.courseName}"${professorContext.courseCode ? ` (${professorContext.courseCode})` : ''}${professorContext.term ? ` for ${professorContext.term}` : ''}.`
+    : '';
+
+  const professorPrimer = `You are a professor teaching ${subjectContext}.${courseContext}
+
+Your role is to evaluate student presentations EXACTLY as a professor in this field would:
+- Apply the academic standards and expectations appropriate for this subject and level
+- Prioritize clarity of reasoning, depth of understanding, and learning outcomes
+- Write feedback as if addressing your student directly
+- Be instructional, not judgmental
+- Provide specific, actionable suggestions for improvement
+- Recognize genuine effort and intellectual growth
+
+CRITICAL RULES:
+1. The provided rubric is AUTHORITATIVE - never invent your own grading criteria
+2. Score strictly within the rubric's defined scale - no deviation
+3. Ground ALL feedback in specific moments from the transcript
+4. Explain improvement suggestions as a teacher would explain to a student`;
+
+  // =========================================================
+  // GRADING SCALE CONFIGURATION
+  // =========================================================
+  let scaleInstructions = '';
+  const effectiveScale = gradingScale || { type: 'none', maxScore: 100 };
+  
+  switch (effectiveScale.type) {
+    case 'points':
+      scaleInstructions = `
+GRADING SCALE: Point-based (${effectiveScale.maxScore || 100} points total)
+- Score each criterion using the point values defined in the rubric
+- The total score should sum to a maximum of ${effectiveScale.maxScore || 100} points
+- Use the exact point values specified in the rubric (e.g., 15/20 points for a criterion)`;
+      break;
+    case 'percentage':
+      scaleInstructions = `
+GRADING SCALE: Percentage-based (0-100%)
+- Score each criterion as a percentage of its maximum
+- The overall score should be a percentage (0-100)
+- Weight criteria according to the rubric percentages`;
+      break;
+    case 'letter':
+      if (effectiveScale.letterGrades?.length) {
+        scaleInstructions = `
+GRADING SCALE: Letter Grades
+${effectiveScale.letterGrades.map(g => `- ${g.letter}: ${g.minScore}-${g.maxScore}`).join('\n')}
+- Assign letter grades based on these score ranges
+- Include both the letter grade and numerical equivalent in feedback`;
+      }
+      break;
+    case 'bands':
+      if (effectiveScale.bands?.length) {
+        scaleInstructions = `
+GRADING SCALE: Performance Bands
+${effectiveScale.bands.map(b => `- ${b.label}: ${b.minScore}-${b.maxScore}`).join('\n')}
+- Use these performance bands for overall assessment
+- Map criterion scores to the appropriate band`;
+      }
+      break;
+    default:
+      scaleInstructions = `
+GRADING SCALE: Normalized (0-100)
+- Score each criterion from 1-5 (1=Poor, 5=Exceptional)
+- The overall score will be normalized to 0-100
+- If no specific weights are provided, distribute evenly across criteria`;
+  }
+
+  // =========================================================
+  // BUILD RUBRIC CONTEXT
+  // =========================================================
   let rubricContext = '';
 
   if (customRubric && customRubric.trim()) {
     rubricContext = `
-CUSTOM RUBRIC (use this as the evaluation framework):
+INSTRUCTOR-PROVIDED RUBRIC (AUTHORITATIVE - follow this exactly):
 ${customRubric}
 
-Map your evaluation to these three categories, interpreting the custom rubric criteria:
-- contentQuality: How well does the content meet the rubric's content-related criteria?
-- delivery: How well does the presentation meet delivery/communication criteria?
-- evidenceStrength: How well does it meet evidence/support/research criteria?`;
+You MUST:
+1. Extract the rubric into discrete criteria with their defined scoring levels
+2. Score each criterion using ONLY the scale defined in the rubric
+3. Never add criteria not present in the rubric
+4. Never score outside the rubric's defined bounds`;
   } else if (customCriteria && customCriteria.length > 0) {
     rubricContext = `
-CUSTOM EVALUATION CRITERIA:
-${customCriteria.map((c, i) => `${i + 1}. ${c.name}: ${c.description}${c.weight ? ` (weight: ${c.weight}/5)` : ''}`).join('\n')}
+STRUCTURED EVALUATION CRITERIA (AUTHORITATIVE):
+${customCriteria.map((c, i) => `${i + 1}. ${c.name}: ${c.description}${c.weight ? ` (weight: ${c.weight})` : ''}`).join('\n')}
 
-Evaluate based on these specific criteria, mapping to:
-- contentQuality: Criteria related to content, organization, accuracy
-- delivery: Criteria related to presentation, clarity, engagement
-- evidenceStrength: Criteria related to evidence, sources, support`;
+Score each criterion according to its defined weight and description.`;
   } else {
     rubricContext = `
-Use standard academic presentation criteria:
-- contentQuality: Organization, depth of content, accuracy, completeness
-- delivery: Clarity of explanation, engagement, pacing, transitions
-- evidenceStrength: Quality of evidence, proper citations, logical support`;
+FALLBACK CRITERIA (use when no rubric is provided):
+- Content Quality (30%): Organization, depth, accuracy, completeness
+- Delivery (30%): Clarity, engagement, pacing, transitions
+- Evidence Strength (40%): Quality of evidence, citations, logical support
+
+Note: These are default criteria. Instructor-provided rubrics always override these.`;
   }
 
-  const systemPrompt = `You are an expert at evaluating academic presentations against rubrics.
+  // =========================================================
+  // ASSIGNMENT & MATERIALS CONTEXT (Context Hierarchy)
+  // =========================================================
+  let assignmentContext = '';
+  if (professorContext?.assignmentName || professorContext?.assignmentInstructions) {
+    assignmentContext = `
+ASSIGNMENT CONTEXT:
+${professorContext.assignmentName ? `Assignment: ${professorContext.assignmentName}` : ''}
+${professorContext.assignmentInstructions ? `Instructions: ${professorContext.assignmentInstructions}` : ''}`;
+  }
+
+  let materialsContext = '';
+  if (professorContext?.classMaterials) {
+    materialsContext = `
+CLASS MATERIALS CONTEXT (Use to inform your evaluation):
+${professorContext.classMaterials.slice(0, 3000)}${professorContext.classMaterials.length > 3000 ? '\n[Materials truncated]' : ''}`;
+  }
+
+  let guidanceContext = '';
+  if (professorContext?.evaluationGuidance) {
+    guidanceContext = `
+INSTRUCTOR EVALUATION GUIDANCE:
+${professorContext.evaluationGuidance}`;
+  }
+
+  // =========================================================
+  // SYSTEM PROMPT (Professor Role + Grading Rules)
+  // =========================================================
+  const systemPrompt = `${professorPrimer}
+${scaleInstructions}
 ${rubricContext}
+${assignmentContext}
+${materialsContext}
+${guidanceContext}
 
-Score each category from 1-5:
-1 = Poor/Missing
-2 = Below expectations
-3 = Meets expectations
-4 = Exceeds expectations  
-5 = Exceptional
-
-Provide specific, actionable feedback tied to what the presenter actually said.
-
-When a CUSTOM RUBRIC is provided:
-- Extract the rubric into 4-8 concrete criteria (short labels)
-- Provide a criterion-level score and feedback
-- Identify missing evidence per criterion (only if evidence is clearly expected by the rubric)`;
+EVALUATION RULES:
+1. The rubric is the SOLE source of truth for criteria and scoring
+2. Ground EVERY piece of feedback in specific transcript quotes
+3. Write feedback as you would to your own student
+4. Be specific about what was done well AND what to improve
+5. Explain WHY something is a strength or weakness
+6. Suggest concrete next steps for improvement`;
 
   const analysisContext = analysis ? `
-ANALYSIS CONTEXT:
-- Key Claims Made: ${analysis.keyClaims.map(c => c.claim).join('; ')}
-- Identified Gaps: ${analysis.logicalGaps.map(g => g.description).join('; ')}
-- Missing Evidence: ${analysis.missingEvidence.map(e => e.description).join('; ')}
-- Overall Argument Strength: ${analysis.overallStrength}/5` : '';
+PRIOR ANALYSIS (for reference):
+- Key Claims: ${analysis.keyClaims.map(c => c.claim).slice(0, 5).join('; ')}
+- Logical Gaps: ${analysis.logicalGaps.map(g => g.description).slice(0, 3).join('; ')}
+- Missing Evidence: ${analysis.missingEvidence.map(e => e.description).slice(0, 3).join('; ')}` : '';
 
-  const userPrompt = `Evaluate this presentation:
+  const userPrompt = `Evaluate this student presentation:
 
 TRANSCRIPT:
 ${transcript.slice(0, config.api.maxTranscriptForQuestions)}
 ${analysisContext}
 
-Provide a detailed rubric evaluation. Be specific about what was done well and what could improve.
-${customRubric && customRubric.trim()
-      ? `
-CUSTOM RUBRIC MODE:
-- You MUST output "criteriaBreakdown" with 4-8 criteria derived from the rubric.
-- For each criterion, include any missing evidence needed to satisfy that criterion (if applicable).
-`
-      : ''}
+Provide your evaluation following the rubric exactly. Be specific and instructional.
 
 JSON format:
 {
   "contentQuality": {
     "score": number,
-    "feedback": "Specific feedback about content",
-    "strengths": [
-      { "text": "Strength description", "quote": "Exact words from transcript that demonstrate this" }
-    ],
-    "improvements": [
-      { "text": "Improvement needed", "quote": "Exact words from transcript showing where this applies" }
-    ]
+    "feedback": "Specific feedback about content as a professor would give",
+    "strengths": [{ "text": "Strength", "quote": "Exact transcript quote (5-20 words)" }],
+    "improvements": [{ "text": "Improvement needed", "quote": "Exact transcript quote" }]
   },
   "delivery": {
     "score": number,
@@ -697,22 +810,30 @@ JSON format:
     "improvements": [{ "text": "...", "quote": "..." }]
   },
   "overallScore": number,
-  "overallFeedback": "Summary evaluation",
+  "overallFeedback": "Summary as a professor would write to the student",
+  "gradingScaleUsed": "${effectiveScale.type}",
+  "maxPossibleScore": ${effectiveScale.maxScore || 100},
   "criteriaBreakdown": [
     {
-      "criterionId": "unique-id-for-criterion",
-      "criterion": "Short label from rubric",
+      "criterionId": "rubric-criterion-id-if-provided",
+      "criterion": "Exact criterion name from rubric",
       "score": number,
+      "maxScore": number,
       "feedback": "Specific feedback tied to transcript",
       "relevantQuotes": ["Exact quote 1", "Exact quote 2"],
       "strengths": [{ "text": "Strength", "quote": "Supporting quote" }],
       "improvements": [{ "text": "Improvement", "quote": "Relevant quote" }],
-      "missingEvidence": ["Specific evidence missing (if any)"]
+      "missingEvidence": ["Specific evidence missing based on rubric requirements"]
     }
   ]
 }
 
-IMPORTANT: For each strength and improvement, include "quote" with the exact words from the transcript (5-20 words) that support your assessment. This enables deep-linking to the video timestamp.
+CRITICAL REQUIREMENTS:
+1. "criteriaBreakdown" MUST include ALL criteria from the provided rubric
+2. Each criterion's "score" must use the rubric's scoring scale
+3. Each criterion's "maxScore" should be the maximum for that criterion
+4. "quote" fields must contain EXACT words from the transcript (5-20 words)
+5. Write as a professor addressing your student
 
 Respond ONLY with valid JSON.`;
 
@@ -777,6 +898,22 @@ Respond ONLY with valid JSON.`;
       return items.map((item: any) => typeof item === 'string' ? item : (item.text || String(item)));
     };
 
+    // Determine letter grade or band label if applicable
+    let letterGrade: string | undefined;
+    let bandLabel: string | undefined;
+    const parsedGradingScale = parsed.gradingScaleUsed || effectiveScale.type;
+    const parsedMaxScore = parsed.maxPossibleScore || effectiveScale.maxScore || 100;
+    
+    if (parsedGradingScale === 'letter' && effectiveScale.letterGrades?.length) {
+      const score = parsed.overallScore || 0;
+      const grade = effectiveScale.letterGrades.find(g => score >= g.minScore && score <= g.maxScore);
+      letterGrade = grade?.letter;
+    } else if (parsedGradingScale === 'bands' && effectiveScale.bands?.length) {
+      const score = parsed.overallScore || 0;
+      const band = effectiveScale.bands.find(b => score >= b.minScore && score <= b.maxScore);
+      bandLabel = band?.label;
+    }
+
     const rubric: RubricEvaluation = {
       contentQuality: {
         score: parsed.contentQuality?.score || 3,
@@ -798,6 +935,10 @@ Respond ONLY with valid JSON.`;
       },
       overallScore: parsed.overallScore || 3,
       overallFeedback: parsed.overallFeedback || 'Evaluation complete',
+      gradingScaleUsed: parsedGradingScale as RubricEvaluation['gradingScaleUsed'],
+      maxPossibleScore: parsedMaxScore,
+      letterGrade,
+      bandLabel,
       criteriaBreakdown: Array.isArray(parsed.criteriaBreakdown)
         ? parsed.criteriaBreakdown
           .map((c: any) => {
@@ -819,6 +960,7 @@ Respond ONLY with valid JSON.`;
               criterionId,
               criterion: criterionName,
               score: typeof c.score === 'number' ? c.score : 3,
+              maxScore: typeof c.maxScore === 'number' ? c.maxScore : undefined,
               feedback: typeof c.feedback === 'string' ? c.feedback : '',
               transcriptRefs: transcriptRefs.length > 0 ? transcriptRefs : undefined,
               strengths: extractWithRefs(c.strengths || [], criterionId, criterionName),

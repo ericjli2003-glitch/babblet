@@ -39,6 +39,26 @@ export interface RubricCriterion {
   originalText?: string; // Source text this was extracted from
 }
 
+// Grading scale types supported
+export type GradingScaleType = 'points' | 'percentage' | 'letter' | 'bands' | 'none';
+
+export interface GradingScale {
+  type: GradingScaleType;
+  maxScore?: number; // e.g., 100 for percentage, 50 for points
+  // For letter grades
+  letterGrades?: Array<{
+    letter: string; // A, B, C, D, F
+    minScore: number;
+    maxScore: number;
+  }>;
+  // For bands
+  bands?: Array<{
+    label: string; // Excellent, Good, Fair, Poor
+    minScore: number;
+    maxScore: number;
+  }>;
+}
+
 export interface Rubric {
   id: string;
   courseId: string;
@@ -49,6 +69,8 @@ export interface Rubric {
   sourceType?: 'text' | 'pdf'; // How the rubric was provided
   overallConfidence?: 'high' | 'medium' | 'low'; // AI extraction confidence
   totalPoints?: number; // Total points if detected
+  // Grading scale detection
+  gradingScale?: GradingScale;
   version: number;
   createdAt: number;
   updatedAt: number;
@@ -61,6 +83,9 @@ export interface Assignment {
   instructions: string;
   dueDate?: string;
   rubricId?: string;
+  // Subject/level metadata (inferred or set by instructor)
+  subjectArea?: string; // e.g., "Microeconomics", "Public Speaking", "Biology"
+  academicLevel?: string; // e.g., "Undergraduate", "Graduate", "High School"
   createdAt: number;
   updatedAt: number;
 }
@@ -208,6 +233,8 @@ export async function createAssignment(params: {
   name: string;
   instructions: string;
   dueDate?: string;
+  subjectArea?: string; // e.g., "Microeconomics", "Public Speaking"
+  academicLevel?: string; // e.g., "Undergraduate", "Graduate"
 }): Promise<Assignment> {
   const assignment: Assignment = {
     id: uuidv4(),
@@ -215,6 +242,8 @@ export async function createAssignment(params: {
     name: params.name,
     instructions: params.instructions,
     dueDate: params.dueDate,
+    subjectArea: params.subjectArea,
+    academicLevel: params.academicLevel,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -284,6 +313,7 @@ export async function createRubric(params: {
   sourceType?: 'text' | 'pdf';
   overallConfidence?: 'high' | 'medium' | 'low';
   totalPoints?: number;
+  gradingScale?: GradingScale;
 }): Promise<Rubric> {
   const rubric: Rubric = {
     id: uuidv4(),
@@ -295,6 +325,7 @@ export async function createRubric(params: {
     sourceType: params.sourceType,
     overallConfidence: params.overallConfidence,
     totalPoints: params.totalPoints,
+    gradingScale: params.gradingScale,
     version: 1,
     createdAt: Date.now(),
     updatedAt: Date.now(),

@@ -99,6 +99,8 @@ function CourseContextPageContent() {
   const [showCreateAssignment, setShowCreateAssignment] = useState(false);
   const [newAssignmentName, setNewAssignmentName] = useState('');
   const [newAssignmentInstructions, setNewAssignmentInstructions] = useState('');
+  const [newAssignmentSubjectArea, setNewAssignmentSubjectArea] = useState('');
+  const [newAssignmentAcademicLevel, setNewAssignmentAcademicLevel] = useState('');
   const [creatingAssignment, setCreatingAssignment] = useState(false);
 
   // Rubric editing - new two-mode flow
@@ -109,6 +111,12 @@ function CourseContextPageContent() {
   const [rubricParseWarnings, setRubricParseWarnings] = useState<string[]>([]);
   const [rubricOverallConfidence, setRubricOverallConfidence] = useState<'high' | 'medium' | 'low' | null>(null);
   const [rubricTotalPoints, setRubricTotalPoints] = useState<number | undefined>(undefined);
+  const [rubricGradingScale, setRubricGradingScale] = useState<{
+    type: 'points' | 'percentage' | 'letter' | 'bands' | 'none';
+    maxScore?: number;
+    letterGrades?: Array<{ letter: string; minScore: number; maxScore: number }>;
+    bands?: Array<{ label: string; minScore: number; maxScore: number }>;
+  } | undefined>(undefined);
   const [editedCriteria, setEditedCriteria] = useState<RubricCriterion[]>([]);
   const [showRubricReview, setShowRubricReview] = useState(false);
   const [savingRubric, setSavingRubric] = useState(false);
@@ -258,6 +266,8 @@ function CourseContextPageContent() {
           courseId: selectedCourse.id,
           name: newAssignmentName.trim(),
           instructions: newAssignmentInstructions.trim(),
+          subjectArea: newAssignmentSubjectArea.trim() || undefined,
+          academicLevel: newAssignmentAcademicLevel || undefined,
         }),
       });
       const data = await res.json();
@@ -266,6 +276,8 @@ function CourseContextPageContent() {
         setShowCreateAssignment(false);
         setNewAssignmentName('');
         setNewAssignmentInstructions('');
+        setNewAssignmentSubjectArea('');
+        setNewAssignmentAcademicLevel('');
         selectAssignment(data.assignment);
       }
     } catch (error) {
@@ -362,6 +374,7 @@ function CourseContextPageContent() {
       setRubricParseWarnings(data.warnings || []);
       setRubricOverallConfidence(data.overallConfidence);
       setRubricTotalPoints(data.totalPoints);
+      setRubricGradingScale(data.gradingScale);
       
       // Store raw text if we extracted from PDF
       if (rubricInputMode === 'pdf' && data.rawText) {
@@ -396,6 +409,7 @@ function CourseContextPageContent() {
     setRubricParseWarnings([]);
     setRubricOverallConfidence(null);
     setRubricTotalPoints(undefined);
+    setRubricGradingScale(undefined);
   };
 
   const reorderCriteria = (fromIndex: number, direction: 'up' | 'down') => {
@@ -419,6 +433,7 @@ function CourseContextPageContent() {
         sourceType: rubricInputMode,
         overallConfidence: rubricOverallConfidence,
         totalPoints: rubricTotalPoints,
+        gradingScale: rubricGradingScale,
       };
 
       if (rubric) {
@@ -901,6 +916,39 @@ function CourseContextPageContent() {
                             className="w-full px-4 py-2.5 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                           />
                         </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-surface-700 mb-1">
+                              Subject Area <span className="text-surface-400 font-normal">(optional)</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={newAssignmentSubjectArea}
+                              onChange={(e) => setNewAssignmentSubjectArea(e.target.value)}
+                              placeholder="e.g., Public Speaking, Economics"
+                              className="w-full px-4 py-2.5 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-surface-700 mb-1">
+                              Academic Level <span className="text-surface-400 font-normal">(optional)</span>
+                            </label>
+                            <select
+                              value={newAssignmentAcademicLevel}
+                              onChange={(e) => setNewAssignmentAcademicLevel(e.target.value)}
+                              className="w-full px-4 py-2.5 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                            >
+                              <option value="">Select level...</option>
+                              <option value="High School">High School</option>
+                              <option value="Undergraduate">Undergraduate</option>
+                              <option value="Graduate">Graduate</option>
+                              <option value="Professional">Professional</option>
+                            </select>
+                          </div>
+                        </div>
+                        <p className="text-xs text-surface-500">
+                          💡 Subject and level help Babblet evaluate presentations with appropriate academic standards.
+                        </p>
                       </div>
                       <div className="flex justify-end gap-3 mt-6">
                         <button
@@ -1036,6 +1084,19 @@ function CourseContextPageContent() {
                         {rubricOverallConfidence === 'high' ? '✓ High confidence' :
                          rubricOverallConfidence === 'medium' ? '⚠ Medium confidence' :
                          '⚠ Low confidence'}
+                      </span>
+                    )}
+                    {rubricGradingScale && rubricGradingScale.type !== 'none' && (
+                      <span className="px-2 py-0.5 text-xs rounded-full bg-primary-100 text-primary-700">
+                        {rubricGradingScale.type === 'points' ? `📊 ${rubricGradingScale.maxScore || rubricTotalPoints || '?'} pts` :
+                         rubricGradingScale.type === 'percentage' ? '📊 Percentage' :
+                         rubricGradingScale.type === 'letter' ? '📊 Letter Grades' :
+                         '📊 Performance Bands'}
+                      </span>
+                    )}
+                    {rubricTotalPoints && (!rubricGradingScale || rubricGradingScale.type === 'none') && (
+                      <span className="px-2 py-0.5 text-xs rounded-full bg-surface-100 text-surface-600">
+                        {rubricTotalPoints} pts total
                       </span>
                     )}
                   </div>

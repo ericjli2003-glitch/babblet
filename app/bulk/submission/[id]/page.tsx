@@ -34,6 +34,7 @@ interface CriterionBreakdown {
   criterionId?: string;
   criterion: string;
   score: number;
+  maxScore?: number; // Maximum for this criterion (from rubric)
   feedback: string;
   transcriptRefs?: TranscriptRef[];
   strengths?: StrengthOrImprovement[];
@@ -85,6 +86,11 @@ interface Submission {
   };
   rubricEvaluation?: {
     overallScore: number;
+    // Grading scale metadata
+    gradingScaleUsed?: 'points' | 'percentage' | 'letter' | 'bands' | 'none';
+    maxPossibleScore?: number;
+    letterGrade?: string;
+    bandLabel?: string;
     criteriaBreakdown?: CriterionBreakdown[];
     // Strengths/improvements can be strings (legacy) or objects (new)
     strengths: Array<string | StrengthOrImprovement>;
@@ -142,6 +148,59 @@ function getScoreBg(score: number): string {
   if (score >= 4) return 'bg-emerald-100';
   if (score >= 3) return 'bg-amber-100';
   return 'bg-red-100';
+}
+
+// Format score based on grading scale type
+function formatScore(rubricEval: {
+  overallScore: number;
+  gradingScaleUsed?: 'points' | 'percentage' | 'letter' | 'bands' | 'none';
+  maxPossibleScore?: number;
+  letterGrade?: string;
+  bandLabel?: string;
+}): string {
+  const { overallScore, gradingScaleUsed, maxPossibleScore, letterGrade, bandLabel } = rubricEval;
+  
+  switch (gradingScaleUsed) {
+    case 'points':
+      // Show as "82 / 100" or similar
+      return `${overallScore.toFixed(0)} / ${maxPossibleScore || 100}`;
+    
+    case 'percentage':
+      // Show as "82%"
+      return `${overallScore.toFixed(1)}%`;
+    
+    case 'letter':
+      // Show letter grade with numeric: "A (92)"
+      if (letterGrade) {
+        return `${letterGrade} (${overallScore.toFixed(0)})`;
+      }
+      return `${overallScore.toFixed(0)} / 100`;
+    
+    case 'bands':
+      // Show band label with numeric: "Excellent (92)"
+      if (bandLabel) {
+        return `${bandLabel} (${overallScore.toFixed(0)})`;
+      }
+      return `${overallScore.toFixed(0)} / 100`;
+    
+    default:
+      // Fallback: normalized 0-100 or legacy 1-5
+      if (overallScore <= 5) {
+        return `${overallScore.toFixed(1)} / 5`;
+      }
+      return `${overallScore.toFixed(0)} / 100`;
+  }
+}
+
+// Format criterion score based on max
+function formatCriterionScore(score: number, maxScore?: number): string {
+  if (maxScore) {
+    return `${score.toFixed(1)} / ${maxScore}`;
+  }
+  if (score <= 5) {
+    return `${score.toFixed(1)} / 5`;
+  }
+  return `${score.toFixed(0)} / 100`;
 }
 
 // ============================================
@@ -377,8 +436,16 @@ export default function SubmissionDetailPage() {
                 <div className={`px-4 py-2 rounded-lg ${getScoreBg(submission.rubricEvaluation.overallScore)}`}>
                   <span className="text-sm text-surface-600">Score:</span>
                   <span className={`ml-2 text-xl font-bold ${getScoreColor(submission.rubricEvaluation.overallScore)}`}>
-                    {submission.rubricEvaluation.overallScore.toFixed(1)}/5
+                    {formatScore(submission.rubricEvaluation)}
                   </span>
+                  {submission.rubricEvaluation.gradingScaleUsed && submission.rubricEvaluation.gradingScaleUsed !== 'none' && (
+                    <span className="ml-2 text-xs text-surface-500 bg-surface-100 px-2 py-0.5 rounded">
+                      {submission.rubricEvaluation.gradingScaleUsed === 'points' ? 'Rubric Scale' :
+                       submission.rubricEvaluation.gradingScaleUsed === 'letter' ? 'Letter Grade' :
+                       submission.rubricEvaluation.gradingScaleUsed === 'bands' ? 'Performance Band' :
+                       'Percentage'}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -434,7 +501,7 @@ export default function SubmissionDetailPage() {
                             <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                           </span>
                           <span className={`font-bold ${getScoreColor(c.score)}`}>
-                            {c.score.toFixed(1)}/5
+                            {formatCriterionScore(c.score, c.maxScore)}
                           </span>
                         </div>
                         <p className="text-sm text-surface-600 line-clamp-2">{c.feedback}</p>

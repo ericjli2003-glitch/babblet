@@ -135,14 +135,24 @@ export interface RubricEvaluation {
   evidenceStrength: RubricScore;
   overallScore: number;
   overallFeedback: string;
+  /** Grading scale metadata */
+  gradingScaleUsed?: 'points' | 'percentage' | 'letter' | 'bands' | 'none';
+  maxPossibleScore?: number;
+  /** Optional letter grade (if letter scale used) */
+  letterGrade?: string;
+  /** Optional band label (if bands scale used) */
+  bandLabel?: string;
   /** Optional custom-criteria breakdown when a rubric is provided */
   criteriaBreakdown?: Array<{
+    criterionId?: string;
     criterion: string;
-    score: number; // 1-5
+    score: number;
+    maxScore?: number; // Maximum for this criterion (from rubric)
     feedback: string;
-    strengths?: string[];
-    improvements?: string[];
+    strengths?: Array<{ text: string; quote?: string; criterionId?: string; criterionName?: string; transcriptRefs?: Array<{ segmentId: string; timestamp: number; snippet: string }> }>;
+    improvements?: Array<{ text: string; quote?: string; criterionId?: string; criterionName?: string; transcriptRefs?: Array<{ segmentId: string; timestamp: number; snippet: string }> }>;
     missingEvidence?: string[];
+    transcriptRefs?: Array<{ segmentId: string; timestamp: number; snippet: string }>;
   }>;
   timestamp: number;
 }

@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { courseId, name, instructions, dueDate } = body;
+    const { courseId, name, instructions, dueDate, subjectArea, academicLevel } = body;
 
     if (!courseId || !name || !instructions) {
       return NextResponse.json(
@@ -65,8 +65,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const assignment = await createAssignment({ courseId, name, instructions, dueDate });
-    console.log(`[Assignments] Created: ${assignment.id} - ${assignment.name}`);
+    const assignment = await createAssignment({ 
+      courseId, 
+      name, 
+      instructions, 
+      dueDate,
+      subjectArea, // e.g., "Microeconomics", "Public Speaking"
+      academicLevel, // e.g., "Undergraduate", "Graduate"
+    });
+    console.log(`[Assignments] Created: ${assignment.id} - ${assignment.name} (${subjectArea || 'no subject'}, ${academicLevel || 'no level'})`);
 
     return NextResponse.json({ success: true, assignment });
   } catch (error) {

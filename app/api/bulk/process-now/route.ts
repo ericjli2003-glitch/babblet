@@ -13,7 +13,7 @@ import {
   requeue
 } from '@/lib/batch-store';
 import { getPresignedDownloadUrl, isR2Configured } from '@/lib/r2';
-import { analyzeWithClaude, isClaudeConfigured, generateQuestionsWithClaude, evaluateWithClaude } from '@/lib/claude';
+import { analyzeWithClaude, isClaudeConfigured, generateQuestionsWithClaude, evaluateWithClaude, ProfessorContext, GradingScaleConfig } from '@/lib/claude';
 import { verifyWithClaude } from '@/lib/verify';
 import { createClient } from '@deepgram/sdk';
 import { config } from '@/lib/config';
@@ -234,8 +234,29 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
         ? `${rubricCriteria || ''}\n\n--- ASSIGNMENT CONTEXT ---\n${assignmentContext}`
         : rubricCriteria;
       
+      // Build professor context for subject-matter evaluation
+      const professorContext: ProfessorContext | undefined = gradingContext?.course ? {
+        courseName: gradingContext.course.name,
+        courseCode: gradingContext.course.courseCode,
+        term: gradingContext.course.term,
+        subjectArea: gradingContext.assignment.subjectArea,
+        academicLevel: gradingContext.assignment.academicLevel,
+        assignmentName: gradingContext.assignment.name,
+        assignmentInstructions: gradingContext.assignment.instructions,
+        classMaterials: gradingContext.documentContext,
+        evaluationGuidance: gradingContext.evaluationGuidance,
+      } : undefined;
+      
+      // Build grading scale config from rubric
+      const gradingScaleConfig: GradingScaleConfig | undefined = gradingContext?.rubric?.gradingScale ? {
+        type: gradingContext.rubric.gradingScale.type,
+        maxScore: gradingContext.rubric.gradingScale.maxScore,
+        letterGrades: gradingContext.rubric.gradingScale.letterGrades,
+        bands: gradingContext.rubric.gradingScale.bands,
+      } : undefined;
+      
       const [rubricResult, questionsResult, verifyResult] = await Promise.allSettled([
-        evaluateWithClaude(transcript, fullRubricContext, undefined, analysis, segments),
+        evaluateWithClaude(transcript, fullRubricContext, undefined, analysis, segments, professorContext, gradingScaleConfig),
         generateQuestionsWithClaude(transcript, analysis, undefined, { maxQuestions: config.limits.defaultMaxQuestions }),
         claims.length > 0 ? verifyWithClaude(transcript, claims) : Promise.resolve([]),
       ]);
@@ -261,6 +282,11 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
         },
         rubricEvaluation: rubricEvaluation ? {
           overallScore: rubricEvaluation.overallScore,
+          // Grading scale metadata
+          gradingScaleUsed: rubricEvaluation.gradingScaleUsed,
+          maxPossibleScore: rubricEvaluation.maxPossibleScore,
+          letterGrade: rubricEvaluation.letterGrade,
+          bandLabel: rubricEvaluation.bandLabel,
           criteriaBreakdown: rubricEvaluation.criteriaBreakdown?.map(c => {
             // Find criterion-level citations for this criterion
             const criterionCites = criterionRetrievalResult?.criterionCitations.find(
@@ -268,13 +294,14 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
                    cc.criterionName.includes(c.criterion) ||
                    c.criterion.includes(cc.criterionName)
             );
-            // Include all enhanced data (criterionId, transcriptRefs, etc.)
+            // Include all enhanced data (criterionId, transcriptRefs, maxScore, etc.)
             return {
-              criterionId: (c as any).criterionId,
+              criterionId: c.criterionId,
               criterion: c.criterion,
               score: c.score,
+              maxScore: c.maxScore, // Criterion-level max from rubric
               feedback: c.feedback,
-              transcriptRefs: (c as any).transcriptRefs,
+              transcriptRefs: c.transcriptRefs,
               citations: criterionCites?.citations || undefined,
             };
           }),
