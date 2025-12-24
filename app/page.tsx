@@ -7,7 +7,6 @@ import {
   Mic,
   Upload,
   FileVideo,
-  Presentation,
   Sparkles,
   ArrowRight,
   Brain,
@@ -16,7 +15,6 @@ import {
   Zap,
   CheckCircle2,
   Loader2,
-  FolderOpen,
   Users,
   BookOpen,
 } from 'lucide-react';
@@ -81,6 +79,11 @@ export default function HomePage() {
       title: 'Instant Feedback',
       description: 'Get actionable insights immediately after the presentation ends',
     },
+    {
+      icon: Users,
+      title: 'Bulk Grading',
+      description: 'Grade entire classes at once with consistent rubric-based evaluation and batch processing',
+    },
   ];
 
   return (
@@ -128,7 +131,7 @@ export default function HomePage() {
             Choose how to capture the presentation
           </h2>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 items-stretch">
+          <div className="grid md:grid-cols-3 gap-6 mb-8 items-stretch">
             {/* Upload Video Option - Primary Blue */}
             <button
               onClick={() => setSelectedMode('upload')}
@@ -183,26 +186,6 @@ export default function HomePage() {
               </p>
             </button>
 
-            {/* Bulk Upload Option - Emerald Green */}
-            <Link
-              href="/bulk"
-              className="group relative p-8 rounded-3xl text-left transition-colors duration-200 bg-white/60 shadow-soft border-2 border-emerald-200 hover:bg-emerald-50 hover:border-emerald-400 flex flex-col h-full"
-            >
-              <div className="absolute top-4 right-4">
-                <div className="flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium">
-                  <Users className="w-3 h-3" />
-                  <span>Batch</span>
-                </div>
-              </div>
-              <div className="w-14 h-14 rounded-2xl bg-emerald-100 group-hover:bg-emerald-500 flex items-center justify-center mb-4 transition-colors duration-200">
-                <FolderOpen className="w-7 h-7 text-emerald-600 group-hover:text-white transition-colors duration-200" />
-              </div>
-              <h3 className="text-xl font-semibold text-surface-900 mb-2">Bulk Upload</h3>
-              <p className="text-surface-600 text-sm flex-1">
-                Grade multiple student videos at once with batch processing
-              </p>
-            </Link>
-
             {/* Course Notebooks Option - Violet Purple */}
             <Link
               href="/context"
@@ -210,7 +193,8 @@ export default function HomePage() {
             >
               <div className="absolute top-4 right-4">
                 <div className="flex items-center gap-1 px-2 py-1 bg-violet-100 text-violet-700 rounded-full text-xs font-medium">
-                  <span>NEW</span>
+                  <Users className="w-3 h-3" />
+                  <span>Bulk</span>
                 </div>
               </div>
               <div className="w-14 h-14 rounded-2xl bg-violet-100 group-hover:bg-violet-500 flex items-center justify-center mb-4 transition-colors duration-200">
@@ -218,7 +202,7 @@ export default function HomePage() {
               </div>
               <h3 className="text-xl font-semibold text-surface-900 mb-2">Course Notebooks</h3>
               <p className="text-surface-600 text-sm flex-1">
-                Set up rubrics, assignments, and course materials for Babblet grading
+                Set up classes with rubrics and materials, then bulk upload student presentations for grading
               </p>
             </Link>
           </div>
@@ -327,7 +311,7 @@ export default function HomePage() {
           <h2 className="text-2xl font-semibold text-surface-900 text-center mb-12">
             Everything you need to evaluate presentations
           </h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-6">
             {features.map((feature, index) => (
               <motion.div
                 key={feature.title}
