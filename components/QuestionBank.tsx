@@ -306,7 +306,7 @@ export default function QuestionBank({ questions, maxQuestions, isLoading, onSel
               <Brain className="w-8 h-8 opacity-50" />
             </div>
             <p className="text-sm text-center">
-              Questions will appear here as the AI analyzes the presentation
+              Questions will appear here as Babblet analyzes the presentation
             </p>
           </div>
         ) : (

@@ -2127,7 +2127,7 @@ function LiveDashboardContent() {
                 </h2>
                 <p className="text-surface-600 mb-6">
                   Click the microphone button on the left to start recording.
-                  The AI will transcribe and analyze the presentation in real-time.
+                  Babblet will transcribe and analyze the presentation in real-time.
                 </p>
                 <div className="flex flex-wrap justify-center gap-4 text-sm text-surface-500">
                   <div className="flex items-center gap-2">

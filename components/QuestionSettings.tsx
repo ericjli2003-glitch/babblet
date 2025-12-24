@@ -215,7 +215,7 @@ export default function QuestionSettings({
                     <option value="hard">Hard</option>
                   </select>
                   <p className="text-xs text-surface-400 mt-2">
-                    Helps the AI tune complexity and expectations.
+                    Helps Babblet tune complexity and expectations.
                   </p>
                 </div>
 

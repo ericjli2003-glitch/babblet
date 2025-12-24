@@ -547,7 +547,7 @@ export default function ClassWorkspace({
                 <EmptyState
                   icon={BookOpen}
                   title="No course materials yet"
-                  description="Upload lecture notes, readings, and rubrics to help the AI provide better feedback."
+                  description="Upload lecture notes, readings, and rubrics to help Babblet provide better feedback."
                   action="Upload Materials"
                   onAction={onUploadDocument}
                 />
@@ -595,7 +595,7 @@ export default function ClassWorkspace({
                   <div>
                     <p className="font-medium text-emerald-800">Using Class Materials</p>
                     <p className="text-sm text-emerald-600">
-                      All assignments in this class will use these materials for AI-powered grading context.
+                      All assignments in this class will use these materials to improve Babblet&apos;s grading feedback.
                     </p>
                   </div>
                 </div>
@@ -635,7 +635,7 @@ export default function ClassWorkspace({
                   <textarea
                     value={summaryText}
                     onChange={(e) => setSummaryText(e.target.value)}
-                    placeholder="Describe the key objectives, themes, and expectations for this course. This helps the AI provide course-relevant feedback when specific materials don't match."
+                    placeholder="Describe the key objectives, themes, and expectations for this course. This helps Babblet provide course-relevant feedback when specific materials don't match."
                     rows={4}
                     className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
                   />
@@ -719,7 +719,7 @@ export default function ClassWorkspace({
                   <strong>4. Fallback Summary:</strong> If no high-quality matches are found, we use your course summary to ensure feedback stays course-relevant.
                 </p>
                 <p>
-                  <strong>5. Budget Controls:</strong> We cap context at ~8,000 characters to keep the AI focused and avoid overwhelming it with too much information.
+                  <strong>5. Budget Controls:</strong> We cap context at ~8,000 characters to keep Babblet focused and avoid overwhelming it with too much information.
                 </p>
               </div>
             </div>

@@ -1181,7 +1181,7 @@ export default function BulkUploadPage() {
                           className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                         />
                         <p className="text-xs text-surface-500 mt-1">
-                          The AI will use this to generate more targeted feedback
+                          Babblet will use this to generate more targeted feedback
                         </p>
                       </div>
                     </>

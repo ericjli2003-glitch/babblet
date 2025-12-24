@@ -268,7 +268,7 @@ export default function HomePage() {
                         <div>
                           <h4 className="font-medium text-surface-900 mb-1">Video Selection</h4>
                           <p className="text-sm text-surface-600">
-                            You&apos;ll select your video file on the next screen. The AI will extract audio 
+                            You&apos;ll select your video file on the next screen. Babblet will extract audio 
                             and transcribe as the video plays, with full playback controls.
                           </p>
                           <div className="flex flex-wrap gap-2 mt-3">

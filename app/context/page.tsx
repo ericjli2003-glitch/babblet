@@ -1380,7 +1380,7 @@ Presentation within time limits"
                         : 'Upload your rubric PDF and click "Extract & Parse Rubric"'}
                     </p>
                     <p className="text-xs text-surface-400 mt-1">
-                      Our AI will automatically extract and structure the criteria
+                      Babblet will automatically extract and structure the criteria
                     </p>
                   </div>
                 )}
@@ -1400,7 +1400,7 @@ Presentation within time limits"
                 </div>
 
                 <p className="text-sm text-surface-500 mb-4">
-                  Add lecture notes, readings, and other materials. The AI will use these to provide more accurate, context-aware feedback.
+                  Add lecture notes, readings, and other materials. Babblet will use these to provide more accurate, context-aware feedback.
                 </p>
 
                 {/* Add Document Form */}

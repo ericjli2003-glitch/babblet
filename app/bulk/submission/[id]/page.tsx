@@ -695,7 +695,7 @@ export default function SubmissionDetailPage() {
                 )}
                 
                 <p className="text-sm text-surface-500 mb-4">
-                  These course materials were retrieved and used by the AI during evaluation.
+                  These course materials were retrieved and used by Babblet during evaluation.
                 </p>
                 
                 {submission.contextCitations && submission.contextCitations.length > 0 ? (
