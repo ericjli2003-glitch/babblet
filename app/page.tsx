@@ -129,16 +129,13 @@ export default function HomePage() {
           </h2>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            {/* Upload Option */}
             {/* Upload Video Option - Primary Blue */}
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+            <button
               onClick={() => setSelectedMode('upload')}
-              className={`relative p-8 rounded-3xl text-left transition-all duration-300 border-2 ${
+              className={`group relative p-8 rounded-3xl text-left transition-colors duration-200 border-2 ${
                 selectedMode === 'upload'
                   ? 'bg-white shadow-soft-lg ring-2 ring-primary-500 border-primary-400'
-                  : 'bg-white/60 shadow-soft hover:bg-white hover:shadow-soft-lg border-primary-200 hover:border-primary-400'
+                  : 'bg-white/60 shadow-soft border-primary-200 hover:bg-primary-50 hover:border-primary-400'
               }`}
             >
               {selectedMode === 'upload' && (
@@ -146,24 +143,26 @@ export default function HomePage() {
                   <CheckCircle2 className="w-6 h-6 text-primary-500" />
                 </div>
               )}
-              <div className="w-14 h-14 rounded-2xl bg-primary-100 flex items-center justify-center mb-4 group-hover:bg-primary-500 transition-colors">
-                <Upload className="w-7 h-7 text-primary-600" />
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-4 transition-colors duration-200 ${
+                selectedMode === 'upload' ? 'bg-primary-500' : 'bg-primary-100 group-hover:bg-primary-500'
+              }`}>
+                <Upload className={`w-7 h-7 transition-colors duration-200 ${
+                  selectedMode === 'upload' ? 'text-white' : 'text-primary-600 group-hover:text-white'
+                }`} />
               </div>
               <h3 className="text-xl font-semibold text-surface-900 mb-2">Upload Video</h3>
               <p className="text-surface-600 text-sm">
                 Upload a pre-recorded presentation video (MP4, MOV, WebM)
               </p>
-            </motion.button>
+            </button>
 
             {/* Live Recording Option - Coral/Accent */}
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+            <button
               onClick={() => setSelectedMode('live')}
-              className={`relative p-8 rounded-3xl text-left transition-all duration-300 border-2 ${
+              className={`group relative p-8 rounded-3xl text-left transition-colors duration-200 border-2 ${
                 selectedMode === 'live'
                   ? 'bg-white shadow-soft-lg ring-2 ring-accent-500 border-accent-400'
-                  : 'bg-white/60 shadow-soft hover:bg-white hover:shadow-soft-lg border-accent-200 hover:border-accent-400'
+                  : 'bg-white/60 shadow-soft border-accent-200 hover:bg-accent-50 hover:border-accent-400'
               }`}
             >
               {selectedMode === 'live' && (
@@ -171,19 +170,23 @@ export default function HomePage() {
                   <CheckCircle2 className="w-6 h-6 text-accent-500" />
                 </div>
               )}
-              <div className="w-14 h-14 rounded-2xl bg-accent-100 flex items-center justify-center mb-4">
-                <Mic className="w-7 h-7 text-accent-600" />
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-4 transition-colors duration-200 ${
+                selectedMode === 'live' ? 'bg-accent-500' : 'bg-accent-100 group-hover:bg-accent-500'
+              }`}>
+                <Mic className={`w-7 h-7 transition-colors duration-200 ${
+                  selectedMode === 'live' ? 'text-white' : 'text-accent-600 group-hover:text-white'
+                }`} />
               </div>
               <h3 className="text-xl font-semibold text-surface-900 mb-2">Record Live</h3>
               <p className="text-surface-600 text-sm">
                 Capture audio in real-time using your microphone
               </p>
-            </motion.button>
+            </button>
 
             {/* Bulk Upload Option - Emerald Green */}
             <Link
               href="/bulk"
-              className="relative p-8 rounded-3xl text-left transition-all duration-300 bg-white/60 shadow-soft hover:bg-white hover:shadow-soft-lg border-2 border-emerald-200 hover:border-emerald-400 group"
+              className="group relative p-8 rounded-3xl text-left transition-colors duration-200 bg-white/60 shadow-soft border-2 border-emerald-200 hover:bg-emerald-50 hover:border-emerald-400"
             >
               <div className="absolute top-4 right-4">
                 <div className="flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium">
@@ -191,8 +194,8 @@ export default function HomePage() {
                   <span>Batch</span>
                 </div>
               </div>
-              <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mb-4 group-hover:bg-emerald-500 transition-colors">
-                <FolderOpen className="w-7 h-7 text-emerald-600 group-hover:text-white transition-colors" />
+              <div className="w-14 h-14 rounded-2xl bg-emerald-100 group-hover:bg-emerald-500 flex items-center justify-center mb-4 transition-colors duration-200">
+                <FolderOpen className="w-7 h-7 text-emerald-600 group-hover:text-white transition-colors duration-200" />
               </div>
               <h3 className="text-xl font-semibold text-surface-900 mb-2">Bulk Upload</h3>
               <p className="text-surface-600 text-sm">
@@ -203,15 +206,15 @@ export default function HomePage() {
             {/* Course Notebooks Option - Violet Purple */}
             <Link
               href="/context"
-              className="relative p-8 rounded-3xl text-left transition-all duration-300 bg-white/60 shadow-soft hover:bg-white hover:shadow-soft-lg border-2 border-violet-200 hover:border-violet-400 group"
+              className="group relative p-8 rounded-3xl text-left transition-colors duration-200 bg-white/60 shadow-soft border-2 border-violet-200 hover:bg-violet-50 hover:border-violet-400"
             >
               <div className="absolute top-4 right-4">
                 <div className="flex items-center gap-1 px-2 py-1 bg-violet-100 text-violet-700 rounded-full text-xs font-medium">
                   <span>NEW</span>
                 </div>
               </div>
-              <div className="w-14 h-14 rounded-2xl bg-violet-100 flex items-center justify-center mb-4 group-hover:bg-violet-500 transition-colors">
-                <BookOpen className="w-7 h-7 text-violet-600 group-hover:text-white transition-colors" />
+              <div className="w-14 h-14 rounded-2xl bg-violet-100 group-hover:bg-violet-500 flex items-center justify-center mb-4 transition-colors duration-200">
+                <BookOpen className="w-7 h-7 text-violet-600 group-hover:text-white transition-colors duration-200" />
               </div>
               <h3 className="text-xl font-semibold text-surface-900 mb-2">Course Notebooks</h3>
               <p className="text-surface-600 text-sm">

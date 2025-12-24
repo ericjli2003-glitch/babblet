@@ -322,7 +322,7 @@ export default function ClassWorkspace({
   const [assignmentToDelete, setAssignmentToDelete] = useState<Assignment | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'assignments' | 'materials' | 'settings'>('assignments');
+  const [activeTab, setActiveTab] = useState<'assignments' | 'grading' | 'materials' | 'settings'>('assignments');
   
   // Course settings state
   const [editingSummary, setEditingSummary] = useState(false);
@@ -543,6 +543,34 @@ export default function ClassWorkspace({
             )}
           </button>
           <button
+            onClick={() => setActiveTab('grading')}
+            className={`px-4 py-3 font-medium text-sm transition-colors relative ${
+              activeTab === 'grading'
+                ? 'text-emerald-600'
+                : 'text-surface-500 hover:text-surface-700'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4" />
+              Grade Submissions
+              {totalSubmissions > 0 && (
+                <span className={`px-2 py-0.5 rounded-full text-xs ${
+                  gradedSubmissions === totalSubmissions 
+                    ? 'bg-emerald-100 text-emerald-700' 
+                    : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {gradedSubmissions}/{totalSubmissions}
+                </span>
+              )}
+            </span>
+            {activeTab === 'grading' && (
+              <motion.div
+                layoutId="activeTab"
+                className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-600"
+              />
+            )}
+          </button>
+          <button
             onClick={() => setActiveTab('materials')}
             className={`px-4 py-3 font-medium text-sm transition-colors relative ${
               activeTab === 'materials'
@@ -618,6 +646,158 @@ export default function ClassWorkspace({
                     onDelete={() => setAssignmentToDelete(assignment)}
                   />
                 ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* Grade Submissions Tab */}
+        {activeTab === 'grading' && (
+          <motion.div
+            key="grading"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-4"
+          >
+            {assignments.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-surface-200 shadow-sm">
+                <EmptyState
+                  icon={CheckCircle}
+                  title="No assignments to grade"
+                  description="Create an assignment first, then upload student submissions to start grading."
+                  action="Create Assignment"
+                  onAction={onCreateAssignment}
+                />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Grading Summary */}
+                <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200 p-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center">
+                        <CheckCircle className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-emerald-900">Grading Progress</h3>
+                        <p className="text-sm text-emerald-700">
+                          {totalSubmissions === 0 
+                            ? 'No submissions yet' 
+                            : `${gradedSubmissions} of ${totalSubmissions} submissions graded`}
+                        </p>
+                      </div>
+                    </div>
+                    {totalSubmissions > 0 && (
+                      <div className="text-right">
+                        <p className="text-3xl font-bold text-emerald-600">
+                          {Math.round((gradedSubmissions / totalSubmissions) * 100)}%
+                        </p>
+                        <p className="text-xs text-emerald-600">Complete</p>
+                      </div>
+                    )}
+                  </div>
+                  {totalSubmissions > 0 && (
+                    <div className="mt-4">
+                      <div className="h-2 bg-emerald-200 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                          style={{ width: `${(gradedSubmissions / totalSubmissions) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Assignment Grading Cards */}
+                <div className="space-y-3">
+                  {assignments.map((assignment) => {
+                    const stats = assignmentStats[assignment.id];
+                    const hasSubmissions = stats && stats.submissionCount > 0;
+                    const isComplete = hasSubmissions && stats.processedCount === stats.submissionCount;
+                    const inProgress = hasSubmissions && stats.processedCount > 0 && !isComplete;
+                    
+                    return (
+                      <div
+                        key={assignment.id}
+                        className="bg-white rounded-2xl border border-surface-200 shadow-sm p-5 hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-4 flex-1">
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                              isComplete ? 'bg-emerald-100' : inProgress ? 'bg-amber-100' : 'bg-surface-100'
+                            }`}>
+                              {isComplete ? (
+                                <CheckCircle className="w-6 h-6 text-emerald-600" />
+                              ) : inProgress ? (
+                                <Play className="w-6 h-6 text-amber-600" />
+                              ) : (
+                                <Clock className="w-6 h-6 text-surface-400" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-semibold text-surface-900">{assignment.name}</h4>
+                              <div className="flex items-center gap-3 mt-2">
+                                <span className={`text-xs px-2 py-1 rounded-full ${
+                                  isComplete ? 'bg-emerald-100 text-emerald-700' : 
+                                  inProgress ? 'bg-amber-100 text-amber-700' : 
+                                  'bg-surface-100 text-surface-600'
+                                }`}>
+                                  {isComplete ? 'Complete' : inProgress ? 'In Progress' : 'Not Started'}
+                                </span>
+                                {hasSubmissions && (
+                                  <span className="text-xs text-surface-500">
+                                    {stats.processedCount}/{stats.submissionCount} graded
+                                  </span>
+                                )}
+                                {stats?.bundleVersion && (
+                                  <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                                    Context v{stats.bundleVersion}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            {hasSubmissions && (
+                              <Link
+                                href={`/bulk?assignmentId=${assignment.id}&courseId=${course.id}`}
+                                className="px-3 py-1.5 text-sm font-medium text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
+                              >
+                                View Submissions
+                              </Link>
+                            )}
+                            <Link
+                              href={`/bulk?assignmentId=${assignment.id}&courseId=${course.id}`}
+                              className="px-3 py-1.5 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition-colors"
+                            >
+                              Upload New
+                            </Link>
+                          </div>
+                        </div>
+                        
+                        {/* Progress bar for this assignment */}
+                        {hasSubmissions && (
+                          <div className="mt-4 pt-4 border-t border-surface-100">
+                            <div className="flex items-center justify-between text-xs text-surface-500 mb-1">
+                              <span>Grading progress</span>
+                              <span>{Math.round((stats.processedCount / stats.submissionCount) * 100)}%</span>
+                            </div>
+                            <div className="h-1.5 bg-surface-100 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  isComplete ? 'bg-emerald-500' : 'bg-amber-500'
+                                }`}
+                                style={{ width: `${(stats.processedCount / stats.submissionCount) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </motion.div>
