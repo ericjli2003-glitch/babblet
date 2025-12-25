@@ -2472,10 +2472,16 @@ function LiveDashboardContent() {
 
                   {/* Video Controls */}
                   <div className="flex items-center gap-4 px-2">
-                    {/* Play/Pause Button */}
+                    {/* Play/Pause Button - starts video if idle */}
                     <button
-                      onClick={togglePlayPause}
-                      disabled={status === 'idle' || status === 'processing'}
+                      onClick={() => {
+                        if (status === 'idle') {
+                          processVideo();
+                        } else {
+                          togglePlayPause();
+                        }
+                      }}
+                      disabled={status === 'processing'}
                       className="p-2 rounded-lg bg-surface-800 text-white hover:bg-surface-700 disabled:opacity-50 transition-colors"
                     >
                       {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
@@ -2505,20 +2511,63 @@ function LiveDashboardContent() {
                     </div>
 
                     {/* Time Display */}
-                    <span className="text-white text-sm font-mono min-w-[100px] text-right">
+                    <span className="text-white text-sm font-mono min-w-[80px] text-right">
                       {formatTime(currentTime)} / {formatTime(videoDuration * 1000)}
                     </span>
 
-                    {/* Change Video */}
-                    <label className="p-2 rounded-lg bg-surface-800 text-white hover:bg-surface-700 cursor-pointer transition-colors">
-                      <Upload className="w-5 h-5" />
+                    {/* Playback Speed */}
+                    <button
+                      onClick={() => {
+                        if (videoRef.current) {
+                          const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
+                          const currentSpeed = videoRef.current.playbackRate;
+                          const currentIndex = speeds.indexOf(currentSpeed);
+                          const nextIndex = (currentIndex + 1) % speeds.length;
+                          videoRef.current.playbackRate = speeds[nextIndex];
+                        }
+                      }}
+                      className="px-2 py-1 rounded-lg bg-surface-700 text-white hover:bg-surface-600 text-xs font-medium min-w-[40px]"
+                      title="Click to change speed"
+                    >
+                      {videoRef.current?.playbackRate || 1}x
+                    </button>
+
+                    {/* Volume Control */}
+                    <div className="flex items-center gap-1 group">
+                      <button
+                        onClick={() => {
+                          if (videoRef.current) {
+                            videoRef.current.muted = !videoRef.current.muted;
+                          }
+                        }}
+                        className="p-1.5 rounded-lg text-white hover:bg-surface-700 transition-colors"
+                      >
+                        {videoRef.current?.muted ? (
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                          </svg>
+                        ) : (
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                          </svg>
+                        )}
+                      </button>
                       <input
-                        type="file"
-                        accept="video/*"
-                        onChange={handleVideoUpload}
-                        className="hidden"
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.1"
+                        defaultValue="1"
+                        onChange={(e) => {
+                          if (videoRef.current) {
+                            videoRef.current.volume = parseFloat(e.target.value);
+                            videoRef.current.muted = false;
+                          }
+                        }}
+                        className="w-16 h-1 bg-surface-600 rounded-full appearance-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full"
                       />
-                    </label>
+                    </div>
                   </div>
                 </div>
               )}
