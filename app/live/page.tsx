@@ -2520,23 +2520,6 @@ function LiveDashboardContent() {
                       />
                     </label>
                   </div>
-
-                  {/* Audio Player Bar - sleek controls with speed/volume */}
-                  <AudioPlayerBar
-                    isPlaying={isPlaying}
-                    currentTimeMs={currentTime}
-                    durationMs={videoDuration * 1000}
-                    onPlayPause={togglePlayPause}
-                    onSeek={(timeMs) => {
-                      if (videoRef.current) {
-                        videoRef.current.currentTime = timeMs / 1000;
-                        setCurrentTime(timeMs);
-                      }
-                    }}
-                    audioRef={videoRef}
-                    markers={timelineMarkers.map(m => ({ timestamp: m.timestamp, type: m.type }))}
-                    compact
-                  />
                 </div>
               )}
             </div>
