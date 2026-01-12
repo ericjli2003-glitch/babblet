@@ -506,14 +506,21 @@ function CourseContextPageContent() {
         setAddDocProgress({ current: 0, total: selectedFiles.length });
         const results: { success: boolean; name: string; document?: unknown }[] = [];
 
+        const DIRECT_UPLOAD_THRESHOLD = 4 * 1024 * 1024; // 4MB
+
         for (let i = 0; i < selectedFiles.length; i++) {
           const file = selectedFiles[i];
           setAddDocProgress({ current: i + 1, total: selectedFiles.length });
 
           try {
-            // Check file size (Vercel limit is ~4.5MB)
-            if (file.size > 4.5 * 1024 * 1024) {
-              results.push({ success: false, name: file.name });
+            // Use direct R2 upload for large files
+            if (file.size > DIRECT_UPLOAD_THRESHOLD) {
+              const result = await uploadLargeFile(file, selectedCourse.id, newDocType);
+              if (result.success) {
+                results.push({ success: true, name: file.name });
+              } else {
+                results.push({ success: false, name: file.name });
+              }
               continue;
             }
 
@@ -651,8 +658,57 @@ function CourseContextPageContent() {
     setUploadDocFiles(prev => prev.filter(f => f.name !== fileName));
   };
 
+  // Helper to upload large files directly to R2
+  const uploadLargeFile = async (file: File, courseId: string, docType: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      // Step 1: Get presigned URL for direct R2 upload
+      const presignRes = await fetch(`/api/context/process-r2-document?filename=${encodeURIComponent(file.name)}&courseId=${courseId}`);
+      if (!presignRes.ok) {
+        const err = await presignRes.json();
+        return { success: false, error: err.error || 'Failed to get upload URL' };
+      }
+      const { presignedUrl, fileKey } = await presignRes.json();
+
+      // Step 2: Upload file directly to R2
+      const uploadRes = await fetch(presignedUrl, {
+        method: 'PUT',
+        body: file,
+        headers: {
+          'Content-Type': 'application/octet-stream',
+        },
+      });
+      if (!uploadRes.ok) {
+        return { success: false, error: 'Direct upload failed' };
+      }
+
+      // Step 3: Process the uploaded file
+      const processRes = await fetch('/api/context/process-r2-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileKey,
+          filename: file.name,
+          courseId,
+          type: docType,
+        }),
+      });
+      const processData = await processRes.json();
+
+      if (!processData.success) {
+        return { success: false, error: processData.error || 'Processing failed' };
+      }
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: 'Upload failed' };
+    }
+  };
+
   const uploadDocument = async () => {
     if (!selectedCourse || uploadDocFiles.length === 0) return;
+
+    // File size threshold - files larger than this use direct R2 upload
+    const DIRECT_UPLOAD_THRESHOLD = 4 * 1024 * 1024; // 4MB
 
     try {
       setUploadingDoc(true);
@@ -665,41 +721,47 @@ function CourseContextPageContent() {
         setUploadProgress({ current: i + 1, total: uploadDocFiles.length });
 
         try {
-          // Check file size (Vercel limit is ~4.5MB)
-          if (file.size > 4.5 * 1024 * 1024) {
-            results.push({ success: false, name: file.name, error: 'File too large (max 4.5MB)' });
-            continue;
-          }
-
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('courseId', selectedCourse.id);
-          formData.append('type', uploadDocType);
-
-          const res = await fetch('/api/context/upload-document', {
-            method: 'POST',
-            body: formData,
-          });
-
-          if (!res.ok) {
-            const errorText = await res.text();
-            let errorMsg = `Server error (${res.status})`;
-            try {
-              const errorJson = JSON.parse(errorText);
-              errorMsg = errorJson.error || errorMsg;
-            } catch {
-              // Use default error message
+          // Use direct R2 upload for large files, regular upload for small files
+          if (file.size > DIRECT_UPLOAD_THRESHOLD) {
+            // Large file: upload directly to R2
+            const result = await uploadLargeFile(file, selectedCourse.id, uploadDocType);
+            if (result.success) {
+              results.push({ success: true, name: file.name });
+            } else {
+              results.push({ success: false, name: file.name, error: result.error });
             }
-            results.push({ success: false, name: file.name, error: errorMsg });
-            continue;
-          }
-
-          const data = await res.json();
-
-          if (data.success) {
-            results.push({ success: true, name: file.name });
           } else {
-            results.push({ success: false, name: file.name, error: data.error });
+            // Small file: use regular upload endpoint
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('courseId', selectedCourse.id);
+            formData.append('type', uploadDocType);
+
+            const res = await fetch('/api/context/upload-document', {
+              method: 'POST',
+              body: formData,
+            });
+
+            if (!res.ok) {
+              const errorText = await res.text();
+              let errorMsg = `Server error (${res.status})`;
+              try {
+                const errorJson = JSON.parse(errorText);
+                errorMsg = errorJson.error || errorMsg;
+              } catch {
+                // Use default error message
+              }
+              results.push({ success: false, name: file.name, error: errorMsg });
+              continue;
+            }
+
+            const data = await res.json();
+
+            if (data.success) {
+              results.push({ success: true, name: file.name });
+            } else {
+              results.push({ success: false, name: file.name, error: data.error });
+            }
           }
         } catch (error) {
           results.push({ success: false, name: file.name, error: 'Network error' });
@@ -1124,14 +1186,14 @@ function CourseContextPageContent() {
                               Click to select files or drag and drop
                             </p>
                             <p className="text-xs text-surface-400 mt-1">
-                              PDF, DOC, DOCX, TXT, MD
+                              PDF, DOC, DOCX, PPTX, TXT, MD
                             </p>
                           </div>
                           <input
                             ref={documentInputRef}
                             type="file"
                             multiple
-                            accept=".pdf,.doc,.docx,.txt,.md"
+                            accept=".pdf,.doc,.docx,.pptx,.ppt,.txt,.md"
                             onChange={handleDocumentFileSelect}
                             className="hidden"
                           />
@@ -1670,7 +1732,7 @@ Presentation within time limits"
                             ref={fileInputRef}
                             type="file"
                             multiple
-                            accept=".pdf,.docx,.doc,.txt,.md"
+                            accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md"
                             onChange={handleFileSelect}
                             className="hidden"
                           />
@@ -1683,7 +1745,7 @@ Presentation within time limits"
                               Click to select files <span className="text-surface-400">(multiple allowed)</span>
                             </p>
                             <p className="text-xs text-surface-500 mt-1">
-                              PDF, DOC, DOCX, TXT, MD
+                              PDF, DOC, DOCX, PPTX, TXT, MD
                             </p>
                           </div>
 

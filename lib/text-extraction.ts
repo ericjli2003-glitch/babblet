@@ -1,10 +1,11 @@
 // ============================================
 // Text Extraction from Various File Formats
-// Supports: PDF, DOCX, TXT, MD
+// Supports: PDF, DOCX, PPTX, TXT, MD
 // ============================================
 
 import mammoth from 'mammoth';
 import { extractText as extractPdfText } from 'unpdf';
+import { OfficeParser } from 'officeparser';
 
 // Serverless-compatible PDF parsing using unpdf
 async function parsePDF(buffer: Buffer): Promise<{ text: string; numpages: number }> {
@@ -29,7 +30,7 @@ async function parsePDF(buffer: Buffer): Promise<{ text: string; numpages: numbe
   }
 }
 
-export type SupportedFileType = 'pdf' | 'docx' | 'txt' | 'md' | 'unknown';
+export type SupportedFileType = 'pdf' | 'docx' | 'pptx' | 'txt' | 'md' | 'unknown';
 
 export interface ExtractionResult {
   success: boolean;
@@ -51,6 +52,8 @@ export function detectFileType(filename: string, mimeType?: string): SupportedFi
   if (ext === 'pdf') return 'pdf';
   if (ext === 'docx') return 'docx';
   if (ext === 'doc') return 'docx'; // Try mammoth for .doc too
+  if (ext === 'pptx') return 'pptx';
+  if (ext === 'ppt') return 'pptx'; // Try officeparser for .ppt too
   if (ext === 'txt') return 'txt';
   if (ext === 'md' || ext === 'markdown') return 'md';
   
@@ -58,6 +61,7 @@ export function detectFileType(filename: string, mimeType?: string): SupportedFi
   if (mimeType) {
     if (mimeType === 'application/pdf') return 'pdf';
     if (mimeType.includes('wordprocessingml') || mimeType === 'application/msword') return 'docx';
+    if (mimeType.includes('presentationml') || mimeType === 'application/vnd.ms-powerpoint') return 'pptx';
     if (mimeType.startsWith('text/')) return 'txt';
   }
   
@@ -115,6 +119,31 @@ async function extractFromDOCX(buffer: Buffer): Promise<ExtractionResult> {
 }
 
 // ============================================
+// PPTX Extraction
+// ============================================
+
+async function extractFromPPTX(buffer: Buffer): Promise<ExtractionResult> {
+  try {
+    const ast = await OfficeParser.parseOffice(buffer);
+    const text = ast.toText();
+    
+    return {
+      success: true,
+      text,
+      wordCount: text.split(/\s+/).filter((w: string) => w.length > 0).length,
+      fileType: 'pptx',
+    };
+  } catch (error) {
+    return {
+      success: false,
+      text: '',
+      error: error instanceof Error ? error.message : 'PPTX extraction failed',
+      fileType: 'pptx',
+    };
+  }
+}
+
+// ============================================
 // Plain Text Extraction
 // ============================================
 
@@ -154,6 +183,8 @@ export async function extractText(
       return extractFromPDF(buffer);
     case 'docx':
       return extractFromDOCX(buffer);
+    case 'pptx':
+      return extractFromPPTX(buffer);
     case 'txt':
     case 'md':
       return extractFromText(buffer);
@@ -205,7 +236,7 @@ export async function extractTextFromUrl(
 // Get Supported Extensions
 // ============================================
 
-export const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.doc', '.txt', '.md'];
+export const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.doc', '.pptx', '.ppt', '.txt', '.md'];
 
 export function isSupportedFile(filename: string): boolean {
   const ext = '.' + filename.toLowerCase().split('.').pop();
