@@ -253,32 +253,53 @@ function AssignmentCard({
 
 function MaterialCard({ 
   document, 
-  onClick 
+  onClick,
+  onDelete,
+  isDeleting,
 }: { 
   document: Document;
   onClick: () => void;
+  onDelete: () => void;
+  isDeleting?: boolean;
 }) {
   const typeConfig = MATERIAL_TYPES[document.type] || MATERIAL_TYPES.other;
   const Icon = typeConfig.icon;
 
   return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-3 p-3 bg-white rounded-xl border border-surface-200 hover:border-primary-200 hover:shadow-sm transition-all text-left w-full group"
-    >
-      <div className={`w-10 h-10 rounded-xl ${typeConfig.color} flex items-center justify-center flex-shrink-0`}>
-        <Icon className="w-5 h-5" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-surface-900 truncate group-hover:text-primary-700 transition-colors">
-          {document.name}
-        </p>
-        <p className="text-xs text-surface-400">
-          {new Date(document.createdAt).toLocaleDateString()}
-        </p>
-      </div>
-      <ChevronRight className="w-4 h-4 text-surface-300 group-hover:text-primary-500 flex-shrink-0" />
-    </button>
+    <div className="flex items-center gap-2 p-3 bg-white rounded-xl border border-surface-200 hover:border-primary-200 hover:shadow-sm transition-all group">
+      <button
+        onClick={onClick}
+        className="flex items-center gap-3 flex-1 min-w-0 text-left"
+      >
+        <div className={`w-10 h-10 rounded-xl ${typeConfig.color} flex items-center justify-center flex-shrink-0`}>
+          <Icon className="w-5 h-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-surface-900 truncate group-hover:text-primary-700 transition-colors">
+            {document.name}
+          </p>
+          <p className="text-xs text-surface-400">
+            {new Date(document.createdAt).toLocaleDateString()}
+          </p>
+        </div>
+        <ChevronRight className="w-4 h-4 text-surface-300 group-hover:text-primary-500 flex-shrink-0" />
+      </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete();
+        }}
+        disabled={isDeleting}
+        className="p-2 text-surface-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
+        title="Delete document"
+      >
+        {isDeleting ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <Trash2 className="w-4 h-4" />
+        )}
+      </button>
+    </div>
   );
 }
 
@@ -334,6 +355,10 @@ export default function ClassWorkspace({
   // Delete confirmation state
   const [assignmentToDelete, setAssignmentToDelete] = useState<Assignment | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Document delete state
+  const [documentToDelete, setDocumentToDelete] = useState<Document | null>(null);
+  const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'assignments' | 'grading' | 'materials' | 'settings'>('assignments');
   
@@ -442,6 +467,30 @@ export default function ClassWorkspace({
       alert('Failed to delete assignment. Please try again.');
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  // Delete document
+  const deleteDocument = async (document: Document) => {
+    setDeletingDocId(document.id);
+    try {
+      const res = await fetch(`/api/context/documents?id=${document.id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        // Remove from local state
+        setDocuments(prev => prev.filter(d => d.id !== document.id));
+        setDocumentToDelete(null);
+      } else {
+        alert(`Failed to delete: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to delete document:', error);
+      alert('Failed to delete document. Please try again.');
+    } finally {
+      setDeletingDocId(null);
     }
   };
 
@@ -681,6 +730,8 @@ export default function ClassWorkspace({
                               // Could open preview/edit modal
                               console.log('Open document:', doc.id);
                             }}
+                            onDelete={() => setDocumentToDelete(doc)}
+                            isDeleting={deletingDocId === doc.id}
                           />
                         ))}
                       </div>
@@ -918,6 +969,73 @@ export default function ClassWorkspace({
                     <>
                       <Trash2 className="w-4 h-4" />
                       Delete Assignment
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Document Confirmation Modal */}
+      <AnimatePresence>
+        {documentToDelete && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={() => !deletingDocId && setDocumentToDelete(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-xl border border-surface-200 p-6 w-full max-w-md"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                  <AlertTriangle className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg text-surface-900">Delete Document</h3>
+                  <p className="text-sm text-surface-500">This action cannot be undone</p>
+                </div>
+              </div>
+              
+              <div className="bg-surface-50 border border-surface-200 rounded-xl p-4 mb-6">
+                <p className="text-sm text-surface-700">
+                  Are you sure you want to delete <strong>&quot;{documentToDelete.name}&quot;</strong>?
+                </p>
+                <p className="text-sm text-surface-500 mt-2">
+                  This will also remove all associated text chunks and embeddings used for AI grading context.
+                </p>
+              </div>
+              
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setDocumentToDelete(null)}
+                  disabled={!!deletingDocId}
+                  className="px-4 py-2.5 text-surface-600 hover:bg-surface-100 rounded-xl disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => deleteDocument(documentToDelete)}
+                  disabled={!!deletingDocId}
+                  className="px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {deletingDocId ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      Delete Document
                     </>
                   )}
                 </button>
