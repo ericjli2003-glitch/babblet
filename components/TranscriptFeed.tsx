@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, Mic, MessageSquareText, User, AlertTriangle, Lightbulb, MessageCircleQuestion } from 'lucide-react';
 import type { TranscriptSegment } from '@/lib/types';
@@ -69,14 +69,30 @@ function buildFuzzySnippetRegex(snippet: string): RegExp | null {
   if (words.length < 2) return null;
 
   // Allow punctuation/whitespace differences between words
-  // Use word boundaries (\b) to ensure we only match complete words
+  // Use flexible separators to handle transcription variations
   const sep = `[\\s\\.,;:!\\?\\\"\\'\\(\\)\\[\\]\\-]*`;
-  // Add word boundary at start and end to prevent matching inside words
-  const pattern = `\\b(${words.map(escapeRegex).join(sep)})\\b`;
-  try {
-    return new RegExp(pattern, 'gi');
-  } catch {
-    return null;
+  
+  // For short snippets (2-4 words), require exact word sequence
+  // For longer snippets, allow matching a subset of consecutive words
+  if (words.length <= 4) {
+    // Short snippet - try to match all words with word boundaries
+    const pattern = `\\b(${words.map(escapeRegex).join(sep)})\\b`;
+    try {
+      return new RegExp(pattern, 'gi');
+    } catch {
+      return null;
+    }
+  } else {
+    // Longer snippet - use middle portion for more reliable matching
+    // Take 4-6 consecutive words from the middle to reduce false positives
+    const midStart = Math.floor((words.length - 4) / 2);
+    const midWords = words.slice(midStart, midStart + 4);
+    const pattern = `\\b(${midWords.map(escapeRegex).join(sep)})\\b`;
+    try {
+      return new RegExp(pattern, 'gi');
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -161,21 +177,6 @@ export default function TranscriptFeed({
   // Display text includes interim (real-time) transcription
   const hasInterim = interimText.trim().length > 0;
 
-  // Auto-scroll to bottom when transcript updates
-  useEffect(() => {
-    if (isLive && bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [fullTranscript, isLive]);
-
-  // Auto-scroll to hovered marker highlight
-  useEffect(() => {
-    if (hoveredMarkerId && highlightRefs.current.has(hoveredMarkerId)) {
-      const el = highlightRefs.current.get(hoveredMarkerId);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, [hoveredMarkerId]);
-
   // Get styles for inline tags by type
   const getTagStyles = (type: 'question' | 'issue' | 'insight') => {
     switch (type) {
@@ -203,10 +204,47 @@ export default function TranscriptFeed({
     }
   };
 
-  // Build a single-pass regex from all active highlights
+  // Pre-compute which highlights actually match the transcript text
+  // This is used for accurate counts AND for rendering
+  const { matchedHighlights, matchedCounts } = useMemo(() => {
+    const normalizedTranscript = normalizeForMatch(fullTranscript);
+    const matched = new Set<string>();
+    
+    for (const h of uniqueHighlights) {
+      if (!h.snippet || h.snippet.length < 5) continue;
+      
+      const pattern = buildFuzzySnippetRegex(h.snippet);
+      if (!pattern) continue;
+      
+      // Check if this snippet exists in the transcript
+      if (pattern.test(normalizedTranscript)) {
+        matched.add(h.id);
+      }
+    }
+    
+    // Count matched highlights by type
+    const counts = {
+      question: 0,
+      issue: 0,
+      insight: 0,
+    };
+    
+    for (const h of uniqueHighlights) {
+      if (matched.has(h.id)) {
+        counts[h.type]++;
+      }
+    }
+    
+    return { matchedHighlights: matched, matchedCounts: counts };
+  }, [uniqueHighlights, fullTranscript]);
+
+  // Build a single-pass regex from all active highlights (that actually match)
   const buildSinglePassHighlighter = () => {
     // Filter highlights based on toggles (or if it's the hovered marker)
+    // AND only include highlights that actually match the transcript
     const activeHighlights = uniqueHighlights.filter(h => {
+      // Must actually match the transcript
+      if (!matchedHighlights.has(h.id)) return false;
       // Always show if this is the hovered marker
       if (h.id === hoveredMarkerId) return true;
       // Otherwise respect toggles
@@ -224,6 +262,21 @@ export default function TranscriptFeed({
 
     return { highlights: sorted };
   };
+
+  // Auto-scroll to bottom when transcript updates
+  useEffect(() => {
+    if (isLive && bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [fullTranscript, isLive]);
+
+  // Auto-scroll to hovered marker highlight
+  useEffect(() => {
+    if (hoveredMarkerId && highlightRefs.current.has(hoveredMarkerId)) {
+      const el = highlightRefs.current.get(hoveredMarkerId);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [hoveredMarkerId]);
 
   // Render text with highlights using single-pass approach
   const renderHighlightedText = (text: string) => {
@@ -369,23 +422,23 @@ export default function TranscriptFeed({
           )}
         </div>
         <div className="flex items-center gap-3">
-          {/* Highlight counts per type */}
-          {effectiveShowQuestions && uniqueHighlights.filter(h => h.type === 'question').length > 0 && (
+          {/* Highlight counts per type - show MATCHED counts (actual highlights in text) */}
+          {effectiveShowQuestions && matchedCounts.question > 0 && (
             <div className="flex items-center gap-1.5 px-2 py-0.5 bg-violet-50 text-violet-700 rounded-full text-xs font-medium">
               <MessageSquareText className="w-3 h-3" />
-              <span>{uniqueHighlights.filter(h => h.type === 'question').length} Q</span>
+              <span>{matchedCounts.question} Q</span>
             </div>
           )}
-          {showIssues && uniqueHighlights.filter(h => h.type === 'issue').length > 0 && (
+          {showIssues && matchedCounts.issue > 0 && (
             <div className="flex items-center gap-1.5 px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full text-xs font-medium">
               <span className="text-xs">⚠️</span>
-              <span>{uniqueHighlights.filter(h => h.type === 'issue').length}</span>
+              <span>{matchedCounts.issue}</span>
             </div>
           )}
-          {showInsights && uniqueHighlights.filter(h => h.type === 'insight').length > 0 && (
+          {showInsights && matchedCounts.insight > 0 && (
             <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-xs font-medium">
               <span className="text-xs">💡</span>
-              <span>{uniqueHighlights.filter(h => h.type === 'insight').length}</span>
+              <span>{matchedCounts.insight}</span>
             </div>
           )}
           <div className="flex items-center gap-1 text-sm text-surface-500">

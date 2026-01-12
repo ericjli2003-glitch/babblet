@@ -6,7 +6,7 @@ import {
   ArrowLeft, Plus, BookOpen, FileText, ClipboardList, Save,
   Trash2, ChevronRight, Loader2, CheckCircle, Camera, Edit3,
   GraduationCap, Calendar, Hash, Upload, File, AlertTriangle,
-  ChevronUp, ChevronDown, RefreshCw, Sparkles
+  ChevronUp, ChevronDown, RefreshCw, Sparkles, X, Files
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -137,15 +137,16 @@ function CourseContextPageContent() {
   const [newDocText, setNewDocText] = useState('');
   const [addingDocument, setAddingDocument] = useState(false);
   const [uploadMode, setUploadMode] = useState<'paste' | 'file'>('file');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [addDocProgress, setAddDocProgress] = useState<{ current: number; total: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Class Workspace document upload modal
   const [showDocumentUpload, setShowDocumentUpload] = useState(false);
-  const [uploadDocName, setUploadDocName] = useState('');
   const [uploadDocType, setUploadDocType] = useState<'lecture_notes' | 'slides' | 'reading' | 'policy' | 'example' | 'other'>('lecture_notes');
-  const [uploadDocFile, setUploadDocFile] = useState<File | null>(null);
+  const [uploadDocFiles, setUploadDocFiles] = useState<File[]>([]);
   const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
 
   // ============================================
@@ -494,31 +495,64 @@ function CourseContextPageContent() {
     if (!selectedCourse) return;
 
     // Validate based on mode
-    if (uploadMode === 'file' && !selectedFile) return;
+    if (uploadMode === 'file' && selectedFiles.length === 0) return;
     if (uploadMode === 'paste' && (!newDocName.trim() || !newDocText.trim())) return;
 
     try {
       setAddingDocument(true);
 
-      let data;
+      if (uploadMode === 'file' && selectedFiles.length > 0) {
+        // Multiple file upload mode
+        setAddDocProgress({ current: 0, total: selectedFiles.length });
+        const results: { success: boolean; name: string; document?: unknown }[] = [];
 
-      if (uploadMode === 'file' && selectedFile) {
-        // File upload mode - use FormData
-        const formData = new FormData();
-        formData.append('file', selectedFile);
-        formData.append('courseId', selectedCourse.id);
-        if (selectedAssignment) {
-          formData.append('assignmentId', selectedAssignment.id);
+        for (let i = 0; i < selectedFiles.length; i++) {
+          const file = selectedFiles[i];
+          setAddDocProgress({ current: i + 1, total: selectedFiles.length });
+
+          try {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('courseId', selectedCourse.id);
+            if (selectedAssignment) {
+              formData.append('assignmentId', selectedAssignment.id);
+            }
+            formData.append('type', newDocType);
+
+            const res = await fetch('/api/context/upload-document', {
+              method: 'POST',
+              body: formData,
+            });
+            const data = await res.json();
+
+            if (data.success) {
+              results.push({ success: true, name: file.name, document: data.document });
+              setDocuments(prev => [data.document, ...prev]);
+            } else {
+              results.push({ success: false, name: file.name });
+            }
+          } catch {
+            results.push({ success: false, name: file.name });
+          }
         }
-        formData.append('type', newDocType);
 
-        const res = await fetch('/api/context/upload-document', {
-          method: 'POST',
-          body: formData,
-        });
-        data = await res.json();
+        const successCount = results.filter(r => r.success).length;
+        const failedResults = results.filter(r => !r.success);
+
+        setShowAddDocument(false);
+        setNewDocName('');
+        setNewDocType('lecture_notes');
+        setSelectedFiles([]);
+        setAddDocProgress(null);
+
+        if (failedResults.length === 0) {
+          alert(`Successfully uploaded ${successCount} file${successCount !== 1 ? 's' : ''}!`);
+        } else {
+          const failedNames = failedResults.map(r => r.name).join(', ');
+          alert(`Uploaded ${successCount} file${successCount !== 1 ? 's' : ''}.\nFailed: ${failedNames}`);
+        }
       } else {
-        // Paste mode
+        // Paste mode (single document)
         const res = await fetch('/api/context/documents', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -530,41 +564,46 @@ function CourseContextPageContent() {
             rawText: newDocText.trim(),
           }),
         });
-        data = await res.json();
-      }
+        const data = await res.json();
 
-      if (data.success) {
-        setDocuments(prev => [data.document, ...prev]);
-        setShowAddDocument(false);
-        setNewDocName('');
-        setNewDocType('lecture_notes');
-        setNewDocText('');
-        setSelectedFile(null);
-        const msg = uploadMode === 'file'
-          ? `Document uploaded! Extracted ${data.document.wordCount || 0} words, created ${data.chunkCount} chunks.`
-          : `Document added! ${data.chunkCount} chunks created with embeddings.`;
-        alert(msg);
-      } else {
-        alert(`Error: ${data.error}`);
+        if (data.success) {
+          setDocuments(prev => [data.document, ...prev]);
+          setShowAddDocument(false);
+          setNewDocName('');
+          setNewDocType('lecture_notes');
+          setNewDocText('');
+          alert(`Document added! ${data.chunkCount} chunks created with embeddings.`);
+        } else {
+          alert(`Error: ${data.error}`);
+        }
       }
     } catch (error) {
       console.error('Failed to add document:', error);
       alert('Failed to add document. Please try again.');
     } finally {
       setAddingDocument(false);
+      setAddDocProgress(null);
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      // Auto-set doc name from filename if empty
-      if (!newDocName) {
-        const nameWithoutExt = file.name.replace(/\.[^.]+$/, '');
-        setNewDocName(nameWithoutExt);
-      }
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const newFiles = Array.from(files);
+      setSelectedFiles(prev => {
+        const existingNames = new Set(prev.map(f => f.name));
+        const uniqueNewFiles = newFiles.filter(f => !existingNames.has(f.name));
+        return [...prev, ...uniqueNewFiles];
+      });
     }
+    // Reset input so the same file can be selected again if removed
+    if (e.target) {
+      e.target.value = '';
+    }
+  };
+
+  const removeSelectedFile = (fileName: string) => {
+    setSelectedFiles(prev => prev.filter(f => f.name !== fileName));
   };
 
   const deleteDoc = async (docId: string) => {
@@ -580,48 +619,83 @@ function CourseContextPageContent() {
 
   // Class Workspace document upload handlers
   const handleDocumentFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setUploadDocFile(file);
-      // Auto-set doc name from filename if empty
-      if (!uploadDocName) {
-        const nameWithoutExt = file.name.replace(/\.[^.]+$/, '');
-        setUploadDocName(nameWithoutExt);
-      }
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      // Add new files to existing selection (avoiding duplicates)
+      const newFiles = Array.from(files);
+      setUploadDocFiles(prev => {
+        const existingNames = new Set(prev.map(f => f.name));
+        const uniqueNewFiles = newFiles.filter(f => !existingNames.has(f.name));
+        return [...prev, ...uniqueNewFiles];
+      });
+    }
+    // Reset input so the same file can be selected again if removed
+    if (e.target) {
+      e.target.value = '';
     }
   };
 
+  const removeUploadFile = (fileName: string) => {
+    setUploadDocFiles(prev => prev.filter(f => f.name !== fileName));
+  };
+
   const uploadDocument = async () => {
-    if (!selectedCourse || !uploadDocFile || !uploadDocName.trim()) return;
+    if (!selectedCourse || uploadDocFiles.length === 0) return;
 
     try {
       setUploadingDoc(true);
+      setUploadProgress({ current: 0, total: uploadDocFiles.length });
 
-      const formData = new FormData();
-      formData.append('file', uploadDocFile);
-      formData.append('courseId', selectedCourse.id);
-      formData.append('type', uploadDocType);
+      const results: { success: boolean; name: string; error?: string }[] = [];
 
-      const res = await fetch('/api/context/upload-document', {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
+      for (let i = 0; i < uploadDocFiles.length; i++) {
+        const file = uploadDocFiles[i];
+        setUploadProgress({ current: i + 1, total: uploadDocFiles.length });
 
-      if (data.success) {
-        setShowDocumentUpload(false);
-        setUploadDocName('');
-        setUploadDocFile(null);
-        setUploadDocType('lecture_notes');
-        alert(`Document uploaded! Extracted ${data.document.wordCount || 0} words, created ${data.chunkCount} chunks.`);
-      } else {
-        alert(`Error: ${data.error}`);
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('courseId', selectedCourse.id);
+          formData.append('type', uploadDocType);
+
+          const res = await fetch('/api/context/upload-document', {
+            method: 'POST',
+            body: formData,
+          });
+          const data = await res.json();
+
+          if (data.success) {
+            results.push({ success: true, name: file.name });
+          } else {
+            results.push({ success: false, name: file.name, error: data.error });
+          }
+        } catch (error) {
+          results.push({ success: false, name: file.name, error: 'Upload failed' });
+        }
       }
+
+      // Show summary
+      const successCount = results.filter(r => r.success).length;
+      const failedResults = results.filter(r => !r.success);
+
+      if (failedResults.length === 0) {
+        alert(`Successfully uploaded ${successCount} file${successCount !== 1 ? 's' : ''}!`);
+      } else {
+        const failedNames = failedResults.map(r => r.name).join(', ');
+        alert(`Uploaded ${successCount} file${successCount !== 1 ? 's' : ''}.\nFailed: ${failedNames}`);
+      }
+
+      setShowDocumentUpload(false);
+      setUploadDocFiles([]);
+      setUploadDocType('lecture_notes');
+      setUploadProgress(null);
+
     } catch (error) {
-      console.error('Failed to upload document:', error);
-      alert('Failed to upload document. Please try again.');
+      console.error('Failed to upload documents:', error);
+      alert('Failed to upload documents. Please try again.');
     } finally {
       setUploadingDoc(false);
+      setUploadProgress(null);
     }
   };
 
@@ -1005,47 +1079,110 @@ function CourseContextPageContent() {
                           </select>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-surface-700 mb-1">Document Name</label>
-                          <input
-                            type="text"
-                            value={uploadDocName}
-                            onChange={(e) => setUploadDocName(e.target.value)}
-                            placeholder="e.g., Week 1 Lecture Notes"
-                            className="w-full px-4 py-2.5 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-surface-700 mb-1">Upload File</label>
+                          <label className="block text-sm font-medium text-surface-700 mb-1">
+                            Select Files
+                            <span className="text-surface-400 font-normal ml-1">(multiple allowed)</span>
+                          </label>
+                          <div
+                            onClick={() => documentInputRef.current?.click()}
+                            className="border-2 border-dashed border-surface-300 rounded-xl p-6 text-center cursor-pointer hover:border-violet-400 hover:bg-violet-50/50 transition-colors"
+                          >
+                            <Files className="w-10 h-10 text-surface-400 mx-auto mb-2" />
+                            <p className="text-sm text-surface-600">
+                              Click to select files or drag and drop
+                            </p>
+                            <p className="text-xs text-surface-400 mt-1">
+                              PDF, DOC, DOCX, TXT, MD, PPT, PPTX
+                            </p>
+                          </div>
                           <input
                             ref={documentInputRef}
                             type="file"
+                            multiple
                             accept=".pdf,.doc,.docx,.txt,.md,.ppt,.pptx"
                             onChange={handleDocumentFileSelect}
-                            className="w-full text-sm text-surface-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                            className="hidden"
                           />
-                          <p className="text-xs text-surface-500 mt-1">
-                            Supported: PDF, DOC, DOCX, TXT, MD, PPT, PPTX
-                          </p>
                         </div>
+
+                        {/* Selected Files List */}
+                        {uploadDocFiles.length > 0 && (
+                          <div className="space-y-2">
+                            <label className="block text-sm font-medium text-surface-700">
+                              Selected Files ({uploadDocFiles.length})
+                            </label>
+                            <div className="max-h-40 overflow-y-auto space-y-2">
+                              {uploadDocFiles.map((file, index) => (
+                                <div
+                                  key={`${file.name}-${index}`}
+                                  className="flex items-center justify-between p-3 bg-surface-50 rounded-lg"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <File className="w-4 h-4 text-violet-500 flex-shrink-0" />
+                                    <span className="text-sm text-surface-700 truncate">{file.name}</span>
+                                    <span className="text-xs text-surface-400 flex-shrink-0">
+                                      ({(file.size / 1024).toFixed(1)} KB)
+                                    </span>
+                                  </div>
+                                  <button
+                                    onClick={() => removeUploadFile(file.name)}
+                                    className="p-1 text-surface-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors flex-shrink-0"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Upload Progress */}
+                        {uploadProgress && (
+                          <div className="p-3 bg-violet-50 rounded-xl">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm text-violet-700">
+                                Uploading file {uploadProgress.current} of {uploadProgress.total}...
+                              </span>
+                              <span className="text-sm text-violet-600 font-medium">
+                                {Math.round((uploadProgress.current / uploadProgress.total) * 100)}%
+                              </span>
+                            </div>
+                            <div className="h-2 bg-violet-200 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-violet-500 transition-all duration-300"
+                                style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <div className="flex justify-end gap-3 mt-6">
                         <button
                           onClick={() => {
                             setShowDocumentUpload(false);
-                            setUploadDocName('');
-                            setUploadDocFile(null);
+                            setUploadDocFiles([]);
                           }}
-                          className="px-4 py-2.5 text-surface-600 hover:bg-surface-100 rounded-xl"
+                          disabled={uploadingDoc}
+                          className="px-4 py-2.5 text-surface-600 hover:bg-surface-100 rounded-xl disabled:opacity-50"
                         >
                           Cancel
                         </button>
                         <button
                           onClick={uploadDocument}
-                          disabled={!uploadDocName.trim() || !uploadDocFile || uploadingDoc}
+                          disabled={uploadDocFiles.length === 0 || uploadingDoc}
                           className="px-5 py-2.5 bg-violet-600 text-white rounded-xl hover:bg-violet-700 disabled:opacity-50 flex items-center gap-2"
                         >
-                          {uploadingDoc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                          Upload Material
+                          {uploadingDoc ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Uploading...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4" />
+                              Upload {uploadDocFiles.length > 0 ? `${uploadDocFiles.length} File${uploadDocFiles.length !== 1 ? 's' : ''}` : 'Files'}
+                            </>
+                          )}
                         </button>
                       </div>
                     </motion.div>
@@ -1496,10 +1633,11 @@ Presentation within time limits"
 
                       {/* File Upload Mode */}
                       {uploadMode === 'file' && (
-                        <div>
+                        <div className="space-y-3">
                           <input
                             ref={fileInputRef}
                             type="file"
+                            multiple
                             accept=".pdf,.docx,.doc,.txt,.md"
                             onChange={handleFileSelect}
                             className="hidden"
@@ -1508,53 +1646,99 @@ Presentation within time limits"
                             onClick={() => fileInputRef.current?.click()}
                             className="border-2 border-dashed border-violet-300 rounded-xl p-6 text-center cursor-pointer hover:border-violet-500 hover:bg-violet-100/50 transition-colors"
                           >
-                            {selectedFile ? (
-                              <div className="flex items-center justify-center gap-3">
-                                <File className="w-8 h-8 text-violet-500" />
-                                <div className="text-left">
-                                  <p className="font-medium text-surface-900">{selectedFile.name}</p>
-                                  <p className="text-sm text-surface-500">
-                                    {(selectedFile.size / 1024).toFixed(1)} KB • Click to change
-                                  </p>
-                                </div>
-                              </div>
-                            ) : (
-                              <>
-                                <Upload className="w-8 h-8 text-violet-400 mx-auto mb-2" />
-                                <p className="text-sm text-surface-600">
-                                  Click to upload <span className="font-medium">PDF, DOCX, TXT, or MD</span>
-                                </p>
-                                <p className="text-xs text-surface-500 mt-1">
-                                  Text will be automatically extracted
-                                </p>
-                              </>
-                            )}
+                            <Files className="w-8 h-8 text-violet-400 mx-auto mb-2" />
+                            <p className="text-sm text-surface-600">
+                              Click to select files <span className="text-surface-400">(multiple allowed)</span>
+                            </p>
+                            <p className="text-xs text-surface-500 mt-1">
+                              PDF, DOCX, TXT, MD supported
+                            </p>
                           </div>
+
+                          {/* Selected Files List */}
+                          {selectedFiles.length > 0 && (
+                            <div className="max-h-32 overflow-y-auto space-y-1">
+                              {selectedFiles.map((file, index) => (
+                                <div
+                                  key={`${file.name}-${index}`}
+                                  className="flex items-center justify-between p-2 bg-white rounded-lg border border-violet-200"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <File className="w-4 h-4 text-violet-500 flex-shrink-0" />
+                                    <span className="text-sm text-surface-700 truncate">{file.name}</span>
+                                    <span className="text-xs text-surface-400 flex-shrink-0">
+                                      ({(file.size / 1024).toFixed(1)} KB)
+                                    </span>
+                                  </div>
+                                  <button
+                                    onClick={() => removeSelectedFile(file.name)}
+                                    className="p-1 text-surface-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors flex-shrink-0"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Upload Progress */}
+                          {addDocProgress && (
+                            <div className="p-2 bg-violet-100 rounded-lg">
+                              <div className="flex items-center justify-between text-xs text-violet-700 mb-1">
+                                <span>Uploading {addDocProgress.current} of {addDocProgress.total}...</span>
+                                <span>{Math.round((addDocProgress.current / addDocProgress.total) * 100)}%</span>
+                              </div>
+                              <div className="h-1.5 bg-violet-200 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-violet-500 transition-all duration-300"
+                                  style={{ width: `${(addDocProgress.current / addDocProgress.total) * 100}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
 
-                      {/* Document Name & Type (shown for both modes) */}
-                      <div className="flex gap-3">
-                        <input
-                          type="text"
-                          value={newDocName}
-                          onChange={(e) => setNewDocName(e.target.value)}
-                          placeholder={uploadMode === 'file' ? 'Document name (auto-filled from file)' : 'Document name'}
-                          className="flex-1 px-3 py-2 rounded-lg border border-violet-300 focus:ring-2 focus:ring-violet-500 text-sm"
-                        />
-                        <select
-                          value={newDocType}
-                          onChange={(e) => setNewDocType(e.target.value)}
-                          className="px-3 py-2 rounded-lg border border-violet-300 focus:ring-2 focus:ring-violet-500 text-sm"
-                        >
-                          <option value="lecture_notes">Lecture Notes</option>
-                          <option value="reading">Reading</option>
-                          <option value="slides">Slides</option>
-                          <option value="policy">Policy</option>
-                          <option value="example">Example</option>
-                          <option value="other">Other</option>
-                        </select>
-                      </div>
+                      {/* Document Type (for file mode) or Name & Type (for paste mode) */}
+                      {uploadMode === 'file' ? (
+                        <div>
+                          <label className="block text-xs text-surface-600 mb-1">Material Type</label>
+                          <select
+                            value={newDocType}
+                            onChange={(e) => setNewDocType(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg border border-violet-300 focus:ring-2 focus:ring-violet-500 text-sm"
+                          >
+                            <option value="lecture_notes">Lecture Notes</option>
+                            <option value="reading">Reading</option>
+                            <option value="slides">Slides</option>
+                            <option value="policy">Policy</option>
+                            <option value="example">Example</option>
+                            <option value="other">Other</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <div className="flex gap-3">
+                          <input
+                            type="text"
+                            value={newDocName}
+                            onChange={(e) => setNewDocName(e.target.value)}
+                            placeholder="Document name"
+                            className="flex-1 px-3 py-2 rounded-lg border border-violet-300 focus:ring-2 focus:ring-violet-500 text-sm"
+                          />
+                          <select
+                            value={newDocType}
+                            onChange={(e) => setNewDocType(e.target.value)}
+                            className="px-3 py-2 rounded-lg border border-violet-300 focus:ring-2 focus:ring-violet-500 text-sm"
+                          >
+                            <option value="lecture_notes">Lecture Notes</option>
+                            <option value="reading">Reading</option>
+                            <option value="slides">Slides</option>
+                            <option value="policy">Policy</option>
+                            <option value="example">Example</option>
+                            <option value="other">Other</option>
+                          </select>
+                        </div>
+                      )}
 
                       {/* Text Paste Mode */}
                       {uploadMode === 'paste' && (
@@ -1571,11 +1755,12 @@ Presentation within time limits"
                         <button
                           onClick={() => {
                             setShowAddDocument(false);
-                            setSelectedFile(null);
+                            setSelectedFiles([]);
                             setNewDocName('');
                             setNewDocText('');
                           }}
-                          className="px-3 py-1.5 text-sm text-surface-600 hover:bg-surface-100 rounded-lg"
+                          disabled={addingDocument}
+                          className="px-3 py-1.5 text-sm text-surface-600 hover:bg-surface-100 rounded-lg disabled:opacity-50"
                         >
                           Cancel
                         </button>
@@ -1583,7 +1768,7 @@ Presentation within time limits"
                           onClick={addDocument}
                           disabled={
                             addingDocument ||
-                            (uploadMode === 'file' && !selectedFile) ||
+                            (uploadMode === 'file' && selectedFiles.length === 0) ||
                             (uploadMode === 'paste' && (!newDocName.trim() || !newDocText.trim()))
                           }
                           className="flex items-center gap-2 px-3 py-1.5 text-sm bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50"
@@ -1591,12 +1776,14 @@ Presentation within time limits"
                           {addingDocument ? (
                             <>
                               <Loader2 className="w-4 h-4 animate-spin" />
-                              Processing...
+                              Uploading...
                             </>
                           ) : (
                             <>
                               <Upload className="w-4 h-4" />
-                              {uploadMode === 'file' ? 'Upload & Extract' : 'Add Document'}
+                              {uploadMode === 'file' 
+                                ? `Upload ${selectedFiles.length > 0 ? selectedFiles.length : ''} File${selectedFiles.length !== 1 ? 's' : ''}`
+                                : 'Add Document'}
                             </>
                           )}
                         </button>
