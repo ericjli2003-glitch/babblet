@@ -4,8 +4,10 @@
 // ============================================
 
 import mammoth from 'mammoth';
-import { extractText as extractPdfText } from 'unpdf';
+import { extractText as extractPdfText, extractImages, getDocumentProxy } from 'unpdf';
 import { OfficeParser } from 'officeparser';
+import OpenAI from 'openai';
+import sharp from 'sharp';
 
 // Serverless-compatible PDF parsing using unpdf
 async function parsePDF(buffer: Buffer): Promise<{ text: string; numpages: number }> {
@@ -91,19 +93,139 @@ const MIN_WORDS_PER_PAGE = 20;
 
 async function extractFromPDFWithOCR(buffer: Buffer): Promise<ExtractionResult> {
   try {
-    // Use officeparser with OCR enabled for scanned PDFs
-    console.log('[TextExtraction] Attempting OCR extraction for scanned PDF...');
-    const ast = await OfficeParser.parseOffice(buffer, { 
-      ocr: true,
-      // OCR language - English by default, can add more like 'eng+fra+deu'
-      ocrLanguage: 'eng',
-    });
-    const text = ast.toText();
+    // Check if OpenAI is configured for Vision OCR
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.log('[TextExtraction] OpenAI not configured, trying officeparser OCR...');
+      // Fallback to officeparser (may not work in serverless)
+      try {
+        const ast = await OfficeParser.parseOffice(buffer, { ocr: true, ocrLanguage: 'eng' });
+        const text = ast.toText();
+        if (text && text.trim().length > 10) {
+          return {
+            success: true,
+            text,
+            wordCount: text.split(/\s+/).filter((w: string) => w.length > 0).length,
+            fileType: 'pdf',
+            usedOcr: true,
+          };
+        }
+      } catch {
+        // officeparser OCR failed, continue to return error
+      }
+      return {
+        success: false,
+        text: '',
+        error: 'OCR requires OPENAI_API_KEY for Vision-based text extraction',
+        fileType: 'pdf',
+      };
+    }
+
+    console.log('[TextExtraction] Attempting Vision OCR extraction for scanned PDF...');
     
+    // Extract images from all PDF pages using unpdf
+    const uint8Array = new Uint8Array(buffer);
+    const pdf = await getDocumentProxy(uint8Array);
+    const numPages = pdf.numPages;
+    
+    // Collect all images from all pages
+    const allImages: Array<{ data: Uint8ClampedArray; width: number; height: number; channels: 1 | 3 | 4 }> = [];
+    
+    for (let pageNum = 1; pageNum <= Math.min(numPages, 10); pageNum++) { // Limit to first 10 pages
+      try {
+        const pageImages = await extractImages(pdf, pageNum);
+        allImages.push(...pageImages);
+      } catch {
+        // Some pages may not have images
+      }
+    }
+    
+    if (allImages.length === 0) {
+      console.log('[TextExtraction] No images found in PDF for OCR');
+      return {
+        success: false,
+        text: '',
+        error: 'No extractable images found in PDF. The PDF may use a format that cannot be processed.',
+        fileType: 'pdf',
+      };
+    }
+
+    console.log(`[TextExtraction] Found ${allImages.length} images across ${numPages} pages, sending to GPT-4 Vision...`);
+
+    // Use OpenAI Vision to extract text from images
+    const openai = new OpenAI({ apiKey });
+    const extractedTexts: string[] = [];
+
+    // Process images one at a time (they can be large)
+    const maxImages = Math.min(allImages.length, 10); // Limit to first 10 images
+    
+    for (let i = 0; i < maxImages; i++) {
+      const img = allImages[i];
+      
+      try {
+        // Convert raw pixel data to PNG using sharp
+        // Channels: 1 = grayscale, 3 = RGB, 4 = RGBA
+        const pngBuffer = await sharp(Buffer.from(img.data), {
+          raw: {
+            width: img.width,
+            height: img.height,
+            channels: img.channels,
+          },
+        })
+          .png()
+          .toBuffer();
+        
+        const base64 = pngBuffer.toString('base64');
+        
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: 'Extract ALL text from this image. Include all visible text, maintaining the reading order. Output ONLY the extracted text, no commentary or descriptions.',
+                },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:image/png;base64,${base64}`,
+                    detail: 'high',
+                  },
+                },
+              ],
+            },
+          ],
+          max_tokens: 4000,
+        });
+
+        const text = response.choices[0]?.message?.content || '';
+        if (text.trim() && !text.toLowerCase().includes('cannot') && !text.toLowerCase().includes('unable') && !text.toLowerCase().includes('no text')) {
+          extractedTexts.push(text.trim());
+        }
+      } catch (visionError) {
+        console.error('[TextExtraction] Vision API error for image:', visionError);
+      }
+    }
+
+    const combinedText = extractedTexts.join('\n\n');
+    
+    if (!combinedText || combinedText.length < 10) {
+      return {
+        success: false,
+        text: '',
+        error: 'Vision OCR could not extract readable text from PDF images',
+        fileType: 'pdf',
+      };
+    }
+
+    console.log(`[TextExtraction] Vision OCR extracted ${combinedText.split(/\s+/).length} words from ${allImages.length} images`);
+
     return {
       success: true,
-      text,
-      wordCount: text.split(/\s+/).filter((w: string) => w.length > 0).length,
+      text: combinedText,
+      wordCount: combinedText.split(/\s+/).filter((w: string) => w.length > 0).length,
       fileType: 'pdf',
       usedOcr: true,
     };
