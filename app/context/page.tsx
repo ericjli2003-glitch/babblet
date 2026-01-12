@@ -83,6 +83,7 @@ function CourseContextPageContent() {
 
   // Selected items
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const [workspaceRefreshKey, setWorkspaceRefreshKey] = useState(0);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [rubric, setRubric] = useState<Rubric | null>(null);
@@ -783,6 +784,9 @@ function CourseContextPageContent() {
       setUploadDocFiles([]);
       setUploadDocType('lecture_notes');
       setUploadProgress(null);
+      
+      // Trigger ClassWorkspace to reload documents
+      setWorkspaceRefreshKey(prev => prev + 1);
 
     } catch (error) {
       console.error('Failed to upload documents:', error);
@@ -1039,6 +1043,7 @@ function CourseContextPageContent() {
               exit={{ opacity: 0, y: -20 }}
             >
               <ClassWorkspace
+                key={workspaceRefreshKey}
                 course={selectedCourse}
                 onSelectAssignment={selectAssignment}
                 onCreateAssignment={() => setShowCreateAssignment(true)}
