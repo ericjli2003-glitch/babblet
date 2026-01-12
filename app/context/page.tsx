@@ -511,6 +511,12 @@ function CourseContextPageContent() {
           setAddDocProgress({ current: i + 1, total: selectedFiles.length });
 
           try {
+            // Check file size (Vercel limit is ~4.5MB)
+            if (file.size > 4.5 * 1024 * 1024) {
+              results.push({ success: false, name: file.name });
+              continue;
+            }
+
             const formData = new FormData();
             formData.append('file', file);
             formData.append('courseId', selectedCourse.id);
@@ -523,6 +529,12 @@ function CourseContextPageContent() {
               method: 'POST',
               body: formData,
             });
+
+            if (!res.ok) {
+              results.push({ success: false, name: file.name });
+              continue;
+            }
+
             const data = await res.json();
 
             if (data.success) {
@@ -653,6 +665,12 @@ function CourseContextPageContent() {
         setUploadProgress({ current: i + 1, total: uploadDocFiles.length });
 
         try {
+          // Check file size (Vercel limit is ~4.5MB)
+          if (file.size > 4.5 * 1024 * 1024) {
+            results.push({ success: false, name: file.name, error: 'File too large (max 4.5MB)' });
+            continue;
+          }
+
           const formData = new FormData();
           formData.append('file', file);
           formData.append('courseId', selectedCourse.id);
@@ -662,6 +680,20 @@ function CourseContextPageContent() {
             method: 'POST',
             body: formData,
           });
+
+          if (!res.ok) {
+            const errorText = await res.text();
+            let errorMsg = `Server error (${res.status})`;
+            try {
+              const errorJson = JSON.parse(errorText);
+              errorMsg = errorJson.error || errorMsg;
+            } catch {
+              // Use default error message
+            }
+            results.push({ success: false, name: file.name, error: errorMsg });
+            continue;
+          }
+
           const data = await res.json();
 
           if (data.success) {
@@ -670,7 +702,7 @@ function CourseContextPageContent() {
             results.push({ success: false, name: file.name, error: data.error });
           }
         } catch (error) {
-          results.push({ success: false, name: file.name, error: 'Upload failed' });
+          results.push({ success: false, name: file.name, error: 'Network error' });
         }
       }
 
@@ -681,8 +713,8 @@ function CourseContextPageContent() {
       if (failedResults.length === 0) {
         alert(`Successfully uploaded ${successCount} file${successCount !== 1 ? 's' : ''}!`);
       } else {
-        const failedNames = failedResults.map(r => r.name).join(', ');
-        alert(`Uploaded ${successCount} file${successCount !== 1 ? 's' : ''}.\nFailed: ${failedNames}`);
+        const failedDetails = failedResults.map(r => `• ${r.name}: ${r.error || 'Unknown error'}`).join('\n');
+        alert(`Uploaded ${successCount} of ${results.length} files.\n\nFailed uploads:\n${failedDetails}`);
       }
 
       setShowDocumentUpload(false);
@@ -1092,14 +1124,14 @@ function CourseContextPageContent() {
                               Click to select files or drag and drop
                             </p>
                             <p className="text-xs text-surface-400 mt-1">
-                              PDF, DOC, DOCX, TXT, MD, PPT, PPTX
+                              PDF, DOC, DOCX, TXT, MD
                             </p>
                           </div>
                           <input
                             ref={documentInputRef}
                             type="file"
                             multiple
-                            accept=".pdf,.doc,.docx,.txt,.md,.ppt,.pptx"
+                            accept=".pdf,.doc,.docx,.txt,.md"
                             onChange={handleDocumentFileSelect}
                             className="hidden"
                           />
@@ -1651,7 +1683,7 @@ Presentation within time limits"
                               Click to select files <span className="text-surface-400">(multiple allowed)</span>
                             </p>
                             <p className="text-xs text-surface-500 mt-1">
-                              PDF, DOCX, TXT, MD supported
+                              PDF, DOC, DOCX, TXT, MD
                             </p>
                           </div>
 
