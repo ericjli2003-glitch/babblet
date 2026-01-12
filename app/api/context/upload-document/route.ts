@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-export const maxDuration = 120; // Allow time for extraction + embeddings
+export const maxDuration = 300; // 5 minutes - max for Vercel Pro (OCR can be slow)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createDocument } from '@/lib/context-store';

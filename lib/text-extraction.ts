@@ -154,17 +154,14 @@ async function extractFromPDFWithOCR(buffer: Buffer): Promise<ExtractionResult> 
 
     // Use OpenAI Vision to extract text from images
     const openai = new OpenAI({ apiKey });
-    const extractedTexts: string[] = [];
 
-    // Process all images
-    console.log(`[TextExtraction] Processing ${allImages.length} images with Vision OCR...`);
+    // Process images in parallel batches for speed
+    const BATCH_SIZE = 5; // Process 5 images at a time
+    console.log(`[TextExtraction] Processing ${allImages.length} images with Vision OCR (batch size: ${BATCH_SIZE})...`);
     
-    for (let i = 0; i < allImages.length; i++) {
-      const img = allImages[i];
-      
+    const processImage = async (img: typeof allImages[0], index: number): Promise<string> => {
       try {
         // Convert raw pixel data to PNG using sharp
-        // Channels: 1 = grayscale, 3 = RGB, 4 = RGBA
         const pngBuffer = await sharp(Buffer.from(img.data), {
           raw: {
             width: img.width,
@@ -178,35 +175,48 @@ async function extractFromPDFWithOCR(buffer: Buffer): Promise<ExtractionResult> 
         const base64 = pngBuffer.toString('base64');
         
         const response = await openai.chat.completions.create({
-          model: 'gpt-4o',
+          model: 'gpt-4o-mini', // Use mini for faster/cheaper OCR
           messages: [
             {
               role: 'user',
               content: [
                 {
                   type: 'text',
-                  text: 'Extract ALL text from this image. Include all visible text, maintaining the reading order. Output ONLY the extracted text, no commentary or descriptions.',
+                  text: 'Extract ALL text from this image. Output ONLY the extracted text, no commentary.',
                 },
                 {
                   type: 'image_url',
                   image_url: {
                     url: `data:image/png;base64,${base64}`,
-                    detail: 'high',
+                    detail: 'low', // Use low detail for faster processing
                   },
                 },
               ],
             },
           ],
-          max_tokens: 4000,
+          max_tokens: 2000,
         });
 
         const text = response.choices[0]?.message?.content || '';
         if (text.trim() && !text.toLowerCase().includes('cannot') && !text.toLowerCase().includes('unable') && !text.toLowerCase().includes('no text')) {
-          extractedTexts.push(text.trim());
+          return text.trim();
         }
+        return '';
       } catch (visionError) {
-        console.error('[TextExtraction] Vision API error for image:', visionError);
+        console.error(`[TextExtraction] Vision API error for image ${index}:`, visionError);
+        return '';
       }
+    };
+
+    // Process in parallel batches
+    const extractedTexts: string[] = [];
+    for (let i = 0; i < allImages.length; i += BATCH_SIZE) {
+      const batch = allImages.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map((img, idx) => processImage(img, i + idx))
+      );
+      extractedTexts.push(...batchResults.filter(t => t.length > 0));
+      console.log(`[TextExtraction] Processed ${Math.min(i + BATCH_SIZE, allImages.length)}/${allImages.length} images...`);
     }
 
     const combinedText = extractedTexts.join('\n\n');
