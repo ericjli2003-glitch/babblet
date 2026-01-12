@@ -39,6 +39,7 @@ export interface ExtractionResult {
   wordCount?: number;
   error?: string;
   fileType: SupportedFileType;
+  usedOcr?: boolean; // True if OCR was used for extraction
 }
 
 // ============================================
@@ -69,21 +70,89 @@ export function detectFileType(filename: string, mimeType?: string): SupportedFi
 }
 
 // ============================================
-// PDF Extraction
+// PDF Extraction (with OCR fallback for scanned documents)
 // ============================================
+
+// Minimum words expected per page - if below this, likely a scanned/image PDF
+const MIN_WORDS_PER_PAGE = 20;
+
+async function extractFromPDFWithOCR(buffer: Buffer): Promise<ExtractionResult> {
+  try {
+    // Use officeparser with OCR enabled for scanned PDFs
+    console.log('[TextExtraction] Attempting OCR extraction for scanned PDF...');
+    const ast = await OfficeParser.parseOffice(buffer, { 
+      ocr: true,
+      // OCR language - English by default, can add more like 'eng+fra+deu'
+      ocrLanguage: 'eng',
+    });
+    const text = ast.toText();
+    
+    return {
+      success: true,
+      text,
+      wordCount: text.split(/\s+/).filter((w: string) => w.length > 0).length,
+      fileType: 'pdf',
+      usedOcr: true,
+    };
+  } catch (error) {
+    console.error('[TextExtraction] OCR extraction failed:', error);
+    return {
+      success: false,
+      text: '',
+      error: error instanceof Error ? error.message : 'OCR extraction failed',
+      fileType: 'pdf',
+    };
+  }
+}
 
 async function extractFromPDF(buffer: Buffer): Promise<ExtractionResult> {
   try {
+    // First, try regular text extraction (faster)
     const data = await parsePDF(buffer);
+    const wordCount = data.text.split(/\s+/).filter(w => w.length > 0).length;
+    const wordsPerPage = data.numpages > 0 ? wordCount / data.numpages : wordCount;
     
+    // If we got enough text, use it
+    if (wordsPerPage >= MIN_WORDS_PER_PAGE || wordCount >= 50) {
+      console.log(`[TextExtraction] Regular PDF extraction: ${wordCount} words from ${data.numpages} pages`);
+      return {
+        success: true,
+        text: data.text,
+        pageCount: data.numpages,
+        wordCount,
+        fileType: 'pdf',
+      };
+    }
+    
+    // Low text content - likely a scanned document, try OCR
+    console.log(`[TextExtraction] Low text content (${wordCount} words, ${wordsPerPage.toFixed(1)}/page), trying OCR...`);
+    const ocrResult = await extractFromPDFWithOCR(buffer);
+    
+    // If OCR got more text, use it; otherwise use what we have
+    if (ocrResult.success && ocrResult.wordCount && ocrResult.wordCount > wordCount) {
+      console.log(`[TextExtraction] OCR improved extraction: ${ocrResult.wordCount} words (was ${wordCount})`);
+      return {
+        ...ocrResult,
+        pageCount: data.numpages,
+      };
+    }
+    
+    // OCR didn't help, return original (might just be a short document)
     return {
       success: true,
       text: data.text,
       pageCount: data.numpages,
-      wordCount: data.text.split(/\s+/).filter(w => w.length > 0).length,
+      wordCount,
       fileType: 'pdf',
     };
   } catch (error) {
+    // Regular extraction failed, try OCR as last resort
+    console.log('[TextExtraction] Regular PDF extraction failed, attempting OCR...');
+    const ocrResult = await extractFromPDFWithOCR(buffer);
+    if (ocrResult.success) {
+      return ocrResult;
+    }
+    
     return {
       success: false,
       text: '',
