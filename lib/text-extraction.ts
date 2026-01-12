@@ -131,7 +131,7 @@ async function extractFromPDFWithOCR(buffer: Buffer): Promise<ExtractionResult> 
     // Collect all images from all pages
     const allImages: Array<{ data: Uint8ClampedArray; width: number; height: number; channels: 1 | 3 | 4 }> = [];
     
-    for (let pageNum = 1; pageNum <= Math.min(numPages, 10); pageNum++) { // Limit to first 10 pages
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) { // Process all pages
       try {
         const pageImages = await extractImages(pdf, pageNum);
         allImages.push(...pageImages);
@@ -156,10 +156,10 @@ async function extractFromPDFWithOCR(buffer: Buffer): Promise<ExtractionResult> 
     const openai = new OpenAI({ apiKey });
     const extractedTexts: string[] = [];
 
-    // Process images one at a time (they can be large)
-    const maxImages = Math.min(allImages.length, 10); // Limit to first 10 images
+    // Process all images
+    console.log(`[TextExtraction] Processing ${allImages.length} images with Vision OCR...`);
     
-    for (let i = 0; i < maxImages; i++) {
+    for (let i = 0; i < allImages.length; i++) {
       const img = allImages[i];
       
       try {
