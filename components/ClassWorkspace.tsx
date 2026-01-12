@@ -7,7 +7,7 @@ import {
   Plus, Upload, ChevronRight, Clock, Users, CheckCircle,
   AlertCircle, Play, Calendar, Loader2, Trash2, Edit3,
   BookOpen, GraduationCap, FolderOpen, Sparkles, MoreVertical,
-  AlertTriangle
+  AlertTriangle, Video
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -40,7 +40,7 @@ interface Document {
   courseId: string;
   assignmentId?: string;
   name: string;
-  type: 'lecture_notes' | 'reading' | 'slides' | 'policy' | 'example' | 'other' | 'rubric';
+  type: 'lecture_notes' | 'reading' | 'slides' | 'policy' | 'example' | 'recording' | 'other' | 'rubric';
   createdAt: number;
 }
 
@@ -73,6 +73,7 @@ const MATERIAL_TYPES = {
   lecture_notes: { icon: BookOpen, label: 'Lecture Notes', color: 'bg-blue-100 text-blue-600' },
   slides: { icon: Presentation, label: 'Slides', color: 'bg-amber-100 text-amber-600' },
   reading: { icon: Book, label: 'Readings', color: 'bg-emerald-100 text-emerald-600' },
+  recording: { icon: Video, label: 'Class Recordings', color: 'bg-pink-100 text-pink-600' },
   policy: { icon: ScrollText, label: 'Policies', color: 'bg-red-100 text-red-600' },
   example: { icon: FileText, label: 'Examples', color: 'bg-cyan-100 text-cyan-600' },
   other: { icon: FolderOpen, label: 'Other', color: 'bg-surface-100 text-surface-600' },

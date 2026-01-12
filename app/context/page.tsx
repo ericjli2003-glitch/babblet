@@ -143,7 +143,7 @@ function CourseContextPageContent() {
 
   // Class Workspace document upload modal
   const [showDocumentUpload, setShowDocumentUpload] = useState(false);
-  const [uploadDocType, setUploadDocType] = useState<'lecture_notes' | 'slides' | 'reading' | 'policy' | 'example' | 'other'>('lecture_notes');
+  const [uploadDocType, setUploadDocType] = useState<'lecture_notes' | 'slides' | 'reading' | 'policy' | 'example' | 'recording' | 'other'>('lecture_notes');
   const [uploadDocFiles, setUploadDocFiles] = useState<File[]>([]);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
@@ -1167,6 +1167,7 @@ function CourseContextPageContent() {
                             <option value="lecture_notes">Lecture Notes</option>
                             <option value="slides">Slides</option>
                             <option value="reading">Reading</option>
+                            <option value="recording">Class Recording</option>
                             <option value="policy">Policy</option>
                             <option value="example">Example</option>
                             <option value="other">Other</option>
@@ -1186,14 +1187,14 @@ function CourseContextPageContent() {
                               Click to select files or drag and drop
                             </p>
                             <p className="text-xs text-surface-400 mt-1">
-                              PDF, DOC, DOCX, PPTX, TXT, MD
+                              PDF, DOCX, PPTX, TXT, MD, MP3, MP4, WAV
                             </p>
                           </div>
                           <input
                             ref={documentInputRef}
                             type="file"
                             multiple
-                            accept=".pdf,.doc,.docx,.pptx,.ppt,.txt,.md"
+                            accept=".pdf,.doc,.docx,.pptx,.ppt,.txt,.md,.mp3,.wav,.m4a,.mp4,.webm,.mov"
                             onChange={handleDocumentFileSelect}
                             className="hidden"
                           />
@@ -1732,7 +1733,7 @@ Presentation within time limits"
                             ref={fileInputRef}
                             type="file"
                             multiple
-                            accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md"
+                            accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md,.mp3,.wav,.m4a,.mp4,.webm,.mov"
                             onChange={handleFileSelect}
                             className="hidden"
                           />
@@ -1745,7 +1746,7 @@ Presentation within time limits"
                               Click to select files <span className="text-surface-400">(multiple allowed)</span>
                             </p>
                             <p className="text-xs text-surface-500 mt-1">
-                              PDF, DOC, DOCX, PPTX, TXT, MD
+                              PDF, DOCX, PPTX, TXT, MD, MP3, MP4, WAV
                             </p>
                           </div>
 
@@ -1805,6 +1806,7 @@ Presentation within time limits"
                             <option value="lecture_notes">Lecture Notes</option>
                             <option value="reading">Reading</option>
                             <option value="slides">Slides</option>
+                            <option value="recording">Class Recording</option>
                             <option value="policy">Policy</option>
                             <option value="example">Example</option>
                             <option value="other">Other</option>
@@ -1827,6 +1829,7 @@ Presentation within time limits"
                             <option value="lecture_notes">Lecture Notes</option>
                             <option value="reading">Reading</option>
                             <option value="slides">Slides</option>
+                            <option value="recording">Class Recording</option>
                             <option value="policy">Policy</option>
                             <option value="example">Example</option>
                             <option value="other">Other</option>

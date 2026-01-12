@@ -30,7 +30,7 @@ async function parsePDF(buffer: Buffer): Promise<{ text: string; numpages: numbe
   }
 }
 
-export type SupportedFileType = 'pdf' | 'docx' | 'pptx' | 'txt' | 'md' | 'unknown';
+export type SupportedFileType = 'pdf' | 'docx' | 'pptx' | 'txt' | 'md' | 'audio' | 'video' | 'unknown';
 
 export interface ExtractionResult {
   success: boolean;
@@ -46,6 +46,10 @@ export interface ExtractionResult {
 // File Type Detection
 // ============================================
 
+// Audio/video extensions for transcription
+const AUDIO_EXTENSIONS = ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'wma'];
+const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'm4v', 'wmv'];
+
 export function detectFileType(filename: string, mimeType?: string): SupportedFileType {
   const ext = filename.toLowerCase().split('.').pop();
   
@@ -57,6 +61,8 @@ export function detectFileType(filename: string, mimeType?: string): SupportedFi
   if (ext === 'ppt') return 'pptx'; // Try officeparser for .ppt too
   if (ext === 'txt') return 'txt';
   if (ext === 'md' || ext === 'markdown') return 'md';
+  if (ext && AUDIO_EXTENSIONS.includes(ext)) return 'audio';
+  if (ext && VIDEO_EXTENSIONS.includes(ext)) return 'video';
   
   // Fall back to mime type
   if (mimeType) {
@@ -64,9 +70,16 @@ export function detectFileType(filename: string, mimeType?: string): SupportedFi
     if (mimeType.includes('wordprocessingml') || mimeType === 'application/msword') return 'docx';
     if (mimeType.includes('presentationml') || mimeType === 'application/vnd.ms-powerpoint') return 'pptx';
     if (mimeType.startsWith('text/')) return 'txt';
+    if (mimeType.startsWith('audio/')) return 'audio';
+    if (mimeType.startsWith('video/')) return 'video';
   }
   
   return 'unknown';
+}
+
+export function isAudioVideoFile(filename: string): boolean {
+  const ext = filename.toLowerCase().split('.').pop();
+  return ext ? [...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS].includes(ext) : false;
 }
 
 // ============================================
@@ -213,6 +226,91 @@ async function extractFromPPTX(buffer: Buffer): Promise<ExtractionResult> {
 }
 
 // ============================================
+// Audio/Video Transcription using Deepgram
+// ============================================
+
+async function transcribeAudioVideo(buffer: Buffer, filename: string): Promise<ExtractionResult> {
+  const fileType = detectFileType(filename);
+  
+  try {
+    // Check if Deepgram is configured
+    const apiKey = process.env.DEEPGRAM_API_KEY;
+    if (!apiKey) {
+      return {
+        success: false,
+        text: '',
+        error: 'Deepgram API not configured. Set DEEPGRAM_API_KEY environment variable.',
+        fileType: fileType as SupportedFileType,
+      };
+    }
+
+    console.log(`[TextExtraction] Transcribing ${fileType} file: ${filename} (${(buffer.length / 1024 / 1024).toFixed(2)} MB)`);
+
+    // Dynamic import to avoid loading Deepgram when not needed
+    const { createClient } = await import('@deepgram/sdk');
+    const deepgram = createClient(apiKey);
+
+    // Deepgram can handle audio/video files directly
+    const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
+      buffer,
+      {
+        model: 'nova-2',
+        language: 'en',
+        smart_format: true,
+        punctuate: true,
+        paragraphs: true,
+        diarize: true, // Speaker detection for lectures
+        utterances: true, // Get utterance-level timestamps
+      }
+    );
+
+    if (error) {
+      console.error('[TextExtraction] Deepgram transcription error:', error);
+      return {
+        success: false,
+        text: '',
+        error: `Transcription failed: ${error.message}`,
+        fileType: fileType as SupportedFileType,
+      };
+    }
+
+    // Extract full transcript
+    const transcript = result?.results?.channels?.[0]?.alternatives?.[0]?.transcript || '';
+    const text = transcript.trim();
+
+    if (!text) {
+      return {
+        success: false,
+        text: '',
+        error: 'No speech detected in the audio/video file',
+        fileType: fileType as SupportedFileType,
+      };
+    }
+
+    // Get duration from metadata if available
+    const duration = result?.metadata?.duration;
+    const durationStr = duration ? ` (${Math.round(duration / 60)} minutes)` : '';
+    
+    console.log(`[TextExtraction] Transcription complete: ${text.split(/\s+/).length} words${durationStr}`);
+
+    return {
+      success: true,
+      text,
+      wordCount: text.split(/\s+/).filter((w: string) => w.length > 0).length,
+      fileType: fileType as SupportedFileType,
+    };
+  } catch (error) {
+    console.error('[TextExtraction] Transcription error:', error);
+    return {
+      success: false,
+      text: '',
+      error: error instanceof Error ? error.message : 'Transcription failed',
+      fileType: fileType as SupportedFileType,
+    };
+  }
+}
+
+// ============================================
 // Plain Text Extraction
 // ============================================
 
@@ -254,6 +352,9 @@ export async function extractText(
       return extractFromDOCX(buffer);
     case 'pptx':
       return extractFromPPTX(buffer);
+    case 'audio':
+    case 'video':
+      return transcribeAudioVideo(buffer, filename);
     case 'txt':
     case 'md':
       return extractFromText(buffer);
@@ -305,7 +406,13 @@ export async function extractTextFromUrl(
 // Get Supported Extensions
 // ============================================
 
-export const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.doc', '.pptx', '.ppt', '.txt', '.md'];
+export const SUPPORTED_EXTENSIONS = [
+  '.pdf', '.docx', '.doc', '.pptx', '.ppt', '.txt', '.md',
+  // Audio files
+  '.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac', '.wma',
+  // Video files
+  '.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v', '.wmv',
+];
 
 export function isSupportedFile(filename: string): boolean {
   const ext = '.' + filename.toLowerCase().split('.').pop();
