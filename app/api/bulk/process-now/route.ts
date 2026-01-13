@@ -2,12 +2,12 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // Allow up to 5 minutes for processing (Vercel Pro)
 
 import { NextRequest, NextResponse } from 'next/server';
-import { 
-  getQueueLength, 
-  getNextQueuedSubmission, 
-  getSubmission, 
-  updateSubmission, 
-  updateBatchStats, 
+import {
+  getQueueLength,
+  getNextQueuedSubmission,
+  getSubmission,
+  updateSubmission,
+  updateBatchStats,
   getBatch,
   getBatchSubmissions,
   requeue
@@ -18,16 +18,16 @@ import { verifyWithClaude } from '@/lib/verify';
 import { createClient } from '@deepgram/sdk';
 import { config } from '@/lib/config';
 import { getGradingContext, type GradingContext } from '@/lib/context-store';
-import { 
-  retrieveContextForGrading, 
+import {
+  retrieveContextForGrading,
   retrieveContextByCriterion,
-  isEmbeddingsConfigured, 
+  isEmbeddingsConfigured,
   type RetrievalResult,
   type CriterionRetrievalResult,
 } from '@/lib/embeddings';
 
-// Maximum submissions to process per request
-const MAX_PROCESS_PER_REQUEST = 2;
+// Maximum submissions to process IN PARALLEL per request
+const MAX_PARALLEL_SUBMISSIONS = 3;
 
 // Lazy Deepgram client
 let deepgramClient: ReturnType<typeof createClient> | null = null;
@@ -46,7 +46,7 @@ async function transcribeFromUrl(url: string): Promise<{
   segments: Array<{ id: string; text: string; timestamp: number; speaker?: string }>;
 }> {
   const deepgram = getDeepgram();
-  
+
   const { result, error } = await deepgram.listen.prerecorded.transcribeUrl(
     { url },
     { model: 'nova-2', language: 'en', smart_format: true, punctuate: true, diarize: true, paragraphs: true }
@@ -60,7 +60,7 @@ async function transcribeFromUrl(url: string): Promise<{
 
   const transcript = alternative.transcript || '';
   const segments: Array<{ id: string; text: string; timestamp: number; speaker?: string }> = [];
-  
+
   if (alternative.paragraphs?.paragraphs) {
     alternative.paragraphs.paragraphs.forEach((para, i) => {
       (para.sentences || []).forEach((sent, j) => {
@@ -80,7 +80,7 @@ async function transcribeFromUrl(url: string): Promise<{
 async function processSubmission(submissionId: string): Promise<{ success: boolean; error?: string }> {
   const startTime = Date.now();
   const submission = await getSubmission(submissionId);
-  
+
   if (!submission) {
     console.error(`[ProcessNow] Submission ${submissionId} not found`);
     return { success: false, error: 'Submission not found' };
@@ -105,36 +105,36 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
     // Analyze with Babblet AI
     if (isClaudeConfigured()) {
       console.log(`[ProcessNow] Analyzing ${submissionId}...`);
-      
+
       const batch = await getBatch(submission.batchId);
-      
+
       // Get grading context if available
       let gradingContext: GradingContext | null = null;
       const bundleVersionId = submission.bundleVersionId || batch?.bundleVersionId;
-      
+
       if (bundleVersionId) {
         gradingContext = await getGradingContext(bundleVersionId);
         if (gradingContext) {
           console.log(`[ProcessNow] Using context v${gradingContext.bundleVersion} for ${submissionId}`);
         }
       }
-      
+
       const analysis = await analyzeWithClaude(transcript);
-      
+
       // Build rubric criteria from context or batch
       let rubricCriteria = batch?.rubricCriteria;
       if (gradingContext) {
         // Use structured rubric from context
         rubricCriteria = gradingContext.rubricJSON;
       }
-      
+
       // Build assignment context for better evaluation
       let assignmentContext = '';
       let retrievedContext: RetrievalResult | null = null;
-      
+
       // Criterion-level retrieval for better context mapping
       let criterionRetrievalResult: CriterionRetrievalResult | null = null;
-      
+
       // Retrieval quality metrics for logging
       let retrievalMetrics = {
         chunksRetrieved: 0,
@@ -143,13 +143,13 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
         usedFallback: false,
         contextCharsUsed: 0,
       };
-      
+
       if (gradingContext) {
         assignmentContext = `${gradingContext.assignmentSummary}\n\n${gradingContext.evaluationGuidance || ''}`;
-        
+
         // Get course summary for fallback
         const courseSummary = gradingContext.courseSummary;
-        
+
         // Retrieve relevant document chunks using embeddings
         if (isEmbeddingsConfigured() && batch?.courseId) {
           try {
@@ -167,7 +167,7 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
                 undefined, // Use default chunks per criterion
                 courseSummary // Pass course summary for fallback
               );
-              
+
               // Track retrieval metrics
               retrievalMetrics = {
                 chunksRetrieved: criterionRetrievalResult.totalChunksRetrieved,
@@ -176,7 +176,7 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
                 usedFallback: criterionRetrievalResult.averageRelevance < 0.25 && !!courseSummary,
                 contextCharsUsed: criterionRetrievalResult.contextCharsUsed,
               };
-              
+
               // Use formatted context from enhanced retrieval
               retrievedContext = {
                 chunks: [],
@@ -186,7 +186,7 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
                 highConfidenceCount: criterionRetrievalResult.highConfidenceCount,
                 usedFallback: retrievalMetrics.usedFallback,
               };
-              
+
               console.log(`[ProcessNow] Context retrieval: ${retrievalMetrics.chunksRetrieved} chunks, ` +
                 `avg relevance=${retrievalMetrics.averageRelevance.toFixed(2)}, ` +
                 `high-confidence=${retrievalMetrics.highConfidenceCount}, ` +
@@ -201,7 +201,7 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
                 5,
                 courseSummary // Pass course summary for fallback
               );
-              
+
               retrievalMetrics = {
                 chunksRetrieved: retrievedContext.chunks.length,
                 averageRelevance: retrievedContext.averageRelevance,
@@ -210,7 +210,7 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
                 contextCharsUsed: retrievedContext.formattedContext.length,
               };
             }
-            
+
             if (retrievedContext?.formattedContext) {
               assignmentContext += `\n\n--- RELEVANT COURSE MATERIALS ---\n${retrievedContext.formattedContext}`;
             }
@@ -225,15 +225,15 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
           }
         }
       }
-      
+
       // Parallel: rubric, questions, verify
       const claims = analysis.keyClaims.slice(0, config.limits.maxClaimsForVerification).map(c => c.claim);
-      
+
       // Combine rubric criteria with assignment context for evaluation
       const fullRubricContext = assignmentContext
         ? `${rubricCriteria || ''}\n\n--- ASSIGNMENT CONTEXT ---\n${assignmentContext}`
         : rubricCriteria;
-      
+
       // Build professor context for subject-matter evaluation
       const professorContext: ProfessorContext | undefined = gradingContext?.course ? {
         courseName: gradingContext.course.name,
@@ -246,7 +246,7 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
         classMaterials: gradingContext.documentContext,
         evaluationGuidance: gradingContext.evaluationGuidance,
       } : undefined;
-      
+
       // Build grading scale config from rubric
       const gradingScaleConfig: GradingScaleConfig | undefined = gradingContext?.rubric?.gradingScale ? {
         type: gradingContext.rubric.gradingScale.type,
@@ -254,7 +254,7 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
         letterGrades: gradingContext.rubric.gradingScale.letterGrades,
         bands: gradingContext.rubric.gradingScale.bands,
       } : undefined;
-      
+
       const [rubricResult, questionsResult, verifyResult] = await Promise.allSettled([
         evaluateWithClaude(transcript, fullRubricContext, undefined, analysis, segments, professorContext, gradingScaleConfig),
         generateQuestionsWithClaude(transcript, analysis, undefined, { maxQuestions: config.limits.defaultMaxQuestions }),
@@ -291,8 +291,8 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
             // Find criterion-level citations for this criterion
             const criterionCites = criterionRetrievalResult?.criterionCitations.find(
               cc => cc.criterionName.toLowerCase() === c.criterion.toLowerCase() ||
-                   cc.criterionName.includes(c.criterion) ||
-                   c.criterion.includes(cc.criterionName)
+                cc.criterionName.includes(c.criterion) ||
+                c.criterion.includes(cc.criterionName)
             );
             // Include all enhanced data (criterionId, transcriptRefs, maxScore, etc.)
             return {
@@ -306,20 +306,20 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
             };
           }),
           // Collect strengths and improvements with their deep-linking data
-          strengths: rubricEvaluation.criteriaBreakdown?.flatMap(c => 
-            ((c as any).strengths || []).map((s: any) => 
-              typeof s === 'string' ? s : { 
-                text: s.text, 
+          strengths: rubricEvaluation.criteriaBreakdown?.flatMap(c =>
+            ((c as any).strengths || []).map((s: any) =>
+              typeof s === 'string' ? s : {
+                text: s.text,
                 criterionId: s.criterionId || (c as any).criterionId,
                 criterionName: s.criterionName || c.criterion,
                 transcriptRefs: s.transcriptRefs,
               }
             )
           ) || [],
-          improvements: rubricEvaluation.criteriaBreakdown?.flatMap(c => 
-            ((c as any).improvements || []).map((s: any) => 
-              typeof s === 'string' ? s : { 
-                text: s.text, 
+          improvements: rubricEvaluation.criteriaBreakdown?.flatMap(c =>
+            ((c as any).improvements || []).map((s: any) =>
+              typeof s === 'string' ? s : {
+                text: s.text,
                 criterionId: s.criterionId || (c as any).criterionId,
                 criterionName: s.criterionName || c.criterion,
                 transcriptRefs: s.transcriptRefs,
@@ -355,72 +355,93 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
 // POST /api/bulk/process-now - Process submissions directly (no auth needed)
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  
+
   try {
     // Check for batchId param to re-queue stuck submissions
     const { searchParams } = new URL(request.url);
     const batchId = searchParams.get('batchId');
-    
+
     let queueLength = await getQueueLength();
     console.log(`[ProcessNow] Initial queue length: ${queueLength}`);
-    
+
     // If queue is empty but batchId provided, re-queue stuck submissions
     if (queueLength === 0 && batchId) {
       console.log(`[ProcessNow] Queue empty, checking for stuck submissions in batch ${batchId}`);
       const submissions = await getBatchSubmissions(batchId);
       const stuckSubmissions = submissions.filter(s => s.status === 'queued');
-      
+
       console.log(`[ProcessNow] Found ${stuckSubmissions.length} stuck submissions`);
-      
+
       for (const sub of stuckSubmissions) {
         await requeue(sub.id);
         console.log(`[ProcessNow] Re-queued submission ${sub.id}`);
       }
-      
+
       queueLength = await getQueueLength();
       console.log(`[ProcessNow] Queue length after re-queue: ${queueLength}`);
     }
-    
+
     if (queueLength === 0) {
-      return NextResponse.json({ 
-        success: true, 
+      return NextResponse.json({
+        success: true,
         message: 'Queue is empty, nothing to process',
-        processed: 0 
+        processed: 0
       });
     }
 
     // Check dependencies
     if (!isR2Configured()) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'R2 storage not configured' 
+      return NextResponse.json({
+        success: false,
+        error: 'R2 storage not configured'
       }, { status: 500 });
     }
 
     if (!process.env.DEEPGRAM_API_KEY) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'DEEPGRAM_API_KEY not configured' 
+      return NextResponse.json({
+        success: false,
+        error: 'DEEPGRAM_API_KEY not configured'
       }, { status: 500 });
     }
 
-    // Process submissions directly - one at a time for reliability
+    // Grab up to N submissions from queue for parallel processing
+    const submissionIds: string[] = [];
+    for (let i = 0; i < MAX_PARALLEL_SUBMISSIONS; i++) {
+      const submissionId = await getNextQueuedSubmission();
+      if (!submissionId) break;
+      submissionIds.push(submissionId);
+    }
+
+    if (submissionIds.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: 'No submissions available to process',
+        processed: 0
+      });
+    }
+
+    console.log(`[ProcessNow] Processing ${submissionIds.length} submissions IN PARALLEL: ${submissionIds.join(', ')}`);
+
+    // Process all submissions in parallel
+    const results = await Promise.allSettled(
+      submissionIds.map(id => processSubmission(id))
+    );
+
+    // Collect results
     const processed: string[] = [];
     const errors: Array<{ id: string; error: string }> = [];
 
-    for (let i = 0; i < MAX_PROCESS_PER_REQUEST; i++) {
-      const submissionId = await getNextQueuedSubmission();
-      if (!submissionId) break;
-
-      console.log(`[ProcessNow] Processing submission ${i + 1}/${MAX_PROCESS_PER_REQUEST}: ${submissionId}`);
-      
-      const result = await processSubmission(submissionId);
-      if (result.success) {
+    results.forEach((result, index) => {
+      const submissionId = submissionIds[index];
+      if (result.status === 'fulfilled' && result.value.success) {
         processed.push(submissionId);
       } else {
-        errors.push({ id: submissionId, error: result.error || 'Unknown' });
+        const errorMsg = result.status === 'rejected' 
+          ? (result.reason?.message || 'Unknown error')
+          : (result.value.error || 'Unknown error');
+        errors.push({ id: submissionId, error: errorMsg });
       }
-    }
+    });
 
     const duration = Date.now() - startTime;
     console.log(`[ProcessNow] Completed. Processed: ${processed.length}, Errors: ${errors.length}, Duration: ${duration}ms`);
@@ -447,11 +468,11 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   try {
     const queueLength = await getQueueLength();
-    
+
     return NextResponse.json({
       success: true,
       queueLength,
-      maxPerRequest: MAX_PROCESS_PER_REQUEST,
+      maxParallel: MAX_PARALLEL_SUBMISSIONS,
       r2Configured: isR2Configured(),
       deepgramConfigured: !!process.env.DEEPGRAM_API_KEY,
       claudeConfigured: isClaudeConfigured(),
