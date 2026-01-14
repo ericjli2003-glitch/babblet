@@ -26,8 +26,9 @@ import {
   type CriterionRetrievalResult,
 } from '@/lib/embeddings';
 
-// Maximum submissions to process IN PARALLEL per request
-const MAX_PARALLEL_SUBMISSIONS = 3;
+// Process 1 submission per request - frontend fires multiple parallel requests
+// This gives each video its own 300s timeout
+const MAX_PER_REQUEST = 1;
 
 // Lazy Deepgram client
 let deepgramClient: ReturnType<typeof createClient> | null = null;
@@ -404,15 +405,10 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Grab up to N submissions from queue for parallel processing
-    const submissionIds: string[] = [];
-    for (let i = 0; i < MAX_PARALLEL_SUBMISSIONS; i++) {
-      const submissionId = await getNextQueuedSubmission();
-      if (!submissionId) break;
-      submissionIds.push(submissionId);
-    }
-
-    if (submissionIds.length === 0) {
+    // Get next queued submission
+    const submissionId = await getNextQueuedSubmission();
+    
+    if (!submissionId) {
       return NextResponse.json({
         success: true,
         message: 'No submissions available to process',
@@ -420,28 +416,19 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    console.log(`[ProcessNow] Processing ${submissionIds.length} submissions IN PARALLEL: ${submissionIds.join(', ')}`);
+    console.log(`[ProcessNow] Processing submission: ${submissionId}`);
 
-    // Process all submissions in parallel
-    const results = await Promise.allSettled(
-      submissionIds.map(id => processSubmission(id))
-    );
+    // Process single submission (frontend fires multiple parallel requests)
+    const result = await processSubmission(submissionId);
 
-    // Collect results
     const processed: string[] = [];
     const errors: Array<{ id: string; error: string }> = [];
 
-    results.forEach((result, index) => {
-      const submissionId = submissionIds[index];
-      if (result.status === 'fulfilled' && result.value.success) {
-        processed.push(submissionId);
-      } else {
-        const errorMsg = result.status === 'rejected' 
-          ? (result.reason?.message || 'Unknown error')
-          : (result.value.error || 'Unknown error');
-        errors.push({ id: submissionId, error: errorMsg });
-      }
-    });
+    if (result.success) {
+      processed.push(submissionId);
+    } else {
+      errors.push({ id: submissionId, error: result.error || 'Unknown error' });
+    }
 
     const duration = Date.now() - startTime;
     console.log(`[ProcessNow] Completed. Processed: ${processed.length}, Errors: ${errors.length}, Duration: ${duration}ms`);
@@ -472,7 +459,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       queueLength,
-      maxParallel: MAX_PARALLEL_SUBMISSIONS,
+      maxPerRequest: MAX_PER_REQUEST,
       r2Configured: isR2Configured(),
       deepgramConfigured: !!process.env.DEEPGRAM_API_KEY,
       claudeConfigured: isClaudeConfigured(),

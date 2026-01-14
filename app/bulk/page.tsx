@@ -916,15 +916,25 @@ function BulkUploadPageContent() {
         ? `/api/bulk/process-now?batchId=${selectedBatchId}`
         : '/api/bulk/process-now';
 
-      const res = await fetch(url, { method: 'POST' });
+      // Fire 3 parallel requests - each gets its own 300s timeout
+      // This allows processing 3 videos simultaneously without timeout issues
+      const PARALLEL_REQUESTS = 3;
+      
+      console.log(`[Bulk] Firing ${PARALLEL_REQUESTS} parallel processing requests...`);
+      
+      const results = await Promise.allSettled(
+        Array(PARALLEL_REQUESTS).fill(null).map(() => 
+          fetch(url, { method: 'POST' }).then(res => res.json())
+        )
+      );
 
-      if (!res.ok) {
-        console.error(`[Bulk] Processing failed with status ${res.status}`);
-        return;
-      }
-
-      const data = await res.json();
-      console.log('[Bulk] Processing triggered:', data);
+      results.forEach((result, i) => {
+        if (result.status === 'fulfilled') {
+          console.log(`[Bulk] Request ${i + 1} completed:`, result.value);
+        } else {
+          console.error(`[Bulk] Request ${i + 1} failed:`, result.reason);
+        }
+      });
 
       // Refresh immediately
       if (selectedBatchId) {
