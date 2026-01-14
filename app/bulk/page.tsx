@@ -588,7 +588,7 @@ function BulkUploadPageContent() {
             // Check if this file exists in local state
             const existing = prev.find(f => f.submissionId === sub.id || f.filename === sub.originalFilename);
             const serverStage = serverStatusToStage(sub.status);
-            
+
             // Use the more advanced stage (don't let stale server data regress local state)
             const localPriority = existing ? stagePriority[existing.stage] : 0;
             const serverPriority = stagePriority[serverStage];
@@ -935,48 +935,72 @@ function BulkUploadPageContent() {
         ? `/api/bulk/process-now?batchId=${selectedBatchId}`
         : '/api/bulk/process-now';
 
-      // Fire 3 parallel requests - each gets its own 300s timeout
-      // This allows processing 3 videos simultaneously without timeout issues
-      const PARALLEL_REQUESTS = 3;
-
-      console.log(`[Bulk] Firing ${PARALLEL_REQUESTS} parallel processing requests...`);
-
-      const results = await Promise.allSettled(
-        Array(PARALLEL_REQUESTS).fill(null).map(() =>
-          fetch(url, { method: 'POST' }).then(res => res.json())
-        )
-      );
-
-      // Collect all successfully processed submission IDs
-      const completedIds: string[] = [];
+      // Count how many files need processing
+      const queuedCount = pipeline.filter(f => 
+        f.stage === 'queued' || f.stage === 'transcribing' || f.stage === 'analyzing'
+      ).length;
       
-      results.forEach((result, i) => {
-        if (result.status === 'fulfilled') {
-          console.log(`[Bulk] Request ${i + 1} completed:`, result.value);
-          // Extract processed IDs from response
-          if (result.value?.processedIds) {
-            completedIds.push(...result.value.processedIds);
-          }
-        } else {
-          console.error(`[Bulk] Request ${i + 1} failed:`, result.reason);
-        }
-      });
+      // Fire parallel requests for ALL queued files (max 5 at a time for safety)
+      const PARALLEL_REQUESTS = Math.min(Math.max(queuedCount, 3), 5);
 
-      // Immediately update local pipeline state for completed submissions
-      // This ensures UI updates even if server sync has stale data
-      if (completedIds.length > 0) {
-        console.log(`[Bulk] Marking ${completedIds.length} submissions as complete locally:`, completedIds);
-        setPipeline(prev => prev.map(f => {
-          if (f.submissionId && completedIds.includes(f.submissionId)) {
-            return { ...f, stage: 'complete' as const };
+      console.log(`[Bulk] Firing ${PARALLEL_REQUESTS} parallel processing requests for ${queuedCount} queued files...`);
+
+      const allCompletedIds: string[] = [];
+      let hasMoreToProcess = true;
+      let round = 1;
+
+      // Keep processing in rounds until queue is empty
+      while (hasMoreToProcess && round <= 10) { // Max 10 rounds to prevent infinite loop
+        console.log(`[Bulk] Processing round ${round}...`);
+        
+        const results = await Promise.allSettled(
+          Array(PARALLEL_REQUESTS).fill(null).map(() =>
+            fetch(url, { method: 'POST' }).then(res => res.json())
+          )
+        );
+
+        let processedThisRound = 0;
+        let remainingInQueue = 0;
+
+        results.forEach((result, i) => {
+          if (result.status === 'fulfilled') {
+            console.log(`[Bulk] Round ${round} Request ${i + 1}:`, result.value);
+            if (result.value?.processedIds) {
+              allCompletedIds.push(...result.value.processedIds);
+              processedThisRound += result.value.processedIds.length;
+            }
+            if (result.value?.remainingInQueue !== undefined) {
+              remainingInQueue = Math.max(remainingInQueue, result.value.remainingInQueue);
+            }
+          } else {
+            console.error(`[Bulk] Round ${round} Request ${i + 1} failed:`, result.reason);
           }
-          return f;
-        }));
+        });
+
+        // Update UI with completed so far
+        if (allCompletedIds.length > 0) {
+          setPipeline(prev => prev.map(f => {
+            if (f.submissionId && allCompletedIds.includes(f.submissionId)) {
+              return { ...f, stage: 'complete' as const };
+            }
+            return f;
+          }));
+        }
+
+        // Check if we should continue
+        hasMoreToProcess = remainingInQueue > 0 && processedThisRound > 0;
+        round++;
+        
+        // Small delay between rounds to let server breathe
+        if (hasMoreToProcess) {
+          await new Promise(r => setTimeout(r, 500));
+        }
       }
 
-      // Also sync with server to get full details (scores, etc.)
+      console.log(`[Bulk] Finished processing. Total completed: ${allCompletedIds.length}`);
+
+      // Sync with server to get full details (scores, etc.)
       if (selectedBatchId) {
-        // Delayed syncs to get full data after KV propagates
         setTimeout(() => syncPipelineWithServer(selectedBatchId, { silent: true }), 2000);
         setTimeout(() => syncPipelineWithServer(selectedBatchId, { silent: true }), 5000);
       }
