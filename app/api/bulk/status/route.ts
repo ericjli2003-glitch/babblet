@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getBatch, getBatchSubmissions, getQueueLength, getSubmission } from '@/lib/batch-store';
+import { getBatch, getBatchSubmissions, getQueueLength, getSubmission, updateBatch } from '@/lib/batch-store';
 import { kv } from '@vercel/kv';
 
 export async function GET(request: NextRequest) {
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'batchId is required' }, { status: 400 });
     }
 
-    const batch = await getBatch(batchId);
+    let batch = await getBatch(batchId);
     if (!batch) {
       return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
     }
@@ -25,11 +25,11 @@ export async function GET(request: NextRequest) {
     let submissions = await getBatchSubmissions(batchId);
     console.log(`[Status] BatchId=${batchId} Found ${submissions.length} submissions from set`);
     
-    // If we have 0 submissions but batch says there are some, try to find them from queue
+    // If we have 0 submissions but batch says there are some, try to recover
     if (submissions.length === 0 && batch.totalSubmissions > 0) {
-      console.log(`[Status] Mismatch detected. Batch has ${batch.totalSubmissions} but found 0 submissions. Checking queue...`);
+      console.log(`[Status] Mismatch detected. Batch has ${batch.totalSubmissions} but found 0 submissions.`);
       
-      // Try to get submissions from the queue
+      // Try 1: Check the queue for queued submissions
       const queueItems = await kv.lrange('submission_queue', 0, -1);
       console.log(`[Status] Queue items:`, queueItems);
       
@@ -37,10 +37,47 @@ export async function GET(request: NextRequest) {
         const sub = await getSubmission(subId as string);
         if (sub && sub.batchId === batchId) {
           submissions.push(sub);
-          // Also fix the set
           await kv.sadd(`batch_submissions:${batchId}`, subId);
-          console.log(`[Status] Recovered submission ${subId} and added to set`);
+          console.log(`[Status] Recovered submission ${subId} from queue`);
         }
+      }
+      
+      // Try 2: Scan for submission keys (expensive but necessary for recovery)
+      if (submissions.length === 0) {
+        console.log(`[Status] Scanning for orphaned submissions...`);
+        let cursor = 0;
+        let scanCount = 0;
+        const maxScans = 10; // Limit scans to avoid timeout
+        
+        do {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const result: [number, string[]] = await kv.scan(cursor, { match: 'submission:*', count: 100 }) as any;
+          cursor = result[0];
+          const keys = result[1];
+          
+          for (const key of keys) {
+            const subId = key.replace('submission:', '');
+            const sub = await getSubmission(subId);
+            if (sub && sub.batchId === batchId) {
+              submissions.push(sub);
+              await kv.sadd(`batch_submissions:${batchId}`, subId);
+              console.log(`[Status] Recovered orphaned submission ${subId}`);
+            }
+          }
+          
+          scanCount++;
+        } while (cursor !== 0 && scanCount < maxScans);
+      }
+      
+      // If still no submissions found, update batch to reflect reality
+      if (submissions.length === 0) {
+        console.log(`[Status] No submissions recoverable. Resetting batch stats.`);
+        batch = await updateBatch(batchId, {
+          totalSubmissions: 0,
+          processedCount: 0,
+          failedCount: 0,
+          status: 'active',
+        }) || batch;
       }
     }
     
