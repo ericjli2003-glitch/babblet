@@ -563,6 +563,17 @@ function BulkUploadPageContent() {
           const serverSubmissions = data.submissions || [];
           const localPending = prev.filter(f => f.stage === 'pending' || f.stage === 'uploading');
 
+          // Stage priority: higher = more advanced in pipeline
+          const stagePriority: Record<PipelineStage, number> = {
+            'pending': 0,
+            'uploading': 1,
+            'queued': 2,
+            'transcribing': 3,
+            'analyzing': 4,
+            'complete': 5,
+            'failed': 5, // Failed is also terminal
+          };
+
           // Convert server submissions to pipeline format
           const serverFiles: PipelineFile[] = serverSubmissions.map((sub: {
             id: string;
@@ -574,8 +585,14 @@ function BulkUploadPageContent() {
             createdAt: number;
             completedAt?: number;
           }) => {
-            // Check if this file exists in local state (preserve upload progress)
+            // Check if this file exists in local state
             const existing = prev.find(f => f.submissionId === sub.id || f.filename === sub.originalFilename);
+            const serverStage = serverStatusToStage(sub.status);
+            
+            // Use the more advanced stage (don't let stale server data regress local state)
+            const localPriority = existing ? stagePriority[existing.stage] : 0;
+            const serverPriority = stagePriority[serverStage];
+            const useLocalStage = existing && localPriority > serverPriority;
 
             return {
               id: existing?.id || sub.id,
@@ -586,11 +603,13 @@ function BulkUploadPageContent() {
               uploadProgress: 100,
               uploadSpeed: 0,
               bytesUploaded: existing?.fileSize || 0,
-              stage: serverStatusToStage(sub.status),
+              // Prefer local stage if it's more advanced, otherwise use server
+              stage: useLocalStage ? existing.stage : serverStage,
               errorMessage: sub.errorMessage,
               addedAt: sub.createdAt,
               completedAt: sub.completedAt,
-              overallScore: sub.overallScore,
+              // Use server score if available, otherwise keep local
+              overallScore: sub.overallScore ?? existing?.overallScore,
               submissionId: sub.id,
             };
           });
@@ -928,22 +947,38 @@ function BulkUploadPageContent() {
         )
       );
 
+      // Collect all successfully processed submission IDs
+      const completedIds: string[] = [];
+      
       results.forEach((result, i) => {
         if (result.status === 'fulfilled') {
           console.log(`[Bulk] Request ${i + 1} completed:`, result.value);
+          // Extract processed IDs from response
+          if (result.value?.processedIds) {
+            completedIds.push(...result.value.processedIds);
+          }
         } else {
           console.error(`[Bulk] Request ${i + 1} failed:`, result.reason);
         }
       });
 
-      // Refresh multiple times to catch status updates
-      // Server may still be writing final status when requests complete
+      // Immediately update local pipeline state for completed submissions
+      // This ensures UI updates even if server sync has stale data
+      if (completedIds.length > 0) {
+        console.log(`[Bulk] Marking ${completedIds.length} submissions as complete locally:`, completedIds);
+        setPipeline(prev => prev.map(f => {
+          if (f.submissionId && completedIds.includes(f.submissionId)) {
+            return { ...f, stage: 'complete' as const };
+          }
+          return f;
+        }));
+      }
+
+      // Also sync with server to get full details (scores, etc.)
       if (selectedBatchId) {
-        // Immediate sync
-        syncPipelineWithServer(selectedBatchId, { silent: true });
-        // Delayed syncs to catch final status
-        setTimeout(() => syncPipelineWithServer(selectedBatchId, { silent: true }), 1000);
-        setTimeout(() => syncPipelineWithServer(selectedBatchId, { silent: true }), 3000);
+        // Delayed syncs to get full data after KV propagates
+        setTimeout(() => syncPipelineWithServer(selectedBatchId, { silent: true }), 2000);
+        setTimeout(() => syncPipelineWithServer(selectedBatchId, { silent: true }), 5000);
       }
     } catch (error) {
       console.error('[Bulk] Failed to trigger processing:', error);
