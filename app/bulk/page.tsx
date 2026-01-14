@@ -16,7 +16,7 @@ import Link from 'next/link';
 // ============================================
 
 const MAX_UPLOAD_CONCURRENCY = 3;
-const POLL_INTERVAL_MS = 3000;
+const POLL_INTERVAL_MS = 2000; // Poll every 2s for faster updates
 const ESTIMATED_TRANSCRIPTION_TIME_MS = 45000; // ~45s per file
 const ESTIMATED_ANALYSIS_TIME_MS = 30000; // ~30s per file
 
@@ -919,11 +919,11 @@ function BulkUploadPageContent() {
       // Fire 3 parallel requests - each gets its own 300s timeout
       // This allows processing 3 videos simultaneously without timeout issues
       const PARALLEL_REQUESTS = 3;
-      
+
       console.log(`[Bulk] Firing ${PARALLEL_REQUESTS} parallel processing requests...`);
-      
+
       const results = await Promise.allSettled(
-        Array(PARALLEL_REQUESTS).fill(null).map(() => 
+        Array(PARALLEL_REQUESTS).fill(null).map(() =>
           fetch(url, { method: 'POST' }).then(res => res.json())
         )
       );
@@ -936,9 +936,14 @@ function BulkUploadPageContent() {
         }
       });
 
-      // Refresh immediately
+      // Refresh multiple times to catch status updates
+      // Server may still be writing final status when requests complete
       if (selectedBatchId) {
+        // Immediate sync
         syncPipelineWithServer(selectedBatchId, { silent: true });
+        // Delayed syncs to catch final status
+        setTimeout(() => syncPipelineWithServer(selectedBatchId, { silent: true }), 1000);
+        setTimeout(() => syncPipelineWithServer(selectedBatchId, { silent: true }), 3000);
       }
     } catch (error) {
       console.error('[Bulk] Failed to trigger processing:', error);
