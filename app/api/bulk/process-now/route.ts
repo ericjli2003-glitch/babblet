@@ -425,10 +425,6 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[ProcessNow] Processing submission: ${submissionId}`);
-    // #region agent log
-    const poppedSub = await getSubmission(submissionId);
-    fetch('http://127.0.0.1:7242/ingest/4d4a084e-4174-46b3-8733-338fa5664bc9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'process-now/route.ts:420',message:'Popped submission - BATCH MISMATCH CHECK',data:{requestedBatchId:batchId,poppedSubBatchId:poppedSub?.batchId,submissionId,match:batchId===poppedSub?.batchId||!batchId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
 
     // Process single submission (frontend fires multiple parallel requests)
     const result = await processSubmission(submissionId);

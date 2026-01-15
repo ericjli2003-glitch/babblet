@@ -21,15 +21,9 @@ export async function GET(request: NextRequest) {
     // Debug: Check raw KV state
     const rawSubmissionIds = await kv.smembers(`batch_submissions:${batchId}`);
     console.log(`[Status] BatchId=${batchId} Raw submission IDs in set:`, rawSubmissionIds);
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/4d4a084e-4174-46b3-8733-338fa5664bc9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'status/route.ts:23',message:'Raw KV set members',data:{batchId,rawSubmissionIds,rawCount:rawSubmissionIds?.length||0,batchTotalSubmissions:batch.totalSubmissions},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
 
     let submissions = await getBatchSubmissions(batchId);
     console.log(`[Status] BatchId=${batchId} Found ${submissions.length} submissions from set`);
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/4d4a084e-4174-46b3-8733-338fa5664bc9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'status/route.ts:28',message:'getBatchSubmissions result',data:{batchId,submissionCount:submissions.length,submissionIds:submissions.map(s=>s.id),statuses:submissions.map(s=>s.status)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     
     // If submissions are missing vs batch stats, try to recover
     if (batch.totalSubmissions > submissions.length) {

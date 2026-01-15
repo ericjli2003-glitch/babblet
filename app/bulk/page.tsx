@@ -806,9 +806,6 @@ function BulkUploadPageContent() {
       }
 
       const enqueueData = await enqueueRes.json();
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/4d4a084e-4174-46b3-8733-338fa5664bc9', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'bulk/page.tsx:791', message: 'Enqueue response - ID COMPARISON', data: { presignSubmissionId: presignData.submissionId, serverSubmissionId: enqueueData.submission?.id, match: presignData.submissionId === enqueueData.submission?.id, filename: file.filename }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'E' }) }).catch(() => { });
-      // #endregion
 
       // Use the SERVER's submission ID, not the presign ID
       const actualSubmissionId = enqueueData.submission?.id || presignData.submissionId;

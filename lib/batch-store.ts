@@ -288,10 +288,7 @@ export async function createSubmission(params: {
   await kv.set(`${SUBMISSION_PREFIX}${submission.id}`, submission);
 
   // Add to batch's submissions set
-  const saddResult = await kv.sadd(`${BATCH_SUBMISSIONS_PREFIX}${params.batchId}`, submission.id);
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/4d4a084e-4174-46b3-8733-338fa5664bc9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'batch-store.ts:291',message:'SADD to batch set',data:{batchId:params.batchId,submissionId:submission.id,saddResult,setKey:`batch_submissions:${params.batchId}`},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
-  // #endregion
+  await kv.sadd(`${BATCH_SUBMISSIONS_PREFIX}${params.batchId}`, submission.id);
 
   // Add to processing queue
   await kv.rpush(QUEUE_KEY, submission.id);
