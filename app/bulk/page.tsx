@@ -789,13 +789,21 @@ function BulkUploadPageContent() {
         throw new Error('Failed to enqueue');
       }
 
+      const enqueueData = await enqueueRes.json();
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/4d4a084e-4174-46b3-8733-338fa5664bc9', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'bulk/page.tsx:791', message: 'Enqueue response - ID COMPARISON', data: { presignSubmissionId: presignData.submissionId, serverSubmissionId: enqueueData.submission?.id, match: presignData.submissionId === enqueueData.submission?.id, filename: file.filename }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'E' }) }).catch(() => { });
+      // #endregion
+
+      // Use the SERVER's submission ID, not the presign ID
+      const actualSubmissionId = enqueueData.submission?.id || presignData.submissionId;
+
       setPipeline(prev => prev.map(f =>
         f.id === file.id ? {
           ...f,
           stage: 'queued',
           uploadProgress: 100,
           uploadCompletedAt: Date.now(),
-          submissionId: presignData.submissionId,
+          submissionId: actualSubmissionId,
           localFile: undefined, // Clear local file reference
         } : f
       ));

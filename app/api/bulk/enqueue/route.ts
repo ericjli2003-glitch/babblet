@@ -9,6 +9,9 @@ export async function POST(request: NextRequest) {
     const { batchId, submissionId, fileKey, originalFilename, fileSize, mimeType, studentName } = body;
 
     console.log(`[Enqueue] Request: batchId=${batchId}, file=${originalFilename}, fileKey=${fileKey}`);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/4d4a084e-4174-46b3-8733-338fa5664bc9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'enqueue/route.ts:12',message:'Enqueue request received',data:{batchId,providedSubmissionId:submissionId,fileKey,originalFilename},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
 
     if (!batchId || !fileKey || !originalFilename) {
       console.error('[Enqueue] Missing required fields');
@@ -38,6 +41,9 @@ export async function POST(request: NextRequest) {
     });
 
     console.log(`[Enqueue] Created submission: id=${submission.id}, studentName=${submission.studentName}`);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/4d4a084e-4174-46b3-8733-338fa5664bc9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'enqueue/route.ts:42',message:'Submission created - ID MISMATCH CHECK',data:{providedId:submissionId,createdId:submission.id,match:submissionId===submission.id,batchId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
 
     return NextResponse.json({
       success: true,
