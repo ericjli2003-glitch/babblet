@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getBatch, getBatchSubmissions, getQueueLength, getSubmission, updateBatch, updateBatchStats } from '@/lib/batch-store';
+import { getBatch, getQueueLength, getSubmission, updateBatch, updateBatchStats } from '@/lib/batch-store';
 import { kv } from '@vercel/kv';
 
 export async function GET(request: NextRequest) {
@@ -18,11 +18,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
     }
 
-    // Debug: Check raw KV state
-    const rawSubmissionIds = await kv.smembers(`batch_submissions:${batchId}`);
-    console.log(`[Status] BatchId=${batchId} Raw submission IDs in set:`, rawSubmissionIds);
-
-    let submissions = await getBatchSubmissions(batchId);
+    // Pull submission IDs directly from the KV set for consistency
+    const submissionIds = await kv.smembers(`batch_submissions:${batchId}`) as string[];
+    console.log(`[Status] BatchId=${batchId} Raw submission IDs in set:`, submissionIds);
+    let submissions = (await Promise.all(submissionIds.map(id => getSubmission(id)))).filter(Boolean) as NonNullable<Awaited<ReturnType<typeof getSubmission>>>[];
     console.log(`[Status] BatchId=${batchId} Found ${submissions.length} submissions from set`);
     
     // If submissions are missing vs batch stats, try to recover
@@ -78,6 +77,10 @@ export async function GET(request: NextRequest) {
       // Don't reset to 0 - data might be temporarily unavailable due to eventual consistency
     }
     
+    // De-duplicate in case recovery added duplicates
+    const deduped = new Map(submissions.map(s => [s.id, s]));
+    submissions = Array.from(deduped.values());
+
     const queueLength = await getQueueLength();
 
     // Calculate stats
