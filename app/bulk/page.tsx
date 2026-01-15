@@ -123,6 +123,22 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatCompletedTime(timestamp: number | undefined): string {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 function getStageInfo(stage: PipelineStage): { icon: React.ReactNode; label: string; color: string } {
   switch (stage) {
     case 'pending':
@@ -863,25 +879,28 @@ function BulkUploadPageContent() {
       const data = await res.json();
 
       if (data.success) {
-        // Trigger processing
-        await fetch(`/api/bulk/process-now?batchId=${selectedBatchId}`, { method: 'POST' });
-
-        // Reset pipeline state for re-graded items
+        const regradedCount = data.results?.filter((r: { success: boolean }) => r.success).length || 0;
+        
+        // Reset pipeline state for re-graded items immediately
         setPipeline(prev => prev.map(f => {
           if (f.stage === 'complete' && f.submissionId && submissionIds.includes(f.submissionId)) {
-            return { ...f, stage: 'queued' as const, overallScore: undefined };
+            return { ...f, stage: 'queued' as const, overallScore: undefined, completedAt: undefined };
           }
           return f;
         }));
 
-        alert(`${data.results?.filter((r: { success: boolean }) => r.success).length || 0} submissions queued for re-grading.`);
+        // Automatically trigger processing (uses the same parallel processing logic)
+        setIsRegrading(false); // Allow UI to update
+        await triggerProcessing();
+        
+        console.log(`[Regrade] ${regradedCount} submissions queued and processing started`);
       } else {
         alert(`Error: ${data.error}`);
+        setIsRegrading(false);
       }
     } catch (error) {
       console.error('Re-grade failed:', error);
       alert('Re-grade failed. Please try again.');
-    } finally {
       setIsRegrading(false);
     }
   };
@@ -989,7 +1008,7 @@ function BulkUploadPageContent() {
         if (allCompletedIds.length > 0) {
           setPipeline(prev => prev.map(f => {
             if (f.submissionId && allCompletedIds.includes(f.submissionId)) {
-              return { ...f, stage: 'complete' as const };
+              return { ...f, stage: 'complete' as const, completedAt: Date.now() };
             }
             return f;
           }));
@@ -1861,6 +1880,11 @@ function BulkUploadPageContent() {
 
                           <div className="flex items-center gap-3">
                             <span className="text-xs text-surface-500">{formatBytes(file.fileSize)}</span>
+                            {file.stage === 'complete' && file.completedAt && (
+                              <span className="text-xs text-surface-400" title={new Date(file.completedAt).toLocaleString()}>
+                                {formatCompletedTime(file.completedAt)}
+                              </span>
+                            )}
                             <div className={`flex items-center gap-1.5 ${stageInfo.color}`}>
                               {stageInfo.icon}
                               <span className="text-sm font-medium">{stageInfo.label}</span>
