@@ -54,8 +54,8 @@ export async function GET() {
       batches.map(async (batch) => {
         if (batch.totalSubmissions > 0) {
           const submissions = await getBatchSubmissions(batch.id);
-          if (submissions.length === 0) {
-            console.log(`[Batches] Recovering submissions for batch ${batch.id}...`);
+          if (batch.totalSubmissions > submissions.length) {
+            console.log(`[Batches] Recovering submissions for batch ${batch.id}. Found ${submissions.length}/${batch.totalSubmissions}`);
             await recoverBatchSubmissions(batch.id);
             await updateBatchStats(batch.id);
             const refreshed = await getBatch(batch.id);

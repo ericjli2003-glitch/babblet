@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getBatch, getBatchSubmissions, getQueueLength, getSubmission, updateBatch } from '@/lib/batch-store';
+import { getBatch, getBatchSubmissions, getQueueLength, getSubmission, updateBatch, updateBatchStats } from '@/lib/batch-store';
 import { kv } from '@vercel/kv';
 
 export async function GET(request: NextRequest) {
@@ -25,9 +25,9 @@ export async function GET(request: NextRequest) {
     let submissions = await getBatchSubmissions(batchId);
     console.log(`[Status] BatchId=${batchId} Found ${submissions.length} submissions from set`);
     
-    // If we have 0 submissions but batch says there are some, try to recover
-    if (submissions.length === 0 && batch.totalSubmissions > 0) {
-      console.log(`[Status] Mismatch detected. Batch has ${batch.totalSubmissions} but found 0 submissions.`);
+    // If submissions are missing vs batch stats, try to recover
+    if (batch.totalSubmissions > submissions.length) {
+      console.log(`[Status] Mismatch detected. Batch has ${batch.totalSubmissions} but found ${submissions.length} submissions.`);
       
       // Try 1: Check the queue for queued submissions
       const queueItems = await kv.lrange('submission_queue', 0, -1);
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       }
       
       // Try 2: Scan for submission keys (expensive but necessary for recovery)
-      if (submissions.length === 0) {
+      if (batch.totalSubmissions > submissions.length) {
         console.log(`[Status] Scanning for orphaned submissions...`);
         let cursor = 0;
         let scanCount = 0;
@@ -69,8 +69,11 @@ export async function GET(request: NextRequest) {
         } while (cursor !== 0 && scanCount < maxScans);
       }
       
-      // If still no submissions found, update batch to reflect reality
-      if (submissions.length === 0) {
+      // Sync batch stats to recovered submissions
+      if (submissions.length > 0) {
+        await updateBatchStats(batchId);
+        batch = await getBatch(batchId) || batch;
+      } else {
         console.log(`[Status] No submissions recoverable. Resetting batch stats.`);
         batch = await updateBatch(batchId, {
           totalSubmissions: 0,
