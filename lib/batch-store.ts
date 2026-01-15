@@ -391,9 +391,18 @@ function inferStudentName(filename: string): string {
 
 /**
  * Update batch stats after a submission completes
+ * Only updates if we can find submissions - protects against eventual consistency issues
  */
 export async function updateBatchStats(batchId: string): Promise<void> {
+  const batch = await getBatch(batchId);
   const submissions = await getBatchSubmissions(batchId);
+  
+  // IMPORTANT: If we found 0 submissions but batch thinks it has some,
+  // don't overwrite - this is likely an eventual consistency issue
+  if (submissions.length === 0 && batch && batch.totalSubmissions > 0) {
+    console.log(`[BatchStore] Skipping stats update for ${batchId}: found 0 submissions but batch has ${batch.totalSubmissions}`);
+    return;
+  }
   
   const processedCount = submissions.filter(s => s.status === 'ready').length;
   const failedCount = submissions.filter(s => s.status === 'failed').length;
@@ -401,7 +410,6 @@ export async function updateBatchStats(batchId: string): Promise<void> {
   const allDone = processedCount + failedCount === submissions.length && submissions.length > 0;
   
   await updateBatch(batchId, {
-    // Sync totalSubmissions with actual count to prevent mismatches
     totalSubmissions: submissions.length,
     processedCount,
     failedCount,

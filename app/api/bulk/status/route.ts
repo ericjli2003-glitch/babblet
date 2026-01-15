@@ -73,15 +73,9 @@ export async function GET(request: NextRequest) {
       if (submissions.length > 0) {
         await updateBatchStats(batchId);
         batch = await getBatch(batchId) || batch;
-      } else {
-        console.log(`[Status] No submissions recoverable. Resetting batch stats.`);
-        batch = await updateBatch(batchId, {
-          totalSubmissions: 0,
-          processedCount: 0,
-          failedCount: 0,
-          status: 'active',
-        }) || batch;
       }
+      // NOTE: If still 0 submissions, leave batch stats as-is
+      // Don't reset to 0 - data might be temporarily unavailable due to eventual consistency
     }
     
     const queueLength = await getQueueLength();
