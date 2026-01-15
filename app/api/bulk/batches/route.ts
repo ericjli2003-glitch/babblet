@@ -64,16 +64,16 @@ export async function GET() {
           // Always recalculate stats from actual submission states
           // This fixes the issue where batch metadata says "4 complete" but submissions are "2 complete, 2 processing"
           const freshSubmissions = await getBatchSubmissions(batch.id);
-          const processedCount = freshSubmissions.filter(s => s.status === 'complete').length;
+          const processedCount = freshSubmissions.filter(s => s.status === 'ready').length;
           const failedCount = freshSubmissions.filter(s => s.status === 'failed').length;
-          const pendingCount = freshSubmissions.filter(s => s.status !== 'complete' && s.status !== 'failed').length;
+          const pendingCount = freshSubmissions.filter(s => s.status !== 'ready' && s.status !== 'failed').length;
           
           // Determine batch status from actual submissions
-          let status: 'active' | 'processing' | 'completed' | 'failed' = batch.status;
+          let status = batch.status;
           if (freshSubmissions.length > 0) {
             if (processedCount + failedCount === freshSubmissions.length) {
-              status = failedCount > 0 && processedCount === 0 ? 'failed' : 'completed';
-            } else if (pendingCount > 0 || freshSubmissions.some(s => s.status === 'processing' || s.status === 'transcribing' || s.status === 'analyzing')) {
+              status = 'completed';
+            } else if (pendingCount > 0 || freshSubmissions.some(s => s.status === 'transcribing' || s.status === 'analyzing')) {
               status = 'processing';
             }
           }
