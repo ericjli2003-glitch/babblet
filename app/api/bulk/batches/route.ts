@@ -1,14 +1,72 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllBatches, getBatch, deleteBatch, getBatchSubmissions } from '@/lib/batch-store';
+import { getAllBatches, getBatch, deleteBatch, getBatchSubmissions, getSubmission, updateBatchStats } from '@/lib/batch-store';
 import { deleteFile, isR2Configured } from '@/lib/r2';
+import { kv } from '@vercel/kv';
+
+async function recoverBatchSubmissions(batchId: string) {
+  const recovered: string[] = [];
+
+  // Try to recover from queue first
+  const queueItems = await kv.lrange('submission_queue', 0, -1);
+  for (const subId of queueItems || []) {
+    const sub = await getSubmission(subId as string);
+    if (sub && sub.batchId === batchId) {
+      await kv.sadd(`batch_submissions:${batchId}`, subId);
+      recovered.push(subId as string);
+    }
+  }
+
+  // If still empty, scan for orphaned submissions
+  if (recovered.length === 0) {
+    let cursor = 0;
+    let scanCount = 0;
+    const maxScans = 10;
+
+    do {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result: [number, string[]] = await kv.scan(cursor, { match: 'submission:*', count: 100 }) as any;
+      cursor = result[0];
+      const keys = result[1];
+
+      for (const key of keys) {
+        const subId = key.replace('submission:', '');
+        const sub = await getSubmission(subId);
+        if (sub && sub.batchId === batchId) {
+          await kv.sadd(`batch_submissions:${batchId}`, subId);
+          recovered.push(subId);
+        }
+      }
+
+      scanCount++;
+    } while (cursor !== 0 && scanCount < maxScans);
+  }
+
+  return recovered;
+}
 
 // GET /api/bulk/batches - List all batches
 export async function GET() {
   try {
     const batches = await getAllBatches();
-    return NextResponse.json({ success: true, batches });
+    const hydrated = await Promise.all(
+      batches.map(async (batch) => {
+        if (batch.totalSubmissions > 0) {
+          const submissions = await getBatchSubmissions(batch.id);
+          if (submissions.length === 0) {
+            console.log(`[Batches] Recovering submissions for batch ${batch.id}...`);
+            await recoverBatchSubmissions(batch.id);
+            await updateBatchStats(batch.id);
+            const refreshed = await getBatch(batch.id);
+            return refreshed || batch;
+          }
+        }
+        return batch;
+      })
+    );
+
+    return NextResponse.json({ success: true, batches: hydrated });
   } catch (error) {
     console.error('[Batches] Error:', error);
     return NextResponse.json(
