@@ -266,6 +266,14 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
       const questions = questionsResult.status === 'fulfilled' ? questionsResult.value : [];
       const findings = verifyResult.status === 'fulfilled' ? verifyResult.value : [];
 
+      // Log if rubric evaluation failed
+      if (rubricResult.status === 'rejected') {
+        console.error(`[ProcessNow] Rubric evaluation FAILED for ${submissionId}:`, rubricResult.reason);
+      }
+      if (questionsResult.status === 'rejected') {
+        console.error(`[ProcessNow] Questions generation FAILED for ${submissionId}:`, questionsResult.reason);
+      }
+
       await updateSubmission(submissionId, {
         // Store the bundleVersionId used for grading
         bundleVersionId: bundleVersionId,

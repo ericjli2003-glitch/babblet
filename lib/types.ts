@@ -149,7 +149,7 @@ export interface RubricEvaluation {
     score: number;
     maxScore?: number; // Maximum for this criterion (from rubric)
     feedback: string;
-    /** Claude rationale tying rubric, context, and accuracy checks */
+    /** Babblet rationale tying rubric, context, and accuracy checks */
     rationale?: string;
     strengths?: Array<{ text: string; quote?: string; criterionId?: string; criterionName?: string; transcriptRefs?: Array<{ segmentId: string; timestamp: number; snippet: string }> }>;
     improvements?: Array<{ text: string; quote?: string; criterionId?: string; criterionName?: string; transcriptRefs?: Array<{ segmentId: string; timestamp: number; snippet: string }> }>;

@@ -857,7 +857,7 @@ export default function SubmissionDetailPage() {
                 <h3 className="font-semibold text-surface-900">Rubric Highlights</h3>
               </div>
               <p className="text-sm text-surface-600 mb-4">
-                Claude highlights criteria using the class context, assignment context, and accuracy checks.
+                Babblet highlights criteria using the class context, assignment context, and accuracy checks.
               </p>
               <div className="space-y-2 text-sm text-surface-600">
                 <div className="flex items-center gap-2">
