@@ -52,40 +52,51 @@ export async function GET() {
     const batches = await getAllBatches();
     const hydrated = await Promise.all(
       batches.map(async (batch) => {
-        if (batch.totalSubmissions > 0) {
-          const submissions = await getBatchSubmissions(batch.id);
-          
-          // Recover if submissions are missing
-          if (batch.totalSubmissions > submissions.length) {
-            console.log(`[Batches] Recovering submissions for batch ${batch.id}. Found ${submissions.length}/${batch.totalSubmissions}`);
-            await recoverBatchSubmissions(batch.id);
+        // Get raw submission IDs from the KV set
+        const submissionIds = await kv.smembers(`batch_submissions:${batch.id}`) as string[];
+        
+        if (submissionIds.length === 0 && batch.totalSubmissions > 0) {
+          // Try to recover missing submissions
+          console.log(`[Batches] Recovering submissions for batch ${batch.id}`);
+          await recoverBatchSubmissions(batch.id);
+          const recoveredIds = await kv.smembers(`batch_submissions:${batch.id}`) as string[];
+          if (recoveredIds.length > 0) {
+            submissionIds.push(...recoveredIds);
           }
+        }
+        
+        if (submissionIds.length > 0) {
+          // Fetch all submissions in parallel for accurate stats
+          const submissions = await Promise.all(
+            submissionIds.map(id => getSubmission(id))
+          );
+          const validSubmissions = submissions.filter(Boolean);
           
-          // Always recalculate stats from actual submission states
-          // This fixes the issue where batch metadata says "4 complete" but submissions are "2 complete, 2 processing"
-          const freshSubmissions = await getBatchSubmissions(batch.id);
-          const processedCount = freshSubmissions.filter(s => s.status === 'ready').length;
-          const failedCount = freshSubmissions.filter(s => s.status === 'failed').length;
-          const pendingCount = freshSubmissions.filter(s => s.status !== 'ready' && s.status !== 'failed').length;
+          const processedCount = validSubmissions.filter(s => s!.status === 'ready').length;
+          const failedCount = validSubmissions.filter(s => s!.status === 'failed').length;
+          const pendingCount = validSubmissions.filter(s => s!.status !== 'ready' && s!.status !== 'failed').length;
+          
+          console.log(`[Batches] Batch ${batch.id}: ${validSubmissions.length} submissions, ready=${processedCount}, failed=${failedCount}, pending=${pendingCount}`);
           
           // Determine batch status from actual submissions
           let status = batch.status;
-          if (freshSubmissions.length > 0) {
-            if (processedCount + failedCount === freshSubmissions.length) {
+          if (validSubmissions.length > 0) {
+            if (processedCount + failedCount === validSubmissions.length) {
               status = 'completed';
-            } else if (pendingCount > 0 || freshSubmissions.some(s => s.status === 'transcribing' || s.status === 'analyzing')) {
+            } else if (pendingCount > 0 || validSubmissions.some(s => s!.status === 'transcribing' || s!.status === 'analyzing')) {
               status = 'processing';
             }
           }
           
           return {
             ...batch,
-            totalSubmissions: freshSubmissions.length,
+            totalSubmissions: validSubmissions.length,
             processedCount,
             failedCount,
             status,
           };
         }
+        
         return batch;
       })
     );

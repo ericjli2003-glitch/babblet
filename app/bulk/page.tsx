@@ -131,7 +131,7 @@ function formatCompletedTime(timestamp: number | undefined): string {
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
-  
+
   if (diffMins < 1) return 'Just now';
   if (diffMins < 60) return `${diffMins}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
@@ -880,7 +880,7 @@ function BulkUploadPageContent() {
 
       if (data.success) {
         const regradedCount = data.results?.filter((r: { success: boolean }) => r.success).length || 0;
-        
+
         // Reset pipeline state for re-graded items immediately
         setPipeline(prev => prev.map(f => {
           if (f.stage === 'complete' && f.submissionId && submissionIds.includes(f.submissionId)) {
@@ -892,7 +892,7 @@ function BulkUploadPageContent() {
         // Automatically trigger processing (uses the same parallel processing logic)
         setIsRegrading(false); // Allow UI to update
         await triggerProcessing();
-        
+
         console.log(`[Regrade] ${regradedCount} submissions queued and processing started`);
       } else {
         alert(`Error: ${data.error}`);
