@@ -603,69 +603,6 @@ export default function SubmissionDetailPage() {
                 </p>
               )}
             </div>
-                <div className="flex items-center gap-2 mb-4">
-                  <Lightbulb className="w-5 h-5 text-amber-500" />
-                  <h3 className="font-semibold text-surface-900">Analysis</h3>
-                </div>
-
-                {/* Overall Strength */}
-                <div className="flex items-center gap-4 mb-6 p-4 bg-surface-50 rounded-lg">
-                  <span className="text-sm text-surface-600">Argument Strength:</span>
-                  <div className="flex-1 h-3 bg-surface-200 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-amber-400 to-emerald-500"
-                      style={{ width: `${(submission.analysis.overallStrength / 5) * 100}%` }}
-                    />
-                  </div>
-                  <span className="font-bold text-surface-900">
-                    {submission.analysis.overallStrength.toFixed(1)}/5
-                  </span>
-                </div>
-
-                {/* Key Claims */}
-                {submission.analysis.keyClaims.length > 0 && (
-                  <div className="mb-4">
-                    <h4 className="text-sm font-medium text-surface-700 mb-2">Key Claims</h4>
-                    <ul className="space-y-2">
-                      {submission.analysis.keyClaims.map(c => (
-                        <li key={c.id} className="p-2 bg-emerald-50 rounded text-sm text-surface-700">
-                          {c.claim}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Logical Gaps */}
-                {submission.analysis.logicalGaps.length > 0 && (
-                  <div className="mb-4">
-                    <h4 className="text-sm font-medium text-amber-700 mb-2">Logical Gaps</h4>
-                    <ul className="space-y-2">
-                      {submission.analysis.logicalGaps.map(g => (
-                        <li key={g.id} className="p-2 bg-amber-50 rounded text-sm text-surface-700">
-                          <span className="text-xs font-medium text-amber-600 mr-2">[{g.severity}]</span>
-                          {g.description}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Missing Evidence */}
-                {submission.analysis.missingEvidence.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium text-red-700 mb-2">Missing Evidence</h4>
-                    <ul className="space-y-2">
-                      {submission.analysis.missingEvidence.map(e => (
-                        <li key={e.id} className="p-2 bg-red-50 rounded text-sm text-surface-700">
-                          {e.description}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* Context Citations */}
             {(submission.contextCitations && submission.contextCitations.length > 0) || submission.retrievalMetrics ? (
