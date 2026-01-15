@@ -54,13 +54,37 @@ export async function GET() {
       batches.map(async (batch) => {
         if (batch.totalSubmissions > 0) {
           const submissions = await getBatchSubmissions(batch.id);
+          
+          // Recover if submissions are missing
           if (batch.totalSubmissions > submissions.length) {
             console.log(`[Batches] Recovering submissions for batch ${batch.id}. Found ${submissions.length}/${batch.totalSubmissions}`);
             await recoverBatchSubmissions(batch.id);
-            await updateBatchStats(batch.id);
-            const refreshed = await getBatch(batch.id);
-            return refreshed || batch;
           }
+          
+          // Always recalculate stats from actual submission states
+          // This fixes the issue where batch metadata says "4 complete" but submissions are "2 complete, 2 processing"
+          const freshSubmissions = await getBatchSubmissions(batch.id);
+          const processedCount = freshSubmissions.filter(s => s.status === 'complete').length;
+          const failedCount = freshSubmissions.filter(s => s.status === 'failed').length;
+          const pendingCount = freshSubmissions.filter(s => s.status !== 'complete' && s.status !== 'failed').length;
+          
+          // Determine batch status from actual submissions
+          let status: 'active' | 'processing' | 'completed' | 'failed' = batch.status;
+          if (freshSubmissions.length > 0) {
+            if (processedCount + failedCount === freshSubmissions.length) {
+              status = failedCount > 0 && processedCount === 0 ? 'failed' : 'completed';
+            } else if (pendingCount > 0 || freshSubmissions.some(s => s.status === 'processing' || s.status === 'transcribing' || s.status === 'analyzing')) {
+              status = 'processing';
+            }
+          }
+          
+          return {
+            ...batch,
+            totalSubmissions: freshSubmissions.length,
+            processedCount,
+            failedCount,
+            status,
+          };
         }
         return batch;
       })
