@@ -936,10 +936,10 @@ function BulkUploadPageContent() {
         : '/api/bulk/process-now';
 
       // Count how many files need processing
-      const queuedCount = pipeline.filter(f => 
+      const queuedCount = pipeline.filter(f =>
         f.stage === 'queued' || f.stage === 'transcribing' || f.stage === 'analyzing'
       ).length;
-      
+
       // Fire parallel requests for ALL queued files (max 5 at a time for safety)
       const PARALLEL_REQUESTS = Math.min(Math.max(queuedCount, 3), 5);
 
@@ -952,7 +952,7 @@ function BulkUploadPageContent() {
       // Keep processing in rounds until queue is empty
       while (hasMoreToProcess && round <= 10) { // Max 10 rounds to prevent infinite loop
         console.log(`[Bulk] Processing round ${round}...`);
-        
+
         const results = await Promise.allSettled(
           Array(PARALLEL_REQUESTS).fill(null).map(() =>
             fetch(url, { method: 'POST' }).then(res => res.json())
@@ -990,7 +990,7 @@ function BulkUploadPageContent() {
         // Check if we should continue
         hasMoreToProcess = remainingInQueue > 0 && processedThisRound > 0;
         round++;
-        
+
         // Small delay between rounds to let server breathe
         if (hasMoreToProcess) {
           await new Promise(r => setTimeout(r, 500));

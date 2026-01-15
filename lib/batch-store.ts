@@ -75,6 +75,8 @@ export interface Submission {
       score: number;
       maxScore?: number; // Maximum for this criterion (from rubric)
       feedback: string;
+      // Claude rationale tying rubric, context, and accuracy checks
+      rationale?: string;
       // Transcript segment references for this criterion
       transcriptRefs?: Array<{
         segmentId: string;

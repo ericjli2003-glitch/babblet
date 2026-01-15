@@ -36,6 +36,7 @@ interface CriterionBreakdown {
   score: number;
   maxScore?: number; // Maximum for this criterion (from rubric)
   feedback: string;
+  rationale?: string;
   transcriptRefs?: TranscriptRef[];
   strengths?: StrengthOrImprovement[];
   improvements?: StrengthOrImprovement[];
@@ -213,7 +214,7 @@ export default function SubmissionDetailPage() {
 
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'transcript' | 'questions'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'transcript' | 'questions' | 'rubric'>('overview');
   const [contextInfo, setContextInfo] = useState<BundleVersionInfo | null>(null);
 
   // Re-grade state
@@ -456,7 +457,7 @@ export default function SubmissionDetailPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Tabs */}
         <div className="flex gap-2 mb-6">
-          {(['overview', 'transcript', 'questions'] as const).map(tab => (
+          {(['overview', 'transcript', 'questions', 'rubric'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -476,11 +477,302 @@ export default function SubmissionDetailPage() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+            className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+          >
+            <div className="space-y-6 lg:col-span-2">
+              {/* Analysis */}
+              {submission.analysis && (
+                <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Lightbulb className="w-5 h-5 text-amber-500" />
+                    <h3 className="font-semibold text-surface-900">Analysis</h3>
+                  </div>
+
+                  {/* Overall Strength */}
+                  <div className="flex items-center gap-4 mb-6 p-4 bg-surface-50 rounded-lg">
+                    <span className="text-sm text-surface-600">Argument Strength:</span>
+                    <div className="flex-1 h-3 bg-surface-200 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-amber-400 to-emerald-500"
+                        style={{ width: `${(submission.analysis.overallStrength / 5) * 100}%` }}
+                      />
+                    </div>
+                    <span className="font-bold text-surface-900">
+                      {submission.analysis.overallStrength.toFixed(1)}/5
+                    </span>
+                  </div>
+
+                  {/* Key Claims */}
+                  {submission.analysis.keyClaims.length > 0 && (
+                    <div className="mb-4">
+                      <h4 className="text-sm font-medium text-surface-700 mb-2">Key Claims</h4>
+                      <ul className="space-y-2">
+                        {submission.analysis.keyClaims.map(c => (
+                          <li key={c.id} className="p-2 bg-emerald-50 rounded text-sm text-surface-700">
+                            {c.claim}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Logical Gaps */}
+                  {submission.analysis.logicalGaps.length > 0 && (
+                    <div className="mb-4">
+                      <h4 className="text-sm font-medium text-amber-700 mb-2">Logical Gaps</h4>
+                      <ul className="space-y-2">
+                        {submission.analysis.logicalGaps.map(g => (
+                          <li key={g.id} className="p-2 bg-amber-50 rounded text-sm text-surface-700">
+                            <span className="text-xs font-medium text-amber-600 mr-2">[{g.severity}]</span>
+                            {g.description}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Missing Evidence */}
+                  {submission.analysis.missingEvidence.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-red-700 mb-2">Missing Evidence</h4>
+                      <ul className="space-y-2">
+                        {submission.analysis.missingEvidence.map(e => (
+                          <li key={e.id} className="p-2 bg-red-50 rounded text-sm text-surface-700">
+                            {e.description}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Verification Findings */}
+              {submission.verificationFindings && submission.verificationFindings.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <CheckCircle className="w-5 h-5 text-blue-500" />
+                    <h3 className="font-semibold text-surface-900">Fact Verification</h3>
+                  </div>
+                  <div className="space-y-3">
+                    {submission.verificationFindings.map(f => (
+                      <div 
+                        key={f.id} 
+                        className={`p-3 rounded-lg ${
+                          f.status === 'verified' ? 'bg-emerald-50' :
+                          f.status === 'questionable' ? 'bg-amber-50' :
+                          f.status === 'incorrect' ? 'bg-red-50' : 'bg-surface-50'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          {f.status === 'verified' && <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5" />}
+                          {f.status === 'questionable' && <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5" />}
+                          {f.status === 'incorrect' && <XCircle className="w-4 h-4 text-red-500 mt-0.5" />}
+                          <div>
+                            <p className="text-sm font-medium text-surface-900">{f.statement}</p>
+                            <p className="text-sm text-surface-600 mt-1">{f.explanation}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Video Player */}
+            <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6 lg:col-span-1">
+              <div className="flex items-center gap-2 mb-4">
+                <Play className="w-5 h-5 text-primary-500" />
+                <h3 className="font-semibold text-surface-900">Video</h3>
+              </div>
+              {videoUrl ? (
+                <video
+                  controls
+                  src={videoUrl}
+                  className="w-full rounded-lg bg-black"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-48 bg-surface-50 rounded-lg text-sm text-surface-500">
+                  Video not available
+                </div>
+              )}
+              {submission.originalFilename && (
+                <p className="mt-3 text-xs text-surface-500 truncate">
+                  {submission.originalFilename}
+                </p>
+              )}
+            </div>
+                <div className="flex items-center gap-2 mb-4">
+                  <Lightbulb className="w-5 h-5 text-amber-500" />
+                  <h3 className="font-semibold text-surface-900">Analysis</h3>
+                </div>
+
+                {/* Overall Strength */}
+                <div className="flex items-center gap-4 mb-6 p-4 bg-surface-50 rounded-lg">
+                  <span className="text-sm text-surface-600">Argument Strength:</span>
+                  <div className="flex-1 h-3 bg-surface-200 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-amber-400 to-emerald-500"
+                      style={{ width: `${(submission.analysis.overallStrength / 5) * 100}%` }}
+                    />
+                  </div>
+                  <span className="font-bold text-surface-900">
+                    {submission.analysis.overallStrength.toFixed(1)}/5
+                  </span>
+                </div>
+
+                {/* Key Claims */}
+                {submission.analysis.keyClaims.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-sm font-medium text-surface-700 mb-2">Key Claims</h4>
+                    <ul className="space-y-2">
+                      {submission.analysis.keyClaims.map(c => (
+                        <li key={c.id} className="p-2 bg-emerald-50 rounded text-sm text-surface-700">
+                          {c.claim}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Logical Gaps */}
+                {submission.analysis.logicalGaps.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-sm font-medium text-amber-700 mb-2">Logical Gaps</h4>
+                    <ul className="space-y-2">
+                      {submission.analysis.logicalGaps.map(g => (
+                        <li key={g.id} className="p-2 bg-amber-50 rounded text-sm text-surface-700">
+                          <span className="text-xs font-medium text-amber-600 mr-2">[{g.severity}]</span>
+                          {g.description}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Missing Evidence */}
+                {submission.analysis.missingEvidence.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-red-700 mb-2">Missing Evidence</h4>
+                    <ul className="space-y-2">
+                      {submission.analysis.missingEvidence.map(e => (
+                        <li key={e.id} className="p-2 bg-red-50 rounded text-sm text-surface-700">
+                          {e.description}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Context Citations */}
+            {(submission.contextCitations && submission.contextCitations.length > 0) || submission.retrievalMetrics ? (
+              <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6 lg:col-span-3">
+                <div className="flex items-center gap-2 mb-4">
+                  <FileText className="w-5 h-5 text-violet-500" />
+                  <h3 className="font-semibold text-surface-900">Context Used for Grading</h3>
+                  {contextInfo && (
+                    <span className="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full ml-2">
+                      v{contextInfo.version}
+                    </span>
+                  )}
+                </div>
+                
+                {/* Retrieval Quality Metrics */}
+                {submission.retrievalMetrics && (
+                  <div className="mb-4 p-3 bg-surface-50 rounded-lg">
+                    <div className="flex items-center gap-4 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-surface-500">Chunks:</span>
+                        <span className="font-medium text-surface-700">
+                          {submission.retrievalMetrics.chunksRetrieved}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-surface-500">Avg Relevance:</span>
+                        <span className={`font-medium ${
+                          submission.retrievalMetrics.averageRelevance >= 0.5 
+                            ? 'text-emerald-600' 
+                            : submission.retrievalMetrics.averageRelevance >= 0.25 
+                              ? 'text-amber-600' 
+                              : 'text-red-500'
+                        }`}>
+                          {(submission.retrievalMetrics.averageRelevance * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-surface-500">High Confidence:</span>
+                        <span className="font-medium text-emerald-600">
+                          {submission.retrievalMetrics.highConfidenceCount}
+                        </span>
+                      </div>
+                      {submission.retrievalMetrics.usedFallback && (
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">
+                          Used Course Summary Fallback
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                <p className="text-sm text-surface-500 mb-4">
+                  These course materials were retrieved and used by Babblet during evaluation.
+                </p>
+                
+                {submission.contextCitations && submission.contextCitations.length > 0 ? (
+                  <div className="space-y-3">
+                    {submission.contextCitations.map((citation, idx) => (
+                      <div 
+                        key={citation.chunkId} 
+                        className="p-4 bg-violet-50 rounded-lg border border-violet-200"
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="w-6 h-6 bg-violet-200 text-violet-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
+                            {idx + 1}
+                          </span>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-medium text-violet-900">{citation.documentName}</p>
+                              {citation.relevanceScore && (
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                  citation.relevanceScore >= 0.5 
+                                    ? 'bg-emerald-100 text-emerald-700' 
+                                    : citation.relevanceScore >= 0.25 
+                                      ? 'bg-amber-100 text-amber-700'
+                                      : 'bg-surface-100 text-surface-600'
+                                }`}>
+                                  {(citation.relevanceScore * 100).toFixed(0)}% match
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-surface-600 mt-1 italic">&quot;{citation.snippet}&quot;</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-surface-400 italic">
+                    No specific document excerpts were retrieved. Course summary was used for context.
+                  </p>
+                )}
+              </div>
+            ) : null}
+          </motion.div>
+        )}
+
+        {/* Rubric Tab */}
+        {activeTab === 'rubric' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="grid grid-cols-1 lg:grid-cols-3 gap-6"
           >
             {/* Rubric Evaluation */}
-            {submission.rubricEvaluation && (
-              <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6">
+            {submission.rubricEvaluation ? (
+              <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6 lg:col-span-2">
                 <div className="flex items-center gap-2 mb-4">
                   <BarChart3 className="w-5 h-5 text-primary-500" />
                   <h3 className="font-semibold text-surface-900">Rubric Evaluation</h3>
@@ -505,7 +797,12 @@ export default function SubmissionDetailPage() {
                           </span>
                         </div>
                         <p className="text-sm text-surface-600 line-clamp-2">{c.feedback}</p>
-                        
+                        {c.rationale && (
+                          <p className="text-xs text-surface-500 mt-2 italic line-clamp-3">
+                            {c.rationale}
+                          </p>
+                        )}
+
                         {/* Transcript link indicator */}
                         {c.transcriptRefs && c.transcriptRefs.length > 0 && (
                           <div className="mt-2 flex items-center gap-1 text-xs text-primary-600">
@@ -513,11 +810,11 @@ export default function SubmissionDetailPage() {
                             {c.transcriptRefs.length} transcript moment{c.transcriptRefs.length !== 1 ? 's' : ''}
                           </div>
                         )}
-                        
+
                         {/* Criterion-level citations */}
                         {c.citations && c.citations.length > 0 && (
                           <div className="mt-2 pt-2 border-t border-surface-200">
-                            <p className="text-xs text-violet-600 mb-1">📚 Based on:</p>
+                            <p className="text-xs text-violet-600 mb-1">📚 Context highlights:</p>
                             {c.citations.slice(0, 2).map((cite, cIdx) => (
                               <p key={cIdx} className="text-xs text-surface-500 truncate">
                                 {cite.documentName}
@@ -610,200 +907,36 @@ export default function SubmissionDetailPage() {
                   </div>
                 )}
               </div>
-            )}
-
-            {/* Analysis */}
-            {submission.analysis && (
-              <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Lightbulb className="w-5 h-5 text-amber-500" />
-                  <h3 className="font-semibold text-surface-900">Analysis</h3>
-                </div>
-
-                {/* Overall Strength */}
-                <div className="flex items-center gap-4 mb-6 p-4 bg-surface-50 rounded-lg">
-                  <span className="text-sm text-surface-600">Argument Strength:</span>
-                  <div className="flex-1 h-3 bg-surface-200 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-amber-400 to-emerald-500"
-                      style={{ width: `${(submission.analysis.overallStrength / 5) * 100}%` }}
-                    />
-                  </div>
-                  <span className="font-bold text-surface-900">
-                    {submission.analysis.overallStrength.toFixed(1)}/5
-                  </span>
-                </div>
-
-                {/* Key Claims */}
-                {submission.analysis.keyClaims.length > 0 && (
-                  <div className="mb-4">
-                    <h4 className="text-sm font-medium text-surface-700 mb-2">Key Claims</h4>
-                    <ul className="space-y-2">
-                      {submission.analysis.keyClaims.map(c => (
-                        <li key={c.id} className="p-2 bg-emerald-50 rounded text-sm text-surface-700">
-                          {c.claim}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Logical Gaps */}
-                {submission.analysis.logicalGaps.length > 0 && (
-                  <div className="mb-4">
-                    <h4 className="text-sm font-medium text-amber-700 mb-2">Logical Gaps</h4>
-                    <ul className="space-y-2">
-                      {submission.analysis.logicalGaps.map(g => (
-                        <li key={g.id} className="p-2 bg-amber-50 rounded text-sm text-surface-700">
-                          <span className="text-xs font-medium text-amber-600 mr-2">[{g.severity}]</span>
-                          {g.description}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Missing Evidence */}
-                {submission.analysis.missingEvidence.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium text-red-700 mb-2">Missing Evidence</h4>
-                    <ul className="space-y-2">
-                      {submission.analysis.missingEvidence.map(e => (
-                        <li key={e.id} className="p-2 bg-red-50 rounded text-sm text-surface-700">
-                          {e.description}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Verification Findings */}
-            {submission.verificationFindings && submission.verificationFindings.length > 0 && (
+            ) : (
               <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6 lg:col-span-2">
-                <div className="flex items-center gap-2 mb-4">
-                  <CheckCircle className="w-5 h-5 text-blue-500" />
-                  <h3 className="font-semibold text-surface-900">Fact Verification</h3>
-                </div>
-                <div className="space-y-3">
-                  {submission.verificationFindings.map(f => (
-                    <div 
-                      key={f.id} 
-                      className={`p-3 rounded-lg ${
-                        f.status === 'verified' ? 'bg-emerald-50' :
-                        f.status === 'questionable' ? 'bg-amber-50' :
-                        f.status === 'incorrect' ? 'bg-red-50' : 'bg-surface-50'
-                      }`}
-                    >
-                      <div className="flex items-start gap-2">
-                        {f.status === 'verified' && <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5" />}
-                        {f.status === 'questionable' && <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5" />}
-                        {f.status === 'incorrect' && <XCircle className="w-4 h-4 text-red-500 mt-0.5" />}
-                        <div>
-                          <p className="text-sm font-medium text-surface-900">{f.statement}</p>
-                          <p className="text-sm text-surface-600 mt-1">{f.explanation}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <p className="text-surface-500">No rubric evaluation available.</p>
               </div>
             )}
 
-            {/* Context Citations */}
-            {(submission.contextCitations && submission.contextCitations.length > 0) || submission.retrievalMetrics ? (
-              <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6 lg:col-span-2">
-                <div className="flex items-center gap-2 mb-4">
-                  <FileText className="w-5 h-5 text-violet-500" />
-                  <h3 className="font-semibold text-surface-900">Context Used for Grading</h3>
-                  {contextInfo && (
-                    <span className="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full ml-2">
-                      v{contextInfo.version}
-                    </span>
-                  )}
-                </div>
-                
-                {/* Retrieval Quality Metrics */}
-                {submission.retrievalMetrics && (
-                  <div className="mb-4 p-3 bg-surface-50 rounded-lg">
-                    <div className="flex items-center gap-4 text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-surface-500">Chunks:</span>
-                        <span className="font-medium text-surface-700">
-                          {submission.retrievalMetrics.chunksRetrieved}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-surface-500">Avg Relevance:</span>
-                        <span className={`font-medium ${
-                          submission.retrievalMetrics.averageRelevance >= 0.5 
-                            ? 'text-emerald-600' 
-                            : submission.retrievalMetrics.averageRelevance >= 0.25 
-                              ? 'text-amber-600' 
-                              : 'text-red-500'
-                        }`}>
-                          {(submission.retrievalMetrics.averageRelevance * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-surface-500">High Confidence:</span>
-                        <span className="font-medium text-emerald-600">
-                          {submission.retrievalMetrics.highConfidenceCount}
-                        </span>
-                      </div>
-                      {submission.retrievalMetrics.usedFallback && (
-                        <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">
-                          Used Course Summary Fallback
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-                
-                <p className="text-sm text-surface-500 mb-4">
-                  These course materials were retrieved and used by Babblet during evaluation.
-                </p>
-                
-                {submission.contextCitations && submission.contextCitations.length > 0 ? (
-                  <div className="space-y-3">
-                    {submission.contextCitations.map((citation, idx) => (
-                      <div 
-                        key={citation.chunkId} 
-                        className="p-4 bg-violet-50 rounded-lg border border-violet-200"
-                      >
-                        <div className="flex items-start gap-3">
-                          <span className="w-6 h-6 bg-violet-200 text-violet-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
-                            {idx + 1}
-                          </span>
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <p className="text-sm font-medium text-violet-900">{citation.documentName}</p>
-                              {citation.relevanceScore && (
-                                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                  citation.relevanceScore >= 0.5 
-                                    ? 'bg-emerald-100 text-emerald-700' 
-                                    : citation.relevanceScore >= 0.25 
-                                      ? 'bg-amber-100 text-amber-700'
-                                      : 'bg-surface-100 text-surface-600'
-                                }`}>
-                                  {(citation.relevanceScore * 100).toFixed(0)}% match
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm text-surface-600 mt-1 italic">&quot;{citation.snippet}&quot;</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-surface-400 italic">
-                    No specific document excerpts were retrieved. Course summary was used for context.
-                  </p>
-                )}
+            {/* Rubric Highlights Summary */}
+            <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6 lg:col-span-1">
+              <div className="flex items-center gap-2 mb-4">
+                <Lightbulb className="w-5 h-5 text-amber-500" />
+                <h3 className="font-semibold text-surface-900">Rubric Highlights</h3>
               </div>
-            ) : null}
+              <p className="text-sm text-surface-600 mb-4">
+                Claude highlights criteria using the class context, assignment context, and accuracy checks.
+              </p>
+              <div className="space-y-2 text-sm text-surface-600">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-500" />
+                  <span>Strengths and improvements are tied to rubric criteria.</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-violet-500" />
+                  <span>Context citations show where rubric alignment came from.</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-500" />
+                  <span>Fact verification influences rubric decisions.</span>
+                </div>
+              </div>
+            </div>
           </motion.div>
         )}
 

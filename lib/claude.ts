@@ -820,6 +820,7 @@ JSON format:
       "score": number,
       "maxScore": number,
       "feedback": "Specific feedback tied to transcript",
+      "rationale": "Explain why this score fits, referencing class context, assignment context, and accuracy checks",
       "relevantQuotes": ["Exact quote 1", "Exact quote 2"],
       "strengths": [{ "text": "Strength", "quote": "Supporting quote" }],
       "improvements": [{ "text": "Improvement", "quote": "Relevant quote" }],
@@ -832,8 +833,9 @@ CRITICAL REQUIREMENTS:
 1. "criteriaBreakdown" MUST include ALL criteria from the provided rubric
 2. Each criterion's "score" must use the rubric's scoring scale
 3. Each criterion's "maxScore" should be the maximum for that criterion
-4. "quote" fields must contain EXACT words from the transcript (5-20 words)
-5. Write as a professor addressing your student
+4. "rationale" must cite class context, assignment context, or accuracy checks when applicable
+5. "quote" fields must contain EXACT words from the transcript (5-20 words)
+6. Write as a professor addressing your student
 
 Respond ONLY with valid JSON.`;
 
@@ -962,6 +964,7 @@ Respond ONLY with valid JSON.`;
               score: typeof c.score === 'number' ? c.score : 3,
               maxScore: typeof c.maxScore === 'number' ? c.maxScore : undefined,
               feedback: typeof c.feedback === 'string' ? c.feedback : '',
+              rationale: typeof c.rationale === 'string' ? c.rationale : undefined,
               transcriptRefs: transcriptRefs.length > 0 ? transcriptRefs : undefined,
               strengths: extractWithRefs(c.strengths || [], criterionId, criterionName),
               improvements: extractWithRefs(c.improvements || [], criterionId, criterionName),

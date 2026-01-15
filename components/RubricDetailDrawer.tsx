@@ -31,6 +31,7 @@ interface CriterionBreakdown {
   criterion: string;
   score: number;
   feedback: string;
+  rationale?: string;
   transcriptRefs?: TranscriptRef[];
   strengths?: StrengthOrImprovement[];
   improvements?: StrengthOrImprovement[];
@@ -346,6 +347,12 @@ export default function RubricDetailDrawer({
                       <h3 className="text-sm font-medium text-surface-500 mb-2">AI Feedback</h3>
                       <p className="text-surface-800">{criterion.feedback}</p>
                     </div>
+                    {criterion.rationale && (
+                      <div className="p-4 bg-violet-50 rounded-xl border border-violet-200">
+                        <h3 className="text-sm font-medium text-violet-700 mb-2">Why this score</h3>
+                        <p className="text-surface-800">{criterion.rationale}</p>
+                      </div>
+                    )}
 
                     {/* Strengths for this criterion */}
                     {criterion.strengths && criterion.strengths.length > 0 && (
