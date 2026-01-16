@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Play, Calendar, Volume2, Gauge } from 'lucide-react';
 
 interface TranscriptEntry {
@@ -24,9 +24,16 @@ interface VideoPanelProps {
   alerts?: Alert[];
   transcriptEntries: TranscriptEntry[];
   onViewFullTranscript?: () => void;
+  onTimeUpdate?: (currentTimeMs: number) => void;
+  currentTimeMs?: number;
 }
 
-export default function VideoPanel({
+export interface VideoPanelRef {
+  seekTo: (timestampMs: number) => void;
+  getCurrentTime: () => number;
+}
+
+const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPanel({
   videoUrl,
   filename,
   uploadDate,
@@ -34,8 +41,36 @@ export default function VideoPanel({
   alerts = [],
   transcriptEntries,
   onViewFullTranscript,
-}: VideoPanelProps) {
+  onTimeUpdate,
+  currentTimeMs = 0,
+}, ref) {
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  useImperativeHandle(ref, () => ({
+    seekTo: (timestampMs: number) => {
+      if (videoRef.current) {
+        videoRef.current.currentTime = timestampMs / 1000;
+        videoRef.current.play();
+      }
+    },
+    getCurrentTime: () => {
+      return videoRef.current ? videoRef.current.currentTime * 1000 : 0;
+    },
+  }));
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleTimeUpdate = () => {
+      if (onTimeUpdate) {
+        onTimeUpdate(video.currentTime * 1000);
+      }
+    };
+
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    return () => video.removeEventListener('timeupdate', handleTimeUpdate);
+  }, [onTimeUpdate]);
 
   const seekTo = (timestampMs: number) => {
     if (videoRef.current) {
@@ -142,4 +177,6 @@ export default function VideoPanel({
       </div>
     </div>
   );
-}
+});
+
+export default VideoPanel;

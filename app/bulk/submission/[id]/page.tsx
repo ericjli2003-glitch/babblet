@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle, XCircle, Download, RefreshCw, Search, ThumbsUp, Clock,
@@ -15,7 +15,7 @@ import VerificationCard from '@/components/submission/VerificationCard';
 import TranscriptSegment from '@/components/submission/TranscriptSegment';
 import QuestionCard from '@/components/submission/QuestionCard';
 import RubricCriterion from '@/components/submission/RubricCriterion';
-import VideoPanel from '@/components/submission/VideoPanel';
+import VideoPanel, { VideoPanelRef } from '@/components/submission/VideoPanel';
 
 // ============================================
 // Types
@@ -124,6 +124,9 @@ export default function SubmissionDetailPage() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [transcriptSearch, setTranscriptSearch] = useState('');
   const [batchInfo, setBatchInfo] = useState<{ name: string; courseName?: string; assignmentName?: string } | null>(null);
+  const [currentVideoTime, setCurrentVideoTime] = useState(0);
+  const videoPanelRef = useRef<VideoPanelRef>(null);
+  const transcriptContainerRef = useRef<HTMLDivElement>(null);
 
   const loadSubmission = useCallback(async () => {
     try {
@@ -189,16 +192,29 @@ export default function SubmissionDetailPage() {
     return items;
   }, [rubric]);
 
+  // Find the current segment based on video time
+  const currentSegmentIndex = useMemo(() => {
+    if (!submission?.transcriptSegments || submission.transcriptSegments.length === 0) return -1;
+    const segments = submission.transcriptSegments;
+    // Find the segment that contains the current time
+    for (let i = segments.length - 1; i >= 0; i--) {
+      if (currentVideoTime >= segments[i].timestamp) {
+        return i;
+      }
+    }
+    return 0;
+  }, [submission?.transcriptSegments, currentVideoTime]);
+
   // Build transcript entries for video panel
   const transcriptEntries = useMemo(() => {
     if (!submission?.transcriptSegments) return [];
-    return submission.transcriptSegments.slice(0, 5).map((seg, i) => ({
+    return submission.transcriptSegments.slice(0, 8).map((seg, i) => ({
       timestamp: formatTimestamp(seg.timestamp),
       timestampMs: seg.timestamp,
       text: seg.text.slice(0, 100) + (seg.text.length > 100 ? '...' : ''),
-      isHighlighted: i === 1,
+      isHighlighted: i === currentSegmentIndex,
     }));
-  }, [submission?.transcriptSegments]);
+  }, [submission?.transcriptSegments, currentSegmentIndex]);
 
   // Filter transcript segments by search
   const filteredSegments = useMemo(() => {
@@ -209,6 +225,24 @@ export default function SubmissionDetailPage() {
       seg.text.toLowerCase().includes(lower)
     );
   }, [submission?.transcriptSegments, transcriptSearch]);
+
+  // Auto-scroll to current segment
+  useEffect(() => {
+    if (activeTab === 'transcript' && currentSegmentIndex >= 0 && transcriptContainerRef.current) {
+      const container = transcriptContainerRef.current;
+      const currentElement = container.querySelector(`[data-segment-index="${currentSegmentIndex}"]`);
+      if (currentElement) {
+        currentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [currentSegmentIndex, activeTab]);
+
+  // Handle seeking from transcript click
+  const handleSegmentClick = useCallback((timestampMs: number) => {
+    if (videoPanelRef.current) {
+      videoPanelRef.current.seekTo(timestampMs);
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -319,7 +353,7 @@ export default function SubmissionDetailPage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="max-w-3xl space-y-6"
+                  className="space-y-6"
                 >
                   <div>
                     <h2 className="text-lg font-semibold text-surface-900 mb-1">Submission Overview & Insights</h2>
@@ -385,10 +419,10 @@ export default function SubmissionDetailPage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="max-w-3xl"
+                  className="h-full flex flex-col"
                 >
                   {/* Header */}
-                  <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center justify-between mb-4">
                     <div className="relative flex-1 max-w-md">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
                       <input
@@ -396,7 +430,7 @@ export default function SubmissionDetailPage() {
                         value={transcriptSearch}
                         onChange={(e) => setTranscriptSearch(e.target.value)}
                         placeholder="Search in transcript..."
-                        className="w-full pl-10 pr-4 py-2 border border-surface-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        className="w-full pl-10 pr-4 py-2 border border-surface-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                       />
                     </div>
                     <div className="flex items-center gap-4">
@@ -410,17 +444,30 @@ export default function SubmissionDetailPage() {
                   </div>
 
                   {/* Transcript Segments */}
-                  <div className="bg-white rounded-2xl border border-surface-200 divide-y divide-surface-100">
+                  <div 
+                    ref={transcriptContainerRef}
+                    className="flex-1 bg-white rounded-2xl border border-surface-200 divide-y divide-surface-100 overflow-auto"
+                  >
                     {filteredSegments.length > 0 ? (
-                      filteredSegments.map((seg, i) => (
-                        <TranscriptSegment
-                          key={seg.id}
-                          timestamp={formatTimestamp(seg.timestamp)}
-                          label={seg.label || (i === 0 ? 'Introduction' : i === 2 ? 'Current Segment' : undefined)}
-                          text={seg.text}
-                          isCurrentSegment={i === 2}
-                        />
-                      ))
+                      filteredSegments.map((seg, i) => {
+                        const originalIndex = submission?.transcriptSegments?.findIndex(s => s.id === seg.id) ?? -1;
+                        const isCurrentSegment = originalIndex === currentSegmentIndex;
+                        return (
+                          <div
+                            key={seg.id}
+                            data-segment-index={originalIndex}
+                            onClick={() => handleSegmentClick(seg.timestamp)}
+                            className="cursor-pointer transition-colors hover:bg-surface-50"
+                          >
+                            <TranscriptSegment
+                              timestamp={formatTimestamp(seg.timestamp)}
+                              label={isCurrentSegment ? 'Current Segment' : (i === 0 && !transcriptSearch ? 'Introduction' : seg.label)}
+                              text={seg.text}
+                              isCurrentSegment={isCurrentSegment}
+                            />
+                          </div>
+                        );
+                      })
                     ) : (
                       <div className="p-8 text-center text-surface-500">
                         No transcript segments found
@@ -437,7 +484,7 @@ export default function SubmissionDetailPage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="max-w-3xl"
+                  className="space-y-6"
                 >
                   {/* Header */}
                   <div className="flex items-start justify-between mb-6">
@@ -511,7 +558,7 @@ export default function SubmissionDetailPage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="max-w-3xl space-y-6"
+                  className="space-y-6"
                 >
                   {/* Grade Summary */}
                   <div className="bg-white rounded-2xl border border-surface-200 p-6">
@@ -613,6 +660,7 @@ export default function SubmissionDetailPage() {
 
           {/* Right Video Panel */}
           <VideoPanel
+            ref={videoPanelRef}
             videoUrl={videoUrl}
             filename={submission.originalFilename}
             uploadDate={formatDate(submission.createdAt)}
@@ -623,6 +671,8 @@ export default function SubmissionDetailPage() {
             ]}
             transcriptEntries={transcriptEntries}
             onViewFullTranscript={() => setActiveTab('transcript')}
+            onTimeUpdate={setCurrentVideoTime}
+            currentTimeMs={currentVideoTime}
           />
         </div>
       </div>
