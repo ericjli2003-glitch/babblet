@@ -1306,10 +1306,10 @@ function BulkUploadPageContent() {
                           {/* Status Badge */}
                           <div className="mb-4">
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${batch.status === 'completed'
-                                ? 'bg-emerald-100 text-emerald-700'
-                                : batch.status === 'processing'
-                                  ? 'bg-amber-100 text-amber-700'
-                                  : 'bg-surface-100 text-surface-600'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : batch.status === 'processing'
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-surface-100 text-surface-600'
                               }`}>
                               {batch.status === 'processing' && (
                                 <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
@@ -1749,8 +1749,8 @@ function BulkUploadPageContent() {
                             const colorIndex = file.studentName.charCodeAt(0) % avatarColors.length;
 
                             const row = (
-                              <tr 
-                                key={file.id} 
+                              <tr
+                                key={file.id}
                                 className={`hover:bg-surface-50 transition-colors ${isClickable ? 'cursor-pointer' : ''}`}
                               >
                                 {/* Student Name */}
@@ -1794,9 +1794,9 @@ function BulkUploadPageContent() {
                                 {/* Uploaded Date */}
                                 <td className="px-6 py-4">
                                   <p className="text-sm text-surface-500">
-                                    {file.uploadCompletedAt 
+                                    {file.uploadCompletedAt
                                       ? new Date(file.uploadCompletedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-                                      : file.addedAt 
+                                      : file.addedAt
                                         ? new Date(file.addedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
                                         : '—'
                                     }
@@ -1805,18 +1805,17 @@ function BulkUploadPageContent() {
 
                                 {/* Status */}
                                 <td className="px-6 py-4">
-                                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                                    file.stage === 'complete' ? 'bg-emerald-100 text-emerald-700' :
-                                    file.stage === 'failed' ? 'bg-red-100 text-red-700' :
-                                    file.stage === 'uploading' || file.stage === 'transcribing' || file.stage === 'analyzing' ? 'bg-amber-100 text-amber-700' :
-                                    'bg-surface-100 text-surface-600'
-                                  }`}>
+                                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${file.stage === 'complete' ? 'bg-emerald-100 text-emerald-700' :
+                                      file.stage === 'failed' ? 'bg-red-100 text-red-700' :
+                                        file.stage === 'uploading' || file.stage === 'transcribing' || file.stage === 'analyzing' ? 'bg-amber-100 text-amber-700' :
+                                          'bg-surface-100 text-surface-600'
+                                    }`}>
                                     {stageInfo.icon}
-                                    {file.stage === 'complete' ? 'Ready' : 
-                                     file.stage === 'failed' ? 'Error' :
-                                     file.stage === 'uploading' ? 'Uploading' :
-                                     file.stage === 'transcribing' || file.stage === 'analyzing' ? 'Processing' :
-                                     'Queued'}
+                                    {file.stage === 'complete' ? 'Ready' :
+                                      file.stage === 'failed' ? 'Error' :
+                                        file.stage === 'uploading' ? 'Uploading' :
+                                          file.stage === 'transcribing' || file.stage === 'analyzing' ? 'Processing' :
+                                            'Queued'}
                                   </span>
                                   {file.errorMessage && (
                                     <p className="text-xs text-red-500 mt-1 max-w-[150px] truncate" title={file.errorMessage}>
