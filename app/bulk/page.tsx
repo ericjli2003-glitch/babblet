@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
+import BatchWizard from '@/components/BatchWizard';
 
 // ============================================
 // Configuration
@@ -218,6 +219,7 @@ function BulkUploadPageContent() {
   // View state
   const [view, setView] = useState<'list' | 'create' | 'batch'>('list');
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  const [showBatchWizard, setShowBatchWizard] = useState(false);
 
   // Batches
   const [batches, setBatches] = useState<BatchSummary[]>([]);
@@ -348,8 +350,16 @@ function BulkUploadPageContent() {
       if (!coursesData.success) return;
 
       const contexts: ContextOption[] = [];
+      const coursesForWizard: Array<{ id: string; name: string; courseCode?: string }> = [];
 
       for (const course of coursesData.courses || []) {
+        // Add course to wizard list
+        coursesForWizard.push({
+          id: course.id,
+          name: course.courseCode ? `${course.courseCode} - ${course.name}` : course.name,
+          courseCode: course.courseCode,
+        });
+
         const assignmentsRes = await fetch(`/api/context/assignments?courseId=${course.id}`);
         const assignmentsData = await assignmentsRes.json();
         if (!assignmentsData.success) continue;
@@ -373,6 +383,15 @@ function BulkUploadPageContent() {
       }
 
       setAvailableContexts(contexts);
+      // Also update availableCourses for the wizard
+      if (coursesForWizard.length > 0) {
+        setAvailableCourses(prev => {
+          // Merge with existing courses from batches
+          const merged = new Map(prev.map(c => [c.id, c]));
+          coursesForWizard.forEach(c => merged.set(c.id, c));
+          return Array.from(merged.values());
+        });
+      }
     } catch (error) {
       console.error('[Bulk] Failed to load contexts:', error);
     }
@@ -441,6 +460,13 @@ function BulkUploadPageContent() {
     }
   }, [view, loadBatches, loadAvailableContexts]);
 
+  // Load contexts when wizard opens
+  useEffect(() => {
+    if (showBatchWizard) {
+      loadAvailableContexts();
+    }
+  }, [showBatchWizard, loadAvailableContexts]);
+
   // ============================================
   // Load Class Context from URL Params
   // ============================================
@@ -497,8 +523,8 @@ function BulkUploadPageContent() {
             setSelectedContextAssignment({ id: assignment.id, name: assignment.name });
           }
 
-          // Go directly to create view for class-scoped uploads
-          setView('create');
+          // Show wizard for class-scoped uploads
+          setShowBatchWizard(true);
         }
       } catch (error) {
         console.error('[Bulk] Failed to load class context:', error);
@@ -1204,7 +1230,7 @@ function BulkUploadPageContent() {
                       </select>
                     )}
                     <button
-                      onClick={() => setView('create')}
+                      onClick={() => setShowBatchWizard(true)}
                       className="flex items-center gap-2 px-4 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors font-medium"
                     >
                       <Plus className="w-4 h-4" />
@@ -1240,7 +1266,7 @@ function BulkUploadPageContent() {
                             Context: {classScopedInfo.courseName} ({classScopedInfo.term})
                           </p>
                           <button
-                            onClick={() => setView('create')}
+                            onClick={() => setShowBatchWizard(true)}
                             className="inline-flex items-center gap-2 px-6 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-colors"
                           >
                             <Plus className="w-5 h-5" />
@@ -1253,7 +1279,7 @@ function BulkUploadPageContent() {
                           <h3 className="text-lg font-semibold text-surface-900 mb-2">No batches yet</h3>
                           <p className="text-surface-600 mb-6">Create your first batch to start uploading presentations</p>
                           <button
-                            onClick={() => setView('create')}
+                            onClick={() => setShowBatchWizard(true)}
                             className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors"
                           >
                             <Plus className="w-5 h-5" />
@@ -1369,7 +1395,7 @@ function BulkUploadPageContent() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         className="bg-surface-50 rounded-xl border-2 border-dashed border-surface-200 p-5 hover:border-primary-300 hover:bg-primary-50/30 transition-all cursor-pointer flex flex-col items-center justify-center min-h-[200px]"
-                        onClick={() => setView('create')}
+                        onClick={() => setShowBatchWizard(true)}
                       >
                         <div className="w-12 h-12 rounded-xl bg-surface-100 flex items-center justify-center mb-3">
                           <Plus className="w-6 h-6 text-surface-400" />
@@ -2009,6 +2035,19 @@ function BulkUploadPageContent() {
             </>
           )}
         </AnimatePresence>
+
+        {/* Batch Creation Wizard */}
+        <BatchWizard
+          isOpen={showBatchWizard}
+          onClose={() => setShowBatchWizard(false)}
+          onComplete={(batchId) => {
+            setShowBatchWizard(false);
+            loadBatches();
+            setSelectedBatchId(batchId);
+            setView('batch');
+          }}
+          courses={availableCourses.map(c => ({ id: c.id, name: c.name }))}
+        />
       </div>
     </DashboardLayout>
   );
