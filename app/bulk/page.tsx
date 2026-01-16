@@ -7,9 +7,10 @@ import {
   Upload, FolderOpen, Plus, Trash2, Download,
   CheckCircle, XCircle, Clock, Loader2, FileVideo, FileAudio,
   ChevronRight, ArrowLeft, Users, AlertTriangle, X, Play, BookOpen,
-  GraduationCap, FileText, Eye
+  GraduationCap, FileText, Eye, MoreHorizontal, Calendar
 } from 'lucide-react';
 import Link from 'next/link';
+import DashboardLayout from '@/components/DashboardLayout';
 
 // ============================================
 // Configuration
@@ -1110,10 +1111,8 @@ function BulkUploadPageContent() {
   const accentColor = isClassScoped ? 'teal' : 'primary';
 
   return (
-    <div className={`min-h-screen ${isClassScoped
-      ? 'bg-gradient-to-br from-teal-50 via-surface-50 to-cyan-50'
-      : 'bg-gradient-to-br from-surface-50 via-surface-100 to-primary-50'
-      }`}>
+    <DashboardLayout>
+      <div className="min-h-full bg-surface-50">
       {/* Class Context Header - Persistent when class-scoped */}
       {isClassScoped && classScopedInfo && (
         <div className="bg-gradient-to-r from-teal-600 to-cyan-600 text-white">
@@ -1171,101 +1170,8 @@ function BulkUploadPageContent() {
         </div>
       )}
 
-      {/* Header */}
-      <header className={`sticky ${isClassScoped ? 'top-0' : 'top-0'} z-50 bg-white/90 backdrop-blur-lg border-b ${isClassScoped ? 'border-teal-200' : 'border-surface-200'}`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-4">
-              {/* Navigation - Different destinations based on scope */}
-              {isClassScoped ? (
-                view === 'batch' || view === 'create' ? (
-                  <Link
-                    href={`/context?courseId=${classScopedInfo?.courseId}&assignmentId=${classScopedInfo?.assignmentId}`}
-                    className="flex items-center gap-2 text-teal-600 hover:text-teal-800 transition-colors"
-                  >
-                    <ArrowLeft className="w-5 h-5" />
-                    <span className="text-sm font-medium">Back to Assignment</span>
-                  </Link>
-                ) : (
-                  <Link
-                    href={`/context?courseId=${classScopedInfo?.courseId}`}
-                    className="flex items-center gap-2 text-teal-600 hover:text-teal-800 transition-colors"
-                  >
-                    <ArrowLeft className="w-5 h-5" />
-                    <span className="text-sm font-medium">Back to Class Notebook</span>
-                  </Link>
-                )
-              ) : view === 'batch' ? (
-                <button
-                  onClick={goToBatchList}
-                  className="flex items-center gap-2 text-surface-600 hover:text-surface-900 transition-colors"
-                >
-                  <ArrowLeft className="w-5 h-5" />
-                  <span className="text-sm font-medium">Back to Batches</span>
-                </button>
-              ) : view === 'create' ? (
-                <button
-                  onClick={goToBatchList}
-                  className="flex items-center gap-2 text-surface-600 hover:text-surface-900 transition-colors"
-                >
-                  <ArrowLeft className="w-5 h-5" />
-                  <span className="text-sm font-medium">Back to Batches</span>
-                </button>
-              ) : (
-                <Link href="/" className="flex items-center gap-2 text-surface-600 hover:text-surface-900 transition-colors">
-                  <ArrowLeft className="w-5 h-5" />
-                  <span className="text-sm font-medium">Back to Dashboard</span>
-                </Link>
-              )}
-              <div className={`h-6 w-px ${isClassScoped ? 'bg-teal-200' : 'bg-surface-200'}`} />
-
-              {/* Title - Different based on scope */}
-              {isClassScoped ? (
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-teal-100 flex items-center justify-center">
-                    <BookOpen className="w-5 h-5 text-teal-600" />
-                  </div>
-                  <div>
-                    <h1 className="text-lg font-bold text-teal-800">
-                      Upload Submissions for {classScopedInfo?.assignmentName || 'Assignment'}
-                    </h1>
-                    <p className="text-xs text-teal-600">
-                      Graded using class rubric and materials
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <h1 className="text-xl font-bold bg-gradient-to-r from-primary-600 to-violet-600 bg-clip-text text-transparent">
-                  Bulk Upload Submissions
-                </h1>
-              )}
-            </div>
-
-            {/* Header Actions */}
-            {view === 'batch' && currentBatch && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={exportCsv}
-                  disabled={stats.complete === 0}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
-                >
-                  <Download className="w-4 h-4" />
-                  Export CSV
-                </button>
-                <button
-                  onClick={() => deleteBatch(selectedBatchId!)}
-                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="p-8">
         <AnimatePresence mode="wait">
           {/* Batches List View */}
           {view === 'list' && (
@@ -1275,67 +1181,34 @@ function BulkUploadPageContent() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
             >
-              <div className="flex items-center justify-between mb-6">
+              {/* Page Header */}
+              <div className="flex items-center justify-between mb-8">
                 <div>
-                  {isClassScoped && classScopedInfo ? (
-                    <>
-                      <div className="flex items-center gap-3 mb-1">
-                        <h2 className="text-2xl font-bold text-surface-900">
-                          Batches for {classScopedInfo.assignmentName}
-                        </h2>
-                        <span className="px-2.5 py-1 bg-teal-100 text-teal-700 text-xs font-medium rounded-full flex items-center gap-1">
-                          <GraduationCap className="w-3 h-3" />
-                          {classScopedInfo.courseName}
-                        </span>
-                      </div>
-                      <p className="text-surface-600 mt-1">
-                        Upload student presentations for this assignment
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <h2 className="text-2xl font-bold text-surface-900">Your Batches</h2>
-                      <p className="text-surface-600 mt-1">Upload and process student presentation videos in bulk</p>
-                    </>
-                  )}
+                  <h1 className="text-2xl font-bold text-surface-900">Presentation Batches</h1>
+                  <p className="text-surface-500 mt-1">Manage, track, and grade your student presentation groups</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  {/* Course Filter - Only show on global view */}
+                  {/* Course Filter */}
                   {!isClassScoped && availableCourses.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm text-surface-600">Filter:</label>
-                      <select
-                        value={courseFilter}
-                        onChange={(e) => setCourseFilter(e.target.value)}
-                        className="px-3 py-2 bg-white border border-surface-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      >
-                        <option value="">All Courses</option>
-                        {availableCourses.map(course => (
-                          <option key={course.id} value={course.id}>
-                            {course.name}{course.courseCode ? ` (${course.courseCode})` : ''}
-                          </option>
-                        ))}
-                      </select>
-                      {courseFilter && (
-                        <button
-                          onClick={() => setCourseFilter('')}
-                          className="p-1 text-surface-400 hover:text-surface-600"
-                          title="Clear filter"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
+                    <select
+                      value={courseFilter}
+                      onChange={(e) => setCourseFilter(e.target.value)}
+                      className="px-3 py-2.5 bg-white border border-surface-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    >
+                      <option value="">All Courses</option>
+                      {availableCourses.map(course => (
+                        <option key={course.id} value={course.id}>
+                          {course.name}{course.courseCode ? ` (${course.courseCode})` : ''}
+                        </option>
+                      ))}
+                    </select>
                   )}
                   <button
                     onClick={() => setView('create')}
-                    className={`flex items-center gap-2 px-4 py-2 text-white rounded-xl transition-colors ${isClassScoped
-                      ? 'bg-teal-600 hover:bg-teal-700'
-                      : 'bg-primary-600 hover:bg-primary-700'
-                      }`}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors font-medium"
                   >
-                    <Plus className="w-5 h-5" />
-                    {isClassScoped ? 'New Batch for Assignment' : 'New Batch'}
+                    <Plus className="w-4 h-4" />
+                    New Batch
                   </button>
                 </div>
               </div>
@@ -1402,63 +1275,109 @@ function BulkUploadPageContent() {
                     </button>
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredBatches.map(batch => (
                       <motion.div
                         key={batch.id}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6 hover:shadow-md transition-shadow cursor-pointer"
+                        className="bg-white rounded-xl border border-surface-200 p-5 hover:shadow-lg hover:border-primary-200 transition-all cursor-pointer group"
                         onClick={() => openBatch(batch.id)}
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3">
-                              <h3 className="text-lg font-semibold text-surface-900">{batch.name}</h3>
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${batch.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
-                                batch.status === 'processing' ? 'bg-amber-100 text-amber-700' :
-                                  'bg-surface-100 text-surface-700'
-                                }`}>
-                                {batch.status}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 mt-1 text-sm text-surface-500">
-                              {batch.courseName && <span>{batch.courseName}</span>}
-                              {batch.assignmentName && <span>• {batch.assignmentName}</span>}
-                              <span>• {formatDate(batch.createdAt)}</span>
-                            </div>
+                        {/* Card Header */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <p className="text-xs font-medium text-surface-400 uppercase tracking-wide mb-1">
+                              {batch.courseName || 'No Course'}
+                            </p>
+                            <h3 className="text-lg font-semibold text-surface-900 group-hover:text-primary-600 transition-colors">
+                              {batch.name}
+                            </h3>
                           </div>
-                          <div className="flex items-center gap-6">
-                            <div className="text-center">
-                              <div className="text-2xl font-bold text-surface-900">{batch.totalSubmissions}</div>
-                              <div className="text-xs text-surface-500">Total</div>
-                            </div>
-                            <div className="text-center">
-                              <div className="text-2xl font-bold text-emerald-600">{batch.processedCount}</div>
-                              <div className="text-xs text-surface-500">Complete</div>
-                            </div>
-                            <button
-                              onClick={(e) => deleteBatch(batch.id, e)}
-                              className="p-2 text-surface-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Delete batch"
-                            >
-                              <Trash2 className="w-5 h-5" />
-                            </button>
-                            <ChevronRight className="w-5 h-5 text-surface-400" />
-                          </div>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); deleteBatch(batch.id, e); }}
+                            className="p-1.5 text-surface-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                            title="Delete batch"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
-                        {batch.totalSubmissions > 0 && (
-                          <div className="mt-3">
-                            <div className="h-2 bg-surface-100 rounded-full overflow-hidden">
+
+                        {/* Status Badge */}
+                        <div className="mb-4">
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                            batch.status === 'completed' 
+                              ? 'bg-emerald-100 text-emerald-700' 
+                              : batch.status === 'processing' 
+                                ? 'bg-amber-100 text-amber-700' 
+                                : 'bg-surface-100 text-surface-600'
+                          }`}>
+                            {batch.status === 'processing' && (
+                              <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
+                            )}
+                            {batch.status === 'completed' && <CheckCircle className="w-3 h-3" />}
+                            {batch.status === 'completed' ? 'Completed' : batch.status === 'processing' ? 'Processing' : 'Queued'}
+                          </span>
+                        </div>
+
+                        {/* Progress / Stats */}
+                        {batch.status === 'processing' && batch.totalSubmissions > 0 && (
+                          <div className="mb-4">
+                            <div className="flex items-center justify-between text-xs text-surface-500 mb-1.5">
+                              <span>Remaining time...</span>
+                              <span>{Math.round((batch.processedCount / batch.totalSubmissions) * 100)}%</span>
+                            </div>
+                            <div className="h-1.5 bg-surface-100 rounded-full overflow-hidden">
                               <div
-                                className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all"
+                                className="h-full bg-primary-500 transition-all"
                                 style={{ width: `${(batch.processedCount / batch.totalSubmissions) * 100}%` }}
                               />
                             </div>
+                            <p className="text-xs text-surface-500 mt-2">
+                              {batch.processedCount} of {batch.totalSubmissions} processed
+                            </p>
                           </div>
                         )}
+
+                        {batch.status === 'completed' && (
+                          <div className="mb-4">
+                            <div className="flex items-center gap-4">
+                              <div>
+                                <p className="text-xs text-surface-400">All graded</p>
+                                <p className="text-lg font-semibold text-surface-900">{batch.processedCount}/{batch.totalSubmissions}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Footer */}
+                        <div className="pt-3 border-t border-surface-100 flex items-center justify-between text-xs text-surface-400">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5" />
+                            {formatDate(batch.createdAt)}
+                          </span>
+                          {batch.status === 'completed' && (
+                            <span className="text-primary-600 font-medium group-hover:underline">
+                              View Report
+                            </span>
+                          )}
+                        </div>
                       </motion.div>
                     ))}
+
+                    {/* Create New Batch Card */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-surface-50 rounded-xl border-2 border-dashed border-surface-200 p-5 hover:border-primary-300 hover:bg-primary-50/30 transition-all cursor-pointer flex flex-col items-center justify-center min-h-[200px]"
+                      onClick={() => setView('create')}
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-surface-100 flex items-center justify-center mb-3">
+                        <Plus className="w-6 h-6 text-surface-400" />
+                      </div>
+                      <p className="font-medium text-surface-700">Create New Batch</p>
+                      <p className="text-sm text-surface-500">Upload student presentations</p>
+                    </motion.div>
                   </div>
                 );
               })()}
@@ -1472,13 +1391,20 @@ function BulkUploadPageContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
+              className="space-y-6"
             >
+              {/* Page Header with Back Button */}
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={goToBatchList}
+                  className="p-2 text-surface-500 hover:text-surface-700 hover:bg-white rounded-lg transition-colors"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                <h1 className="text-2xl font-bold text-surface-900">Create New Batch</h1>
+              </div>
+
               <div className={`bg-white rounded-2xl shadow-sm border p-8 ${isClassScoped ? 'border-teal-200' : 'border-surface-200'}`}>
-                <h2 className="text-2xl font-bold text-surface-900 mb-6">
-                  {isClassScoped && classScopedInfo
-                    ? `Create Batch for ${classScopedInfo.assignmentName}`
-                    : 'Create New Batch'}
-                </h2>
 
                 <div className="space-y-6 max-w-xl">
                   {/* Context Selection Banner */}
@@ -1637,16 +1563,45 @@ function BulkUploadPageContent() {
               exit={{ opacity: 0, y: -20 }}
               className="space-y-6"
             >
-              {/* Batch Header */}
+              {/* Page Header with Back Button */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={goToBatchList}
+                    className="p-2 text-surface-500 hover:text-surface-700 hover:bg-white rounded-lg transition-colors"
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                  <div>
+                    <h1 className="text-2xl font-bold text-surface-900">{currentBatch?.name || 'Batch Details'}</h1>
+                    <p className="text-surface-500 text-sm">
+                      {currentBatch?.courseName} • {currentBatch?.assignmentName}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={exportCsv}
+                    disabled={stats.complete === 0}
+                    className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export CSV
+                  </button>
+                  <button
+                    onClick={() => deleteBatch(selectedBatchId!)}
+                    className="p-2 text-surface-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Batch Header Card */}
               {currentBatch && (
                 <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-6">
                   <div className="flex items-start justify-between mb-6">
                     <div>
-                      <h2 className="text-2xl font-bold text-surface-900">{currentBatch.name}</h2>
-                      <div className="flex items-center gap-2 mt-1 text-sm text-surface-500">
-                        {currentBatch.courseName && <span>{currentBatch.courseName}</span>}
-                        {currentBatch.assignmentName && <span>• {currentBatch.assignmentName}</span>}
-                      </div>
                       {/* Context Indicator */}
                       {currentBatch.bundleVersionId ? (
                         <div className="flex items-center gap-2 mt-2">
@@ -2053,6 +2008,7 @@ function BulkUploadPageContent() {
           </>
         )}
       </AnimatePresence>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }
