@@ -197,23 +197,36 @@ export default function SubmissionDetailPage() {
     if (!submission?.transcriptSegments || submission.transcriptSegments.length === 0) return -1;
     const segments = submission.transcriptSegments;
     // Find the segment that contains the current time
+    // Timestamps might be in milliseconds or seconds - handle both
     for (let i = segments.length - 1; i >= 0; i--) {
-      if (currentVideoTime >= segments[i].timestamp) {
+      const segTime = segments[i].timestamp;
+      // If timestamps are small (likely seconds), convert currentVideoTime to seconds
+      const compareTime = segTime < 1000 ? currentVideoTime / 1000 : currentVideoTime;
+      if (compareTime >= segTime) {
         return i;
       }
     }
     return 0;
   }, [submission?.transcriptSegments, currentVideoTime]);
 
+  // Handle video time updates
+  const handleVideoTimeUpdate = useCallback((timeMs: number) => {
+    setCurrentVideoTime(timeMs);
+  }, []);
+
   // Build transcript entries for video panel
   const transcriptEntries = useMemo(() => {
     if (!submission?.transcriptSegments) return [];
-    return submission.transcriptSegments.slice(0, 8).map((seg, i) => ({
-      timestamp: formatTimestamp(seg.timestamp),
-      timestampMs: seg.timestamp,
-      text: seg.text.slice(0, 100) + (seg.text.length > 100 ? '...' : ''),
-      isHighlighted: i === currentSegmentIndex,
-    }));
+    return submission.transcriptSegments.slice(0, 8).map((seg, i) => {
+      // Handle timestamps that might be in seconds or milliseconds
+      const timestampMs = seg.timestamp < 1000 ? seg.timestamp * 1000 : seg.timestamp;
+      return {
+        timestamp: formatTimestamp(timestampMs),
+        timestampMs: timestampMs,
+        text: seg.text.slice(0, 100) + (seg.text.length > 100 ? '...' : ''),
+        isHighlighted: i === currentSegmentIndex,
+      };
+    });
   }, [submission?.transcriptSegments, currentSegmentIndex]);
 
   // Filter transcript segments by search
@@ -381,6 +394,46 @@ export default function SubmissionDetailPage() {
                     ]}
                   />
 
+                  {/* Course Material Alignment */}
+                  <div className="bg-white rounded-2xl border border-surface-200 p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="font-semibold text-surface-900">Course Material Alignment</h3>
+                        <p className="text-sm text-surface-500">How well the presentation aligns with course content</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-2xl font-bold text-primary-600">87%</span>
+                        <p className="text-xs text-surface-500">Overall Alignment</p>
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      {[
+                        { label: 'Topic Coverage', description: 'Key concepts from syllabus addressed', value: 92, color: 'bg-emerald-500' },
+                        { label: 'Terminology Accuracy', description: 'Correct use of course-specific terms', value: 88, color: 'bg-primary-500' },
+                        { label: 'Content Depth', description: 'Level of detail matching expectations', value: 85, color: 'bg-primary-500' },
+                        { label: 'Reference Integration', description: 'Use of required readings/materials', value: 78, color: 'bg-amber-500' },
+                      ].map((item) => (
+                        <div key={item.label}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div>
+                              <span className="text-sm font-medium text-surface-900">{item.label}</span>
+                              <span className="text-xs text-surface-500 ml-2">{item.description}</span>
+                            </div>
+                            <span className={`text-sm font-semibold ${item.value >= 85 ? 'text-emerald-600' : item.value >= 70 ? 'text-amber-600' : 'text-red-600'}`}>
+                              {item.value}%
+                            </span>
+                          </div>
+                          <div className="h-2 bg-surface-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full ${item.color} rounded-full transition-all`}
+                              style={{ width: `${item.value}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Two Column Grid */}
                   <div className="grid grid-cols-2 gap-6">
                     {/* Key Insights */}
@@ -452,15 +505,17 @@ export default function SubmissionDetailPage() {
                       filteredSegments.map((seg, i) => {
                         const originalIndex = submission?.transcriptSegments?.findIndex(s => s.id === seg.id) ?? -1;
                         const isCurrentSegment = originalIndex === currentSegmentIndex;
+                        // Handle timestamps that might be in seconds or milliseconds
+                        const timestampMs = seg.timestamp < 1000 ? seg.timestamp * 1000 : seg.timestamp;
                         return (
                           <div
                             key={seg.id}
                             data-segment-index={originalIndex}
-                            onClick={() => handleSegmentClick(seg.timestamp)}
-                            className="cursor-pointer transition-colors hover:bg-surface-50"
+                            onClick={() => handleSegmentClick(timestampMs)}
+                            className={`cursor-pointer transition-colors ${isCurrentSegment ? 'bg-primary-50 border-l-4 border-primary-500' : 'hover:bg-surface-50'}`}
                           >
                             <TranscriptSegment
-                              timestamp={formatTimestamp(seg.timestamp)}
+                              timestamp={formatTimestamp(timestampMs)}
                               label={isCurrentSegment ? 'Current Segment' : (i === 0 && !transcriptSearch ? 'Introduction' : seg.label)}
                               text={seg.text}
                               isCurrentSegment={isCurrentSegment}
@@ -671,7 +726,7 @@ export default function SubmissionDetailPage() {
             ]}
             transcriptEntries={transcriptEntries}
             onViewFullTranscript={() => setActiveTab('transcript')}
-            onTimeUpdate={setCurrentVideoTime}
+            onTimeUpdate={handleVideoTimeUpdate}
             currentTimeMs={currentVideoTime}
           />
         </div>
