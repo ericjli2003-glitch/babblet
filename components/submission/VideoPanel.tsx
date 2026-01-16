@@ -1,0 +1,145 @@
+'use client';
+
+import { useRef } from 'react';
+import { Play, Calendar, Volume2, Gauge } from 'lucide-react';
+
+interface TranscriptEntry {
+  timestamp: string;
+  timestampMs: number;
+  text: string;
+  isHighlighted?: boolean;
+}
+
+interface Alert {
+  type: 'pacing' | 'volume';
+  label: string;
+  timeRange?: string;
+}
+
+interface VideoPanelProps {
+  videoUrl?: string | null;
+  filename: string;
+  uploadDate: string;
+  fileSize: string;
+  alerts?: Alert[];
+  transcriptEntries: TranscriptEntry[];
+  onViewFullTranscript?: () => void;
+}
+
+export default function VideoPanel({
+  videoUrl,
+  filename,
+  uploadDate,
+  fileSize,
+  alerts = [],
+  transcriptEntries,
+  onViewFullTranscript,
+}: VideoPanelProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const seekTo = (timestampMs: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = timestampMs / 1000;
+      videoRef.current.play();
+    }
+  };
+
+  return (
+    <div className="w-96 bg-surface-800 text-white flex flex-col h-full">
+      {/* Video Player */}
+      <div className="p-4">
+        <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
+          {videoUrl ? (
+            <video
+              ref={videoRef}
+              src={videoUrl}
+              controls
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-surface-700 to-surface-900">
+              <button className="w-16 h-16 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-colors">
+                <Play className="w-8 h-8 text-white ml-1" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* File Info */}
+        <div className="mt-4">
+          <h3 className="font-medium text-sm truncate">{filename}</h3>
+          <div className="flex items-center gap-2 mt-1.5 text-xs text-surface-400">
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Uploaded {uploadDate}</span>
+            <span>•</span>
+            <span>{fileSize}</span>
+          </div>
+        </div>
+
+        {/* Alert Badges */}
+        {alerts.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-3">
+            {alerts.map((alert, i) => (
+              <span
+                key={i}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                  alert.type === 'pacing'
+                    ? 'bg-emerald-500/20 text-emerald-300'
+                    : 'bg-amber-500/20 text-amber-300'
+                }`}
+              >
+                {alert.type === 'pacing' ? (
+                  <Gauge className="w-3 h-3" />
+                ) : (
+                  <Volume2 className="w-3 h-3" />
+                )}
+                {alert.label}
+                {alert.timeRange && (
+                  <span className="text-white/60">({alert.timeRange})</span>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Live Transcript */}
+      <div className="flex-1 border-t border-surface-700 flex flex-col overflow-hidden">
+        <div className="px-4 py-3 border-b border-surface-700 flex items-center justify-between">
+          <h4 className="font-semibold text-sm uppercase tracking-wide">Live Transcript</h4>
+          {onViewFullTranscript && (
+            <button
+              onClick={onViewFullTranscript}
+              className="text-xs text-primary-400 hover:text-primary-300 font-medium"
+            >
+              View Full
+            </button>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-auto p-4 space-y-3">
+          {transcriptEntries.map((entry, i) => (
+            <div
+              key={i}
+              onClick={() => seekTo(entry.timestampMs)}
+              className={`cursor-pointer rounded-lg p-2 -mx-2 transition-colors ${
+                entry.isHighlighted
+                  ? 'bg-primary-500/20'
+                  : 'hover:bg-surface-700/50'
+              }`}
+            >
+              <span className="text-primary-400 font-mono text-xs block mb-1">
+                {entry.timestamp}
+              </span>
+              <p className={`text-xs leading-relaxed ${
+                entry.isHighlighted ? 'text-white' : 'text-surface-300'
+              }`}>
+                {entry.text}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

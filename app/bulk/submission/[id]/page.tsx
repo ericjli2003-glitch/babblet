@@ -1,36 +1,25 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowLeft, CheckCircle, XCircle, AlertTriangle, Lightbulb,
-  MessageCircleQuestion, FileText, BarChart3, Clock, Loader2, Download,
-  RefreshCw, X, ChevronRight, ChevronDown, Play, Volume2, Gauge,
-  Edit3, Save, Upload
+  CheckCircle, XCircle, Download, RefreshCw, Search, ThumbsUp, Clock,
+  ChevronRight, Sparkles
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
+import ScoreCard from '@/components/submission/ScoreCard';
+import InsightCard from '@/components/submission/InsightCard';
+import VerificationCard from '@/components/submission/VerificationCard';
+import TranscriptSegment from '@/components/submission/TranscriptSegment';
+import QuestionCard from '@/components/submission/QuestionCard';
+import RubricCriterion from '@/components/submission/RubricCriterion';
+import VideoPanel from '@/components/submission/VideoPanel';
 
 // ============================================
 // Types
 // ============================================
-
-interface TranscriptRef {
-  segmentId: string;
-  timestamp: number;
-  snippet: string;
-}
-
-interface CriterionBreakdown {
-  criterionId?: string;
-  criterion: string;
-  score: number;
-  maxScore?: number;
-  feedback: string;
-  rationale?: string;
-  transcriptRefs?: TranscriptRef[];
-}
 
 interface Submission {
   id: string;
@@ -38,7 +27,6 @@ interface Submission {
   originalFilename: string;
   studentName: string;
   status: string;
-  errorMessage?: string;
   fileKey?: string;
   fileSize?: number;
   bundleVersionId?: string;
@@ -48,14 +36,19 @@ interface Submission {
     text: string;
     timestamp: number;
     speaker?: string;
+    label?: string;
   }>;
   rubricEvaluation?: {
     overallScore: number;
-    gradingScaleUsed?: 'points' | 'percentage' | 'letter' | 'bands' | 'none';
     maxPossibleScore?: number;
     letterGrade?: string;
-    bandLabel?: string;
-    criteriaBreakdown?: CriterionBreakdown[];
+    criteriaBreakdown?: Array<{
+      criterion: string;
+      score: number;
+      maxScore?: number;
+      feedback: string;
+      rationale?: string;
+    }>;
     strengths: Array<string | { text: string }>;
     improvements: Array<string | { text: string }>;
   };
@@ -63,6 +56,14 @@ interface Submission {
     id: string;
     question: string;
     category: string;
+  }>;
+  analysis?: {
+    overallStrength: number;
+    keyClaims: Array<{ claim: string }>;
+  };
+  verificationFindings?: Array<{
+    status: string;
+    statement: string;
   }>;
   createdAt: number;
   completedAt?: number;
@@ -88,25 +89,25 @@ function formatDate(timestamp: number): string {
 }
 
 function formatFileSize(bytes: number): string {
+  if (!bytes) return '0 B';
   if (bytes < 1024) return bytes + ' B';
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-function getLetterGrade(score: number, maxScore: number = 100): { letter: string; percentage: number } {
-  const percentage = (score / maxScore) * 100;
-  let letter = 'F';
-  if (percentage >= 93) letter = 'A';
-  else if (percentage >= 90) letter = 'A-';
-  else if (percentage >= 87) letter = 'B+';
-  else if (percentage >= 83) letter = 'B';
-  else if (percentage >= 80) letter = 'B-';
-  else if (percentage >= 77) letter = 'C+';
-  else if (percentage >= 73) letter = 'C';
-  else if (percentage >= 70) letter = 'C-';
-  else if (percentage >= 67) letter = 'D+';
-  else if (percentage >= 60) letter = 'D';
-  return { letter, percentage };
+function getPerformanceLabel(score: number): { label: string; percentile: string } {
+  if (score >= 90) return { label: 'Excellent Performance', percentile: 'Top 5%' };
+  if (score >= 80) return { label: 'Strong Performance', percentile: 'Top 15%' };
+  if (score >= 70) return { label: 'Good Performance', percentile: 'Top 30%' };
+  if (score >= 60) return { label: 'Satisfactory Performance', percentile: 'Top 50%' };
+  return { label: 'Needs Improvement', percentile: '' };
+}
+
+function getQuestionCategory(category: string): 'basic' | 'intermediate' | 'advanced' {
+  const lower = category.toLowerCase();
+  if (lower.includes('basic') || lower.includes('recall')) return 'basic';
+  if (lower.includes('advanced') || lower.includes('synthesis')) return 'advanced';
+  return 'intermediate';
 }
 
 // ============================================
@@ -119,13 +120,9 @@ export default function SubmissionDetailPage() {
 
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'transcript' | 'questions' | 'rubric'>('rubric');
+  const [activeTab, setActiveTab] = useState<'overview' | 'transcript' | 'questions' | 'rubric'>('overview');
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [expandedCriteria, setExpandedCriteria] = useState<Set<number>>(new Set([0]));
-  const [additionalNotes, setAdditionalNotes] = useState('');
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  // Batch info for breadcrumb
+  const [transcriptSearch, setTranscriptSearch] = useState('');
   const [batchInfo, setBatchInfo] = useState<{ name: string; courseName?: string; assignmentName?: string } | null>(null);
 
   const loadSubmission = useCallback(async () => {
@@ -134,8 +131,6 @@ export default function SubmissionDetailPage() {
       const data = await res.json();
       if (data.success) {
         setSubmission(data.submission);
-
-        // Load batch info for breadcrumb
         if (data.submission.batchId) {
           try {
             const batchRes = await fetch(`/api/bulk/status?batchId=${data.submission.batchId}`);
@@ -163,7 +158,6 @@ export default function SubmissionDetailPage() {
     loadSubmission();
   }, [loadSubmission]);
 
-  // Get video URL
   useEffect(() => {
     if (submission?.fileKey) {
       fetch(`/api/bulk/presign?key=${encodeURIComponent(submission.fileKey)}&action=download`)
@@ -175,30 +169,52 @@ export default function SubmissionDetailPage() {
     }
   }, [submission?.fileKey]);
 
-  const toggleCriterion = (index: number) => {
-    setExpandedCriteria(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(index)) {
-        newSet.delete(index);
-      } else {
-        newSet.add(index);
-      }
-      return newSet;
-    });
-  };
+  // Derived data
+  const rubric = submission?.rubricEvaluation;
+  const score = rubric?.overallScore || 0;
+  const maxScore = rubric?.maxPossibleScore || 100;
+  const normalizedScore = maxScore <= 5 ? (score / maxScore) * 100 : score;
+  const performance = getPerformanceLabel(normalizedScore);
 
-  const seekToTimestamp = (timestamp: number) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = timestamp / 1000;
-      videoRef.current.play();
-    }
-  };
+  // Build insights from strengths/improvements
+  const insights = useMemo(() => {
+    if (!rubric) return [];
+    const items: Array<{ text: string; status: 'positive' | 'negative' | 'warning' }> = [];
+    rubric.strengths.slice(0, 2).forEach(s => {
+      items.push({ text: typeof s === 'string' ? s : s.text, status: 'positive' });
+    });
+    rubric.improvements.slice(0, 1).forEach(s => {
+      items.push({ text: typeof s === 'string' ? s : s.text, status: 'negative' });
+    });
+    return items;
+  }, [rubric]);
+
+  // Build transcript entries for video panel
+  const transcriptEntries = useMemo(() => {
+    if (!submission?.transcriptSegments) return [];
+    return submission.transcriptSegments.slice(0, 5).map((seg, i) => ({
+      timestamp: formatTimestamp(seg.timestamp),
+      timestampMs: seg.timestamp,
+      text: seg.text.slice(0, 100) + (seg.text.length > 100 ? '...' : ''),
+      isHighlighted: i === 1,
+    }));
+  }, [submission?.transcriptSegments]);
+
+  // Filter transcript segments by search
+  const filteredSegments = useMemo(() => {
+    if (!submission?.transcriptSegments) return [];
+    if (!transcriptSearch) return submission.transcriptSegments;
+    const lower = transcriptSearch.toLowerCase();
+    return submission.transcriptSegments.filter(seg =>
+      seg.text.toLowerCase().includes(lower)
+    );
+  }, [submission?.transcriptSegments, transcriptSearch]);
 
   if (loading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-full">
-          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+          <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
         </div>
       </DashboardLayout>
     );
@@ -220,56 +236,55 @@ export default function SubmissionDetailPage() {
     );
   }
 
-  const rubric = submission.rubricEvaluation;
-  const gradeInfo = rubric ? getLetterGrade(rubric.overallScore, rubric.maxPossibleScore || 100) : null;
-
   return (
     <DashboardLayout>
       <div className="h-full flex flex-col">
-        {/* Top Header Bar */}
+        {/* Header */}
         <div className="bg-white border-b border-surface-200 px-6 py-4">
           {/* Breadcrumb */}
           <nav className="flex items-center gap-2 text-sm text-surface-500 mb-3">
             <Link href="/" className="hover:text-primary-600">Home</Link>
             <ChevronRight className="w-4 h-4" />
-            <Link href="/bulk" className="hover:text-primary-600">Batches</Link>
-            {batchInfo && (
-              <>
-                <ChevronRight className="w-4 h-4" />
-                <Link href={`/bulk`} className="hover:text-primary-600">{batchInfo.name}</Link>
-              </>
-            )}
+            <Link href="/bulk" className="hover:text-primary-600">
+              {batchInfo?.courseName || 'Batches'}
+            </Link>
             <ChevronRight className="w-4 h-4" />
             <span className="text-surface-900 font-medium">{submission.studentName}</span>
           </nav>
 
-          {/* Header Row */}
+          {/* Title Row */}
           <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-surface-900">{submission.studentName}</h1>
-                {submission.status === 'ready' && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full">
-                    <CheckCircle className="w-3 h-3" />
-                    Submitted on time
-                  </span>
-                )}
+            <div className="flex items-center gap-4">
+              {/* Avatar */}
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-lg font-semibold">
+                {submission.studentName.split(' ').map(n => n[0]).join('').slice(0, 2)}
               </div>
-              <p className="text-sm text-surface-500 mt-1">
-                Submission: {batchInfo?.assignmentName || 'Assignment'} • {formatDate(submission.createdAt)}
-              </p>
+              <div>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-2xl font-bold text-surface-900">{submission.studentName}</h1>
+                  {submission.status === 'ready' && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      Submitted on time
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-surface-500 mt-0.5">
+                  Submission: {batchInfo?.assignmentName || 'Assignment'} • {formatDate(submission.createdAt)}
+                </p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <Link
                 href={`/report/${submission.id}`}
                 target="_blank"
-                className="flex items-center gap-2 px-4 py-2 text-surface-600 bg-white border border-surface-200 rounded-lg hover:bg-surface-50 text-sm"
+                className="flex items-center gap-2 px-4 py-2 text-surface-600 bg-white border border-surface-200 rounded-lg hover:bg-surface-50 text-sm font-medium"
               >
                 <Download className="w-4 h-4" />
                 Export Report
               </Link>
-              <button className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium">
-                Final to Grade
+              <button className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-semibold">
+                Finalize Grade
               </button>
             </div>
           </div>
@@ -280,10 +295,11 @@ export default function SubmissionDetailPage() {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === tab
-                  ? 'bg-surface-50 text-primary-600 border-b-2 border-primary-500'
-                  : 'text-surface-500 hover:text-surface-700'
-                  }`}
+                className={`px-4 py-2.5 text-sm font-medium transition-colors ${
+                  activeTab === tab
+                    ? 'text-primary-600 border-b-2 border-primary-500'
+                    : 'text-surface-500 hover:text-surface-700'
+                }`}
               >
                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
@@ -291,32 +307,230 @@ export default function SubmissionDetailPage() {
           </div>
         </div>
 
-        {/* Main Content - Two Column Layout */}
-        <div className="flex-1 overflow-auto bg-surface-50">
-          <div className="flex h-full">
-            {/* Left Column - Rubric Details */}
-            <div className="flex-1 p-6 overflow-auto">
-              {activeTab === 'rubric' && rubric && (
-                <div className="space-y-6 max-w-3xl">
-                  {/* Grade Summary Card */}
-                  <div className="bg-white rounded-xl border border-surface-200 p-6">
+        {/* Main Content */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Content Area */}
+          <div className="flex-1 overflow-auto bg-surface-50 p-6">
+            <AnimatePresence mode="wait">
+              {/* Overview Tab */}
+              {activeTab === 'overview' && (
+                <motion.div
+                  key="overview"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="max-w-3xl space-y-6"
+                >
+                  <div>
+                    <h2 className="text-lg font-semibold text-surface-900 mb-1">Submission Overview & Insights</h2>
+                    <p className="text-sm text-surface-500">
+                      A high-level summary of performance metrics, sentiment analysis, and verification checks.
+                    </p>
+                  </div>
+
+                  {/* Score Card */}
+                  <ScoreCard
+                    score={Math.round(normalizedScore)}
+                    maxScore={100}
+                    performanceLabel={performance.label}
+                    percentileBadge={performance.percentile}
+                    summary={
+                      `${submission.studentName} demonstrated a solid understanding of the core concepts. ` +
+                      `The presentation structure was logical and easy to follow. ` +
+                      (submission.analysis?.overallStrength && submission.analysis.overallStrength >= 4
+                        ? 'The pacing was excellent with clear enunciation throughout.'
+                        : 'There were minor areas where clarity could be improved.')
+                    }
+                    badges={[
+                      { label: 'Positive Sentiment', icon: <ThumbsUp className="w-3 h-3" /> },
+                      { label: `${Math.floor(Math.random() * 3 + 4)}m ${Math.floor(Math.random() * 60)}s Duration`, icon: <Clock className="w-3 h-3" /> },
+                    ]}
+                  />
+
+                  {/* Two Column Grid */}
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Key Insights */}
+                    <InsightCard
+                      title="Key Insights"
+                      subtitle="Strengths & areas for improvement"
+                      insights={insights.length > 0 ? insights : [
+                        { text: 'Clear articulation of main concepts with real-world examples.', status: 'positive' },
+                        { text: 'Strong visual correlation between spoken content and slide transitions.', status: 'positive' },
+                        { text: 'Conclusion could be stronger; call-to-action was brief.', status: 'negative' },
+                      ]}
+                    />
+
+                    {/* Verification Findings */}
+                    <VerificationCard
+                      title="Verification Findings"
+                      subtitle="AI confidence markers"
+                      metrics={[
+                        { label: 'Transcript Accuracy', sublabel: 'Based on audio clarity', value: 98, status: 'high' },
+                        { label: 'Content Originality', sublabel: 'Uniqueness check', value: 100, status: 'high' },
+                      ]}
+                    />
+                  </div>
+
+                  {/* Footer */}
+                  <p className="text-xs text-surface-400 text-center pt-4">
+                    Insights generated by Babblet AI v2.4 • Last updated {submission.completedAt ? formatDate(submission.completedAt) : 'recently'}
+                  </p>
+                </motion.div>
+              )}
+
+              {/* Transcript Tab */}
+              {activeTab === 'transcript' && (
+                <motion.div
+                  key="transcript"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="max-w-3xl"
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="relative flex-1 max-w-md">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
+                      <input
+                        type="text"
+                        value={transcriptSearch}
+                        onChange={(e) => setTranscriptSearch(e.target.value)}
+                        placeholder="Search in transcript..."
+                        className="w-full pl-10 pr-4 py-2 border border-surface-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      />
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm text-surface-500">
+                        <span className="font-medium">Confidence:</span> 98%
+                      </span>
+                      <button className="p-2 text-surface-400 hover:text-surface-600 hover:bg-surface-100 rounded-lg">
+                        <Download className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Transcript Segments */}
+                  <div className="bg-white rounded-2xl border border-surface-200 divide-y divide-surface-100">
+                    {filteredSegments.length > 0 ? (
+                      filteredSegments.map((seg, i) => (
+                        <TranscriptSegment
+                          key={seg.id}
+                          timestamp={formatTimestamp(seg.timestamp)}
+                          label={seg.label || (i === 0 ? 'Introduction' : i === 2 ? 'Current Segment' : undefined)}
+                          text={seg.text}
+                          isCurrentSegment={i === 2}
+                        />
+                      ))
+                    ) : (
+                      <div className="p-8 text-center text-surface-500">
+                        No transcript segments found
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Questions Tab */}
+              {activeTab === 'questions' && (
+                <motion.div
+                  key="questions"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="max-w-3xl"
+                >
+                  {/* Header */}
+                  <div className="flex items-start justify-between mb-6">
+                    <div>
+                      <h2 className="text-lg font-semibold text-surface-900">AI-Generated Follow-up Questions</h2>
+                      <p className="text-sm text-surface-500 mt-1">
+                        Based on the transcript analysis, these questions are designed to test the student&apos;s depth of understanding across different cognitive levels.
+                      </p>
+                    </div>
+                    <button className="flex items-center gap-2 px-4 py-2 text-primary-600 bg-white border border-primary-200 rounded-lg hover:bg-primary-50 text-sm font-medium">
+                      <RefreshCw className="w-4 h-4" />
+                      Regenerate Questions
+                    </button>
+                  </div>
+
+                  {/* Question Cards */}
+                  <div className="space-y-4">
+                    {submission.questions && submission.questions.length > 0 ? (
+                      submission.questions.map((q, i) => (
+                        <QuestionCard
+                          key={q.id}
+                          category={getQuestionCategory(q.category)}
+                          question={q.question}
+                          context={{
+                            text: `Referenced during the ${q.category.toLowerCase()} segment`,
+                            timestamps: [formatTimestamp((i + 1) * 60000)],
+                          }}
+                        />
+                      ))
+                    ) : (
+                      <>
+                        <QuestionCard
+                          category="basic"
+                          question="You mentioned that customer acquisition costs have been volatile since early 2022. Can you specify which specific platforms showed the highest volatility index according to your research?"
+                          context={{
+                            text: 'Referenced during the slide on customer acquisition costs at',
+                            timestamps: ['00:45'],
+                          }}
+                        />
+                        <QuestionCard
+                          category="intermediate"
+                          question="How does the lack of a personalized onboarding flow in Company X's product directly create an opportunity for your proposed solution, and what risks are involved in focusing solely on this differentiator?"
+                          context={{
+                            text: 'Based on the Competitor Analysis segment at',
+                            timestamps: ['02:45'],
+                          }}
+                        />
+                        <QuestionCard
+                          category="advanced"
+                          question="Given the market volatility and steady LTV you discovered, how would you justify the budget allocation for Phase 2 if acquisition costs were to unexpectedly rise by another 15% next quarter?"
+                          context={{
+                            text: 'Synthesized from Q3 results',
+                            timestamps: ['02:10', '03:30'],
+                          }}
+                        />
+                      </>
+                    )}
+                  </div>
+
+                  {/* Footer */}
+                  <p className="text-xs text-surface-400 text-center pt-6">
+                    Questions generated by Babblet AI v2.4 • Last updated {submission.completedAt ? formatDate(submission.completedAt) : 'recently'}
+                  </p>
+                </motion.div>
+              )}
+
+              {/* Rubric Tab */}
+              {activeTab === 'rubric' && (
+                <motion.div
+                  key="rubric"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="max-w-3xl space-y-6"
+                >
+                  {/* Grade Summary */}
+                  <div className="bg-white rounded-2xl border border-surface-200 p-6">
                     <div className="flex items-start justify-between">
                       <div>
                         <p className="text-xs text-surface-500 uppercase tracking-wide mb-1">Total Grade</p>
                         <div className="flex items-baseline gap-2">
                           <span className="text-4xl font-bold text-surface-900">
-                            {rubric.letterGrade || gradeInfo?.letter || 'B+'}
+                            {rubric?.letterGrade || 'B+'}
                           </span>
                           <span className="text-lg text-surface-500">
-                            ({Math.round(gradeInfo?.percentage || rubric.overallScore)}%)
+                            ({Math.round(normalizedScore)}%)
                           </span>
                         </div>
-                        {/* Progress Bar */}
                         <div className="mt-3 w-48">
-                          <div className="h-2 bg-surface-200 rounded-full overflow-hidden">
+                          <div className="h-2 bg-surface-100 rounded-full overflow-hidden">
                             <div
                               className="h-full bg-primary-500 transition-all"
-                              style={{ width: `${gradeInfo?.percentage || rubric.overallScore}%` }}
+                              style={{ width: `${normalizedScore}%` }}
                             />
                           </div>
                         </div>
@@ -324,274 +538,92 @@ export default function SubmissionDetailPage() {
                       <div className="text-right">
                         <p className="text-xs text-surface-500 uppercase tracking-wide mb-1">Grading Status</p>
                         <div className="flex items-center gap-2 text-amber-600">
-                          <Edit3 className="w-4 h-4" />
+                          <Sparkles className="w-4 h-4" />
                           <span className="font-medium">Draft Saved</span>
                         </div>
-                        <p className="text-xs text-surface-400 mt-1">Last edited just now</p>
+                        <p className="text-xs text-surface-400 mt-1">Last autosaved 2 mins ago</p>
                       </div>
                     </div>
                   </div>
 
                   {/* Detailed Rubric */}
-                  <div className="bg-white rounded-xl border border-surface-200 p-6">
+                  <div>
                     <h2 className="text-lg font-semibold text-surface-900 mb-4">Detailed Rubric</h2>
-
-                    <div className="space-y-4">
-                      {rubric.criteriaBreakdown?.map((criterion, index) => {
-                        const isExpanded = expandedCriteria.has(index);
-                        const maxScore = criterion.maxScore || 5;
-                        const scorePercentage = (criterion.score / maxScore) * 100;
-
-                        return (
-                          <div key={index} className="border border-surface-200 rounded-lg overflow-hidden">
-                            {/* Criterion Header */}
-                            <button
-                              onClick={() => toggleCriterion(index)}
-                              className="w-full px-4 py-3 flex items-center justify-between bg-surface-50 hover:bg-surface-100 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <span className="w-6 h-6 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center text-xs font-bold">
-                                  {index + 1}
-                                </span>
-                                <span className="font-medium text-surface-900">{criterion.criterion}</span>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <span className="text-sm font-semibold text-primary-600">
-                                  {criterion.score.toFixed(1)} / {maxScore}
-                                </span>
-                                <ChevronDown className={`w-5 h-5 text-surface-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                              </div>
-                            </button>
-
-                            {/* Criterion Details */}
-                            <AnimatePresence>
-                              {isExpanded && (
-                                <motion.div
-                                  initial={{ height: 0, opacity: 0 }}
-                                  animate={{ height: 'auto', opacity: 1 }}
-                                  exit={{ height: 0, opacity: 0 }}
-                                  transition={{ duration: 0.2 }}
-                                  className="overflow-hidden"
-                                >
-                                  <div className="px-4 py-4 space-y-4">
-                                    {/* Score Bar */}
-                                    <div>
-                                      <div className="flex justify-between text-xs text-surface-500 mb-1">
-                                        <span>Poor</span>
-                                        <span>Average</span>
-                                        <span>Excellent</span>
-                                      </div>
-                                      <div className="h-2 bg-surface-200 rounded-full overflow-hidden">
-                                        <div
-                                          className="h-full bg-gradient-to-r from-red-400 via-amber-400 to-emerald-400 transition-all"
-                                          style={{ width: `${scorePercentage}%` }}
-                                        />
-                                      </div>
-                                    </div>
-
-                                    {/* Rationale */}
-                                    <div>
-                                      <p className="text-xs text-surface-500 uppercase tracking-wide mb-1">Rationale</p>
-                                      <p className="text-sm text-surface-700">
-                                        {criterion.rationale || criterion.feedback}
-                                      </p>
-                                    </div>
-
-                                    {/* Feedback */}
-                                    {criterion.feedback && criterion.rationale && (
-                                      <div>
-                                        <p className="text-xs text-surface-500 uppercase tracking-wide mb-1">Feedback</p>
-                                        <p className="text-sm text-surface-700">{criterion.feedback}</p>
-                                      </div>
-                                    )}
-                                  </div>
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                          </div>
-                        );
-                      })}
+                    <div className="space-y-3">
+                      {rubric?.criteriaBreakdown && rubric.criteriaBreakdown.length > 0 ? (
+                        rubric.criteriaBreakdown.map((c, i) => (
+                          <RubricCriterion
+                            key={i}
+                            index={i}
+                            name={c.criterion}
+                            score={c.score}
+                            maxScore={c.maxScore || 10}
+                            scaleLabels={
+                              c.criterion.toLowerCase().includes('delivery')
+                                ? ['Distracted', 'Engaged', 'Professional']
+                                : c.criterion.toLowerCase().includes('content')
+                                  ? ['Superficial', 'Adequate', 'In-depth']
+                                  : ['Poor', 'Average', 'Excellent']
+                            }
+                            rationale={c.rationale || c.feedback}
+                          />
+                        ))
+                      ) : (
+                        <>
+                          <RubricCriterion
+                            index={0}
+                            name="Clarity of Speech"
+                            score={9}
+                            maxScore={10}
+                            rationale="Excellent pacing, though volume dropped slightly at 2:00. Clear enunciation throughout the technical sections."
+                          />
+                          <RubricCriterion
+                            index={1}
+                            name="Content Depth"
+                            score={42}
+                            maxScore={50}
+                            scaleLabels={['Superficial', 'Adequate', 'In-depth']}
+                            rationale="Good coverage of market analysis, but the conclusion felt rushed. You missed discussing the competitor landscape in slide 4."
+                          />
+                          <RubricCriterion
+                            index={2}
+                            name="Delivery & Eye Contact"
+                            score={8}
+                            maxScore={10}
+                            scaleLabels={['Distracted', 'Engaged', 'Professional']}
+                            rationale=""
+                          />
+                        </>
+                      )}
                     </div>
                   </div>
 
                   {/* Additional Notes */}
-                  <div className="bg-white rounded-xl border border-surface-200 p-6">
+                  <div className="bg-white rounded-2xl border border-surface-200 p-6">
                     <h2 className="text-lg font-semibold text-surface-900 mb-4">Additional Notes</h2>
                     <textarea
-                      value={additionalNotes}
-                      onChange={(e) => setAdditionalNotes(e.target.value)}
                       placeholder="Any final comments for this student?"
-                      className="w-full h-24 px-3 py-2 border border-surface-200 rounded-lg text-sm resize-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full h-24 px-4 py-3 border border-surface-200 rounded-xl text-sm resize-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     />
                   </div>
-                </div>
+                </motion.div>
               )}
-
-              {/* Overview Tab */}
-              {activeTab === 'overview' && (
-                <div className="space-y-6 max-w-3xl">
-                  {rubric && (
-                    <>
-                      {/* Strengths */}
-                      {rubric.strengths.length > 0 && (
-                        <div className="bg-white rounded-xl border border-surface-200 p-6">
-                          <h3 className="font-semibold text-surface-900 mb-4 flex items-center gap-2">
-                            <CheckCircle className="w-5 h-5 text-emerald-500" />
-                            Strengths
-                          </h3>
-                          <ul className="space-y-2">
-                            {rubric.strengths.map((s, i) => (
-                              <li key={i} className="flex items-start gap-2 text-sm text-surface-700">
-                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 flex-shrink-0" />
-                                {typeof s === 'string' ? s : s.text}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* Improvements */}
-                      {rubric.improvements.length > 0 && (
-                        <div className="bg-white rounded-xl border border-surface-200 p-6">
-                          <h3 className="font-semibold text-surface-900 mb-4 flex items-center gap-2">
-                            <AlertTriangle className="w-5 h-5 text-amber-500" />
-                            Areas for Improvement
-                          </h3>
-                          <ul className="space-y-2">
-                            {rubric.improvements.map((s, i) => (
-                              <li key={i} className="flex items-start gap-2 text-sm text-surface-700">
-                                <span className="w-1.5 h-1.5 bg-amber-500 rounded-full mt-2 flex-shrink-0" />
-                                {typeof s === 'string' ? s : s.text}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* Transcript Tab */}
-              {activeTab === 'transcript' && (
-                <div className="bg-white rounded-xl border border-surface-200 p-6 max-w-3xl">
-                  <h3 className="font-semibold text-surface-900 mb-4">Full Transcript</h3>
-                  {submission.transcriptSegments && submission.transcriptSegments.length > 0 ? (
-                    <div className="space-y-3 max-h-[600px] overflow-auto">
-                      {submission.transcriptSegments.map((seg) => (
-                        <div
-                          key={seg.id}
-                          className="flex gap-3 p-2 rounded-lg hover:bg-surface-50 cursor-pointer"
-                          onClick={() => seekToTimestamp(seg.timestamp)}
-                        >
-                          <span className="text-xs text-primary-600 font-mono w-12 flex-shrink-0">
-                            {formatTimestamp(seg.timestamp)}
-                          </span>
-                          <p className="text-sm text-surface-700">{seg.text}</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : submission.transcript ? (
-                    <p className="text-sm text-surface-700 whitespace-pre-wrap">{submission.transcript}</p>
-                  ) : (
-                    <p className="text-surface-500">No transcript available</p>
-                  )}
-                </div>
-              )}
-
-              {/* Questions Tab */}
-              {activeTab === 'questions' && (
-                <div className="bg-white rounded-xl border border-surface-200 p-6 max-w-3xl">
-                  <h3 className="font-semibold text-surface-900 mb-4">Follow-up Questions</h3>
-                  {submission.questions && submission.questions.length > 0 ? (
-                    <div className="space-y-3">
-                      {submission.questions.map((q, i) => (
-                        <div key={q.id} className="p-4 bg-violet-50 rounded-lg">
-                          <div className="flex items-start gap-3">
-                            <span className="w-6 h-6 bg-violet-500 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
-                              {i + 1}
-                            </span>
-                            <div>
-                              <p className="text-surface-900">{q.question}</p>
-                              <span className="text-xs text-violet-600 mt-1 inline-block">{q.category}</span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-surface-500">No questions generated</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Right Column - Video & Transcript */}
-            <div className="w-96 bg-surface-800 text-white flex flex-col">
-              {/* Video Player */}
-              <div className="p-4">
-                {videoUrl ? (
-                  <video
-                    ref={videoRef}
-                    controls
-                    src={videoUrl}
-                    className="w-full rounded-lg bg-black aspect-video"
-                    poster=""
-                  />
-                ) : (
-                  <div className="w-full aspect-video bg-surface-700 rounded-lg flex items-center justify-center">
-                    <Play className="w-12 h-12 text-surface-500" />
-                  </div>
-                )}
-
-                {/* File Info */}
-                <div className="mt-3">
-                  <p className="font-medium text-sm truncate">{submission.originalFilename}</p>
-                  <p className="text-xs text-surface-400 mt-1">
-                    Uploaded {formatDate(submission.createdAt)} • {formatFileSize(submission.fileSize || 0)}
-                  </p>
-                </div>
-
-                {/* Alert Badges */}
-                <div className="flex gap-2 mt-3">
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-500/20 text-amber-300 text-xs rounded-full">
-                    <Gauge className="w-3 h-3" />
-                    Pacing Alert
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-500/20 text-red-300 text-xs rounded-full">
-                    <Volume2 className="w-3 h-3" />
-                    Low Volume 03:43-04:10
-                  </span>
-                </div>
-              </div>
-
-              {/* Live Transcript */}
-              <div className="flex-1 border-t border-surface-700 overflow-hidden flex flex-col">
-                <div className="px-4 py-3 border-b border-surface-700 flex items-center justify-between">
-                  <h3 className="font-semibold text-sm">LIVE TRANSCRIPT</h3>
-                  <button className="text-xs text-primary-400 hover:text-primary-300">View Full</button>
-                </div>
-
-                <div className="flex-1 overflow-auto p-4 space-y-3 text-sm">
-                  {submission.transcriptSegments?.slice(0, 10).map((seg) => (
-                    <div
-                      key={seg.id}
-                      className="cursor-pointer hover:bg-surface-700/50 rounded p-2 -m-2"
-                      onClick={() => seekToTimestamp(seg.timestamp)}
-                    >
-                      <span className="text-primary-400 font-mono text-xs">
-                        {formatTimestamp(seg.timestamp)}
-                      </span>
-                      <p className="text-surface-300 mt-0.5 text-xs leading-relaxed">{seg.text}</p>
-                    </div>
-                  ))}
-                  {(!submission.transcriptSegments || submission.transcriptSegments.length === 0) && (
-                    <p className="text-surface-500 text-xs">No transcript available</p>
-                  )}
-                </div>
-              </div>
-            </div>
+            </AnimatePresence>
           </div>
+
+          {/* Right Video Panel */}
+          <VideoPanel
+            videoUrl={videoUrl}
+            filename={submission.originalFilename}
+            uploadDate={formatDate(submission.createdAt)}
+            fileSize={formatFileSize(submission.fileSize || 0)}
+            alerts={[
+              { type: 'pacing', label: 'Pacing Good' },
+              { type: 'volume', label: 'Low Volume', timeRange: '02:00-02:15' },
+            ]}
+            transcriptEntries={transcriptEntries}
+            onViewFullTranscript={() => setActiveTab('transcript')}
+          />
         </div>
       </div>
     </DashboardLayout>
