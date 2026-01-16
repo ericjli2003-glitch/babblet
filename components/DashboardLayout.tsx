@@ -20,15 +20,15 @@ interface DashboardLayoutProps {
 }
 
 const sideNavItems = [
+  { href: '/courses', label: 'Courses', icon: BookOpen },
   { href: '/bulk', label: 'Batches', icon: FolderOpen },
-  { href: '/context', label: 'Courses', icon: BookOpen },
   { href: '/students', label: 'Students', icon: Users },
   { href: '/rubrics', label: 'Rubrics', icon: FileText },
 ];
 
 const topNavItems = [
-  { href: '/', label: 'Dashboard' },
-  { href: '/bulk', label: 'Batches' },
+  { href: '/courses', label: 'Dashboard' },
+  { href: '/courses', label: 'Courses' },
   { href: '/reports', label: 'Reports' },
   { href: '/settings', label: 'Settings' },
 ];
@@ -106,8 +106,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <header className="h-14 bg-white border-b border-surface-200 flex items-center justify-between px-6">
           <nav className="flex items-center gap-6">
             {topNavItems.map((item) => {
-              const isActive = item.href === '/bulk' 
-                ? pathname === '/bulk' || pathname?.startsWith('/bulk/')
+              const isActive = item.href === '/courses' 
+                ? pathname === '/courses' || pathname?.startsWith('/courses/')
                 : pathname === item.href;
               return (
                 <Link

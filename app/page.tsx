@@ -44,13 +44,13 @@ export default function HomePage() {
             {/* Auth Buttons */}
             <div className="flex items-center gap-4">
               <Link
-                href="/bulk"
+                href="/courses"
                 className="px-4 py-2 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
               >
                 Sign Up
               </Link>
               <Link
-                href="/bulk"
+                href="/courses"
                 className="text-sm text-surface-600 hover:text-surface-900 transition-colors"
               >
                 Login
@@ -78,7 +78,7 @@ export default function HomePage() {
               </p>
               <div className="flex flex-wrap gap-4">
                 <Link
-                  href="/bulk"
+                  href="/courses"
                   className="inline-flex items-center px-6 py-3 text-base font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors shadow-soft hover:shadow-glow"
                 >
                   Get Started for Free
@@ -267,7 +267,7 @@ export default function HomePage() {
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <Link
-                href="/bulk"
+                href="/courses"
                 className="inline-flex items-center px-6 py-3 text-base font-medium text-primary-600 bg-white hover:bg-surface-50 rounded-lg transition-colors shadow-soft"
               >
                 Create Free Account
