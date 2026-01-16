@@ -1832,9 +1832,9 @@ function BulkUploadPageContent() {
                                 {/* Status */}
                                 <td className="px-6 py-4">
                                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${file.stage === 'complete' ? 'bg-emerald-100 text-emerald-700' :
-                                      file.stage === 'failed' ? 'bg-red-100 text-red-700' :
-                                        file.stage === 'uploading' || file.stage === 'transcribing' || file.stage === 'analyzing' ? 'bg-amber-100 text-amber-700' :
-                                          'bg-surface-100 text-surface-600'
+                                    file.stage === 'failed' ? 'bg-red-100 text-red-700' :
+                                      file.stage === 'uploading' || file.stage === 'transcribing' || file.stage === 'analyzing' ? 'bg-amber-100 text-amber-700' :
+                                        'bg-surface-100 text-surface-600'
                                     }`}>
                                     {stageInfo.icon}
                                     {file.stage === 'complete' ? 'Ready' :

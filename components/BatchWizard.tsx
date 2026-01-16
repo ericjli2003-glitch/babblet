@@ -45,6 +45,7 @@ interface BatchWizardProps {
   onClose: () => void;
   onComplete: (batchId: string) => void;
   courses: Course[];
+  defaultCourseId?: string;
 }
 
 // ============================================
@@ -697,13 +698,13 @@ function Step3Upload({ files, setFiles, onBack, onComplete, isCreating }: Step3P
 // Main Wizard Component
 // ============================================
 
-export default function BatchWizard({ isOpen, onClose, onComplete, courses }: BatchWizardProps) {
+export default function BatchWizard({ isOpen, onClose, onComplete, courses, defaultCourseId }: BatchWizardProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [isCreating, setIsCreating] = useState(false);
 
   // Step 1 state
   const [batchName, setBatchName] = useState('');
-  const [selectedCourse, setSelectedCourse] = useState('');
+  const [selectedCourse, setSelectedCourse] = useState(defaultCourseId || '');
   const [assignmentType, setAssignmentType] = useState<'individual' | 'group' | 'presentation'>('presentation');
 
   // Step 2 state
@@ -712,6 +713,13 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses }: Ba
 
   // Step 3 state
   const [files, setFiles] = useState<QueuedFile[]>([]);
+
+  // Update selected course when defaultCourseId changes
+  useEffect(() => {
+    if (isOpen && defaultCourseId) {
+      setSelectedCourse(defaultCourseId);
+    }
+  }, [isOpen, defaultCourseId]);
 
   // Reset state when wizard closes
   useEffect(() => {

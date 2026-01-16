@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   Plus, Settings, Download, ChevronRight, Users, TrendingUp,
   AlertCircle, Play, Eye, Loader2, BookOpen
 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
+import BatchWizard from '@/components/BatchWizard';
 
 // ============================================
 // Types
@@ -261,10 +263,12 @@ function QuickStats({ course }: { course: Course }) {
 // ============================================
 
 export default function CoursesPage() {
+  const router = useRouter();
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'assignments' | 'students' | 'analytics'>('assignments');
+  const [showBatchWizard, setShowBatchWizard] = useState(false);
 
   useEffect(() => {
     // Load courses from API or use mock data
@@ -426,8 +430,8 @@ export default function CoursesPage() {
                 ))}
 
                 {/* Add Assignment Card */}
-                <Link
-                  href={`/context?courseId=${selectedCourse.id}`}
+                <button
+                  onClick={() => setShowBatchWizard(true)}
                   className="bg-surface-50 rounded-2xl border-2 border-dashed border-surface-200 p-8 flex flex-col items-center justify-center hover:border-primary-300 hover:bg-primary-50/30 transition-all min-h-[250px]"
                 >
                   <div className="w-12 h-12 rounded-xl bg-surface-100 flex items-center justify-center mb-3">
@@ -437,7 +441,7 @@ export default function CoursesPage() {
                   <p className="text-sm text-surface-500 text-center mt-1">
                     Add rubric and start grading
                   </p>
-                </Link>
+                </button>
               </div>
             )}
 
@@ -468,6 +472,19 @@ export default function CoursesPage() {
         <p className="text-xs text-surface-400 text-center mt-8">
           © 2023 Babblet Grading Systems. All rights reserved.
         </p>
+
+        {/* Batch Creation Wizard */}
+        <BatchWizard
+          isOpen={showBatchWizard}
+          onClose={() => setShowBatchWizard(false)}
+          onComplete={(batchId) => {
+            setShowBatchWizard(false);
+            // Navigate to the batch detail view
+            router.push(`/bulk?batchId=${batchId}`);
+          }}
+          courses={courses.map(c => ({ id: c.id, name: c.courseCode ? `${c.courseCode} - ${c.name}` : c.name }))}
+          defaultCourseId={selectedCourse?.id}
+        />
       </div>
     </DashboardLayout>
   );
