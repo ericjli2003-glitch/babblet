@@ -284,11 +284,10 @@ export default function CoursesPage() {
             totalSubmissions: 0,
           }));
           setCourses(mappedCourses);
-          setSelectedCourse(mappedCourses[0]);
+          // Don't auto-select - show course list first
         } else {
-          // Use mock data
+          // Use mock data but don't auto-select
           setCourses(mockCourses);
-          setSelectedCourse(mockCourses[0]);
         }
       } catch {
         setCourses(mockCourses);
