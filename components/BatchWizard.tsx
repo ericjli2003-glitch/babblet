@@ -3,9 +3,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  X, ArrowRight, Check, Upload,
+  X, ArrowRight, Check, Upload, Plus, Minus,
   FileText, Trash2, Cloud, Loader2, CheckCircle, AlertCircle, HelpCircle,
-  Edit2
+  Edit2, Save
 } from 'lucide-react';
 
 // ============================================
@@ -288,7 +288,74 @@ function Step2ContextRubric({
   const [rubricMode, setRubricMode] = useState<'upload' | 'select' | 'manual'>('upload');
   const [isParsingRubric, setIsParsingRubric] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingRubric, setEditingRubric] = useState<Rubric | null>(null);
   const rubricFileInputRef = useRef<HTMLInputElement>(null);
+
+  const startEditing = () => {
+    const allRubrics = customRubric ? [customRubric, ...rubrics] : rubrics;
+    const rubricToEdit = allRubrics.find(r => r.id === selectedRubric);
+    if (rubricToEdit) {
+      setEditingRubric(JSON.parse(JSON.stringify(rubricToEdit))); // Deep clone
+      setIsEditing(true);
+    }
+  };
+
+  const saveEditing = () => {
+    if (editingRubric) {
+      // Calculate total points
+      editingRubric.totalPoints = editingRubric.criteria.reduce((sum, c) => sum + c.points, 0);
+      setCustomRubric(editingRubric);
+      setSelectedRubric(editingRubric.id);
+      setIsEditing(false);
+      setEditingRubric(null);
+    }
+  };
+
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setEditingRubric(null);
+  };
+
+  const updateCriterion = (index: number, field: keyof RubricCriterion, value: string | number) => {
+    if (!editingRubric) return;
+    const updated = { ...editingRubric };
+    updated.criteria = [...updated.criteria];
+    updated.criteria[index] = { ...updated.criteria[index], [field]: value };
+    setEditingRubric(updated);
+  };
+
+  const updateLevel = (criterionIndex: number, levelIndex: number, field: keyof RubricLevel, value: string | number) => {
+    if (!editingRubric) return;
+    const updated = { ...editingRubric };
+    updated.criteria = [...updated.criteria];
+    const criterion = { ...updated.criteria[criterionIndex] };
+    if (criterion.levels) {
+      criterion.levels = [...criterion.levels];
+      criterion.levels[levelIndex] = { ...criterion.levels[levelIndex], [field]: value };
+      updated.criteria[criterionIndex] = criterion;
+      setEditingRubric(updated);
+    }
+  };
+
+  const addCriterion = () => {
+    if (!editingRubric) return;
+    const updated = { ...editingRubric };
+    updated.criteria = [...updated.criteria, {
+      name: 'New Criterion',
+      description: '',
+      points: 10,
+      levels: defaultLevels,
+    }];
+    setEditingRubric(updated);
+  };
+
+  const removeCriterion = (index: number) => {
+    if (!editingRubric || editingRubric.criteria.length <= 1) return;
+    const updated = { ...editingRubric };
+    updated.criteria = updated.criteria.filter((_, i) => i !== index);
+    setEditingRubric(updated);
+  };
 
   const handleRubricUpload = async (file: File) => {
     setIsParsingRubric(true);
@@ -473,67 +540,201 @@ function Step2ContextRubric({
             </select>
           )}
 
-          {/* Rubric Preview */}
-          {currentRubric && (
+          {/* Rubric Preview / Edit Mode */}
+          {(currentRubric || isEditing) && (
             <>
-              <h4 className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-3">Rubric Preview</h4>
-              
-              {/* Criteria with Levels */}
-              <div className="space-y-4">
-                {currentRubric.criteria.map((criterion) => (
-                  <div key={criterion.name} className="border border-surface-200 rounded-xl overflow-hidden">
-                    {/* Criterion Header */}
-                    <div className="bg-surface-50 px-4 py-3 flex items-center justify-between">
-                      <div>
-                        <h5 className="font-semibold text-surface-900">{criterion.name}</h5>
-                        <p className="text-xs text-surface-500">{criterion.description}</p>
-                      </div>
-                      <span className="text-sm font-bold text-primary-600">{criterion.points} pts</span>
-                    </div>
-                    
-                    {/* Levels Grid */}
-                    {criterion.levels && criterion.levels.length > 0 && (
-                      <div className="p-3 grid grid-cols-4 gap-2">
-                        {criterion.levels.map((level, idx) => (
-                          <div
-                            key={level.score}
-                            className={`p-3 rounded-lg border text-sm ${
-                              idx === criterion.levels!.length - 1
-                                ? 'border-primary-200 bg-primary-50'
-                                : 'border-surface-200 bg-white'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className={`text-xs font-semibold ${
-                                idx === criterion.levels!.length - 1 ? 'text-primary-600' : 'text-surface-500'
-                              }`}>
-                                {level.label} ({level.score})
-                              </span>
-                              {idx === criterion.levels!.length - 1 && (
-                                <span className="w-4 h-4 bg-primary-500 rounded-full flex items-center justify-center">
-                                  <Check className="w-2.5 h-2.5 text-white" />
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-xs text-surface-600 leading-relaxed">{level.description}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-semibold text-surface-500 uppercase tracking-wide">
+                  {isEditing ? 'Edit Rubric' : 'Rubric Preview'}
+                </h4>
+                {isEditing && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={cancelEditing}
+                      className="px-3 py-1.5 text-sm text-surface-600 hover:text-surface-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={saveEditing}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      Save Changes
+                    </button>
                   </div>
-                ))}
+                )}
               </div>
+              
+              {/* Editing Mode */}
+              {isEditing && editingRubric && (
+                <div className="space-y-4">
+                  {/* Rubric Name */}
+                  <div>
+                    <label className="block text-sm font-medium text-surface-700 mb-1">Rubric Name</label>
+                    <input
+                      type="text"
+                      value={editingRubric.name}
+                      onChange={(e) => setEditingRubric({ ...editingRubric, name: e.target.value })}
+                      className="w-full px-3 py-2 border border-surface-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
 
-              {/* Total Points */}
-              <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t border-surface-200">
-                <span className="text-sm font-semibold text-surface-700">Total Points</span>
-                <span className="text-lg font-bold text-primary-600">{currentRubric.totalPoints}</span>
-              </div>
+                  {/* Criteria */}
+                  {editingRubric.criteria.map((criterion, cIdx) => (
+                    <div key={cIdx} className="border border-surface-200 rounded-xl overflow-hidden">
+                      <div className="bg-surface-50 px-4 py-3">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 space-y-2">
+                            <input
+                              type="text"
+                              value={criterion.name}
+                              onChange={(e) => updateCriterion(cIdx, 'name', e.target.value)}
+                              className="w-full px-3 py-1.5 border border-surface-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-primary-500"
+                              placeholder="Criterion name"
+                            />
+                            <input
+                              type="text"
+                              value={criterion.description}
+                              onChange={(e) => updateCriterion(cIdx, 'description', e.target.value)}
+                              className="w-full px-3 py-1.5 border border-surface-200 rounded-lg text-xs text-surface-600 focus:ring-2 focus:ring-primary-500"
+                              placeholder="Description"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              value={criterion.points}
+                              onChange={(e) => updateCriterion(cIdx, 'points', parseInt(e.target.value) || 0)}
+                              className="w-16 px-2 py-1.5 border border-surface-200 rounded-lg text-sm text-center font-bold focus:ring-2 focus:ring-primary-500"
+                            />
+                            <span className="text-xs text-surface-500">pts</span>
+                            <button
+                              onClick={() => removeCriterion(cIdx)}
+                              className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
+                              disabled={editingRubric.criteria.length <= 1}
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Editable Levels */}
+                      {criterion.levels && (
+                        <div className="p-3 grid grid-cols-4 gap-2">
+                          {criterion.levels.map((level, lIdx) => (
+                            <div key={lIdx} className="p-2 rounded-lg border border-surface-200 bg-white space-y-1.5">
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={level.label}
+                                  onChange={(e) => updateLevel(cIdx, lIdx, 'label', e.target.value)}
+                                  className="flex-1 px-2 py-1 border border-surface-200 rounded text-xs font-medium focus:ring-1 focus:ring-primary-500"
+                                />
+                                <input
+                                  type="number"
+                                  value={level.score}
+                                  onChange={(e) => updateLevel(cIdx, lIdx, 'score', parseInt(e.target.value) || 0)}
+                                  className="w-10 px-1 py-1 border border-surface-200 rounded text-xs text-center focus:ring-1 focus:ring-primary-500"
+                                />
+                              </div>
+                              <textarea
+                                value={level.description}
+                                onChange={(e) => updateLevel(cIdx, lIdx, 'description', e.target.value)}
+                                className="w-full px-2 py-1 border border-surface-200 rounded text-xs text-surface-600 resize-none focus:ring-1 focus:ring-primary-500"
+                                rows={2}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
 
-              <button className="flex items-center gap-1.5 text-primary-600 text-sm font-medium mt-4 hover:text-primary-700">
-                <Edit2 className="w-4 h-4" />
-                Edit this rubric
-              </button>
+                  {/* Add Criterion Button */}
+                  <button
+                    onClick={addCriterion}
+                    className="flex items-center gap-2 w-full py-3 border-2 border-dashed border-surface-200 rounded-xl text-surface-500 hover:border-primary-300 hover:text-primary-600 text-sm font-medium justify-center"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Criterion
+                  </button>
+
+                  {/* Total Points */}
+                  <div className="flex items-center justify-end gap-2 pt-4 border-t border-surface-200">
+                    <span className="text-sm font-semibold text-surface-700">Total Points</span>
+                    <span className="text-lg font-bold text-primary-600">
+                      {editingRubric.criteria.reduce((sum, c) => sum + c.points, 0)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* View Mode */}
+              {!isEditing && currentRubric && (
+                <>
+                  {/* Criteria with Levels */}
+                  <div className="space-y-4">
+                    {currentRubric.criteria.map((criterion) => (
+                      <div key={criterion.name} className="border border-surface-200 rounded-xl overflow-hidden">
+                        {/* Criterion Header */}
+                        <div className="bg-surface-50 px-4 py-3 flex items-center justify-between">
+                          <div>
+                            <h5 className="font-semibold text-surface-900">{criterion.name}</h5>
+                            <p className="text-xs text-surface-500">{criterion.description}</p>
+                          </div>
+                          <span className="text-sm font-bold text-primary-600">{criterion.points} pts</span>
+                        </div>
+                        
+                        {/* Levels Grid */}
+                        {criterion.levels && criterion.levels.length > 0 && (
+                          <div className="p-3 grid grid-cols-4 gap-2">
+                            {criterion.levels.map((level, idx) => (
+                              <div
+                                key={level.score}
+                                className={`p-3 rounded-lg border text-sm ${
+                                  idx === criterion.levels!.length - 1
+                                    ? 'border-primary-200 bg-primary-50'
+                                    : 'border-surface-200 bg-white'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <span className={`text-xs font-semibold ${
+                                    idx === criterion.levels!.length - 1 ? 'text-primary-600' : 'text-surface-500'
+                                  }`}>
+                                    {level.label} ({level.score})
+                                  </span>
+                                  {idx === criterion.levels!.length - 1 && (
+                                    <span className="w-4 h-4 bg-primary-500 rounded-full flex items-center justify-center">
+                                      <Check className="w-2.5 h-2.5 text-white" />
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-surface-600 leading-relaxed">{level.description}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Total Points */}
+                  <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t border-surface-200">
+                    <span className="text-sm font-semibold text-surface-700">Total Points</span>
+                    <span className="text-lg font-bold text-primary-600">{currentRubric.totalPoints}</span>
+                  </div>
+
+                  <button 
+                    onClick={startEditing}
+                    className="flex items-center gap-1.5 text-primary-600 text-sm font-medium mt-4 hover:text-primary-700"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    Edit this rubric
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>
@@ -624,9 +825,9 @@ function Step3Upload({ files, setFiles, onBack, onComplete, isCreating }: Step3P
   const readyCount = files.filter(f => f.status === 'waiting' || f.status === 'complete').length;
 
   return (
-    <div className="flex flex-col min-h-[600px]">
+    <div className="flex flex-col h-[600px]">
       {/* Breadcrumb Header */}
-      <div className="px-8 py-4 border-b border-surface-200">
+      <div className="px-8 py-4 border-b border-surface-200 flex-shrink-0">
         <nav className="text-sm text-surface-500">
           <span className="hover:text-primary-600 cursor-pointer">Batches</span>
           <span className="mx-2">/</span>
@@ -636,32 +837,34 @@ function Step3Upload({ files, setFiles, onBack, onComplete, isCreating }: Step3P
         </nav>
       </div>
 
-      {/* Title */}
-      <div className="px-8 py-6">
-        <h1 className="text-2xl font-bold text-surface-900 mb-1">Step 3: Upload Student Presentations</h1>
-        <p className="text-surface-500">Final step: Add your media files to begin bulk processing.</p>
-      </div>
-
-      {/* Progress Tabs */}
-      <div className="px-8 pb-6">
-        <div className="flex gap-8 border-b border-surface-200">
-          {['General Info', 'Rubric Selection', 'Upload & Finish'].map((tab, index) => (
-            <button
-              key={tab}
-              className={`pb-3 text-sm font-medium transition-colors ${
-                index === 2
-                  ? 'text-primary-600 border-b-2 border-primary-500 -mb-px'
-                  : 'text-surface-400'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-auto">
+        {/* Title */}
+        <div className="px-8 py-6">
+          <h1 className="text-2xl font-bold text-surface-900 mb-1">Step 3: Upload Student Presentations</h1>
+          <p className="text-surface-500">Final step: Add your media files to begin bulk processing.</p>
         </div>
-      </div>
 
-      {/* Upload Zone */}
-      <div className="px-8 flex-1">
+        {/* Progress Tabs */}
+        <div className="px-8 pb-6">
+          <div className="flex gap-8 border-b border-surface-200">
+            {['General Info', 'Rubric Selection', 'Upload & Finish'].map((tab, index) => (
+              <button
+                key={tab}
+                className={`pb-3 text-sm font-medium transition-colors ${
+                  index === 2
+                    ? 'text-primary-600 border-b-2 border-primary-500 -mb-px'
+                    : 'text-surface-400'
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Upload Zone */}
+        <div className="px-8">
         <div
           onDrop={handleDrop}
           onDragOver={handleDragOver}
@@ -778,16 +981,30 @@ function Step3Upload({ files, setFiles, onBack, onComplete, isCreating }: Step3P
             </div>
           </div>
         )}
+
+        {/* Info Card */}
+        <div className="px-8 pb-6">
+          <div className="bg-primary-50 border border-primary-100 rounded-xl p-4 flex items-start gap-3">
+            <HelpCircle className="w-5 h-5 text-primary-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <h4 className="font-semibold text-surface-900 mb-1">Bulk Processing</h4>
+              <p className="text-sm text-surface-600">
+                Babblet will automatically transcribe and apply the selected rubric to each uploaded file.
+                You&apos;ll receive a notification once the batch processing is complete.
+              </p>
+            </div>
+          </div>
+        </div>
+        </div>
       </div>
 
-      {/* Footer */}
-      <div className="mt-6 px-8">
-        <div className="flex items-center justify-between text-sm text-surface-500 mb-4">
+      {/* Footer - Fixed at bottom */}
+      <div className="border-t border-surface-200 px-8 py-4 flex-shrink-0">
+        <div className="flex items-center justify-between text-sm text-surface-500 mb-3">
           <span>Total Size: {formatFileSize(totalSize)}</span>
           <span>Ready to process {readyCount} presentation{readyCount !== 1 ? 's' : ''}</span>
         </div>
-
-        <div className="flex items-center justify-between pb-6">
+        <div className="flex items-center justify-between">
           <button
             onClick={onBack}
             className="px-6 py-2.5 bg-surface-100 text-surface-700 rounded-lg hover:bg-surface-200 font-medium"
@@ -810,18 +1027,6 @@ function Step3Upload({ files, setFiles, onBack, onComplete, isCreating }: Step3P
               </>
             )}
           </button>
-        </div>
-
-        {/* Info Card */}
-        <div className="bg-primary-50 border border-primary-100 rounded-xl p-4 mb-6 flex items-start gap-3">
-          <HelpCircle className="w-5 h-5 text-primary-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <h4 className="font-semibold text-surface-900 mb-1">Bulk Processing</h4>
-            <p className="text-sm text-surface-600">
-              Babblet will automatically transcribe and apply the selected rubric to each uploaded file.
-              You&apos;ll receive a notification once the batch processing is complete.
-            </p>
-          </div>
         </div>
       </div>
     </div>
