@@ -10,9 +10,14 @@ export async function POST(request: NextRequest) {
       name, 
       courseName, 
       assignmentName, 
+      // Legacy field names
       rubricCriteria, 
       rubricTemplateId,
-      // New context references
+      // New field names from wizard
+      context,
+      rubricId,
+      customRubric,
+      // Context references
       courseId,
       assignmentId,
       bundleVersionId,
@@ -25,12 +30,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Build rubric criteria string from custom rubric if provided
+    let finalRubricCriteria = rubricCriteria || context;
+    if (customRubric?.criteria) {
+      finalRubricCriteria = customRubric.criteria
+        .map((c: { name: string; description: string; points: number }) => 
+          `${c.name} (${c.points} pts): ${c.description}`
+        )
+        .join('\n');
+    }
+
     const batch = await createBatch({
       name,
       courseName,
       assignmentName,
-      rubricCriteria,
-      rubricTemplateId,
+      rubricCriteria: finalRubricCriteria,
+      rubricTemplateId: rubricTemplateId || rubricId,
       // Pass context references if provided
       courseId,
       assignmentId: assignmentId,
@@ -39,7 +54,8 @@ export async function POST(request: NextRequest) {
 
     console.log(`[CreateBatch] Created batch ${batch.id} with bundleVersionId: ${bundleVersionId || 'none'}`);
 
-    return NextResponse.json({ success: true, batch });
+    // Return batchId at top level for wizard compatibility
+    return NextResponse.json({ success: true, batch, batchId: batch.id });
   } catch (error) {
     console.error('[CreateBatch] Error:', error);
     return NextResponse.json(
