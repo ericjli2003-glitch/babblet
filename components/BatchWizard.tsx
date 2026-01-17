@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  X, ArrowRight, ArrowLeft, Check, Upload, User, Users, Presentation,
+  X, ArrowRight, Check, Upload,
   FileText, Trash2, Cloud, Loader2, CheckCircle, AlertCircle, HelpCircle,
   Edit2
 } from 'lucide-react';
@@ -162,8 +162,6 @@ interface Step1Props {
   setBatchName: (name: string) => void;
   selectedCourse: string;
   setSelectedCourse: (id: string) => void;
-  assignmentType: 'individual' | 'group' | 'presentation';
-  setAssignmentType: (type: 'individual' | 'group' | 'presentation') => void;
   courses: Course[];
   onCancel: () => void;
   onNext: () => void;
@@ -172,7 +170,6 @@ interface Step1Props {
 function Step1GeneralInfo({
   batchName, setBatchName,
   selectedCourse, setSelectedCourse,
-  assignmentType, setAssignmentType,
   courses, onCancel, onNext,
 }: Step1Props) {
   const canProceed = batchName.trim().length > 0;
@@ -210,7 +207,7 @@ function Step1GeneralInfo({
         </div>
 
         {/* Select Course */}
-        <div className="mb-6">
+        <div>
           <label className="block text-sm font-medium text-surface-900 mb-2">Select Course</label>
           <select
             value={selectedCourse}
@@ -222,33 +219,6 @@ function Step1GeneralInfo({
               <option key={course.id} value={course.id}>{course.name}</option>
             ))}
           </select>
-        </div>
-
-        {/* Assignment Type */}
-        <div>
-          <label className="block text-sm font-medium text-surface-900 mb-3">Assignment Type</label>
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { value: 'individual', label: 'Individual', icon: User },
-              { value: 'group', label: 'Group', icon: Users },
-              { value: 'presentation', label: 'Presentation', icon: Presentation },
-            ].map(({ value, label, icon: Icon }) => (
-              <button
-                key={value}
-                onClick={() => setAssignmentType(value as typeof assignmentType)}
-                className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all ${
-                  assignmentType === value
-                    ? 'border-primary-500 bg-primary-50'
-                    : 'border-surface-200 hover:border-surface-300'
-                }`}
-              >
-                <Icon className={`w-5 h-5 ${assignmentType === value ? 'text-primary-600' : 'text-surface-500'}`} />
-                <span className={`text-sm font-medium ${assignmentType === value ? 'text-primary-700' : 'text-surface-700'}`}>
-                  {label}
-                </span>
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -289,6 +259,8 @@ interface Step2Props {
   selectedRubric: string;
   setSelectedRubric: (id: string) => void;
   rubrics: Rubric[];
+  customRubric: Rubric | null;
+  setCustomRubric: (rubric: Rubric | null) => void;
   onBack: () => void;
   onNext: () => void;
 }
@@ -296,9 +268,55 @@ interface Step2Props {
 function Step2ContextRubric({
   classContext, setClassContext,
   selectedRubric, setSelectedRubric,
-  rubrics, onBack, onNext,
+  rubrics, customRubric, setCustomRubric,
+  onBack, onNext,
 }: Step2Props) {
-  const currentRubric = rubrics.find(r => r.id === selectedRubric);
+  const [rubricMode, setRubricMode] = useState<'upload' | 'select' | 'manual'>('upload');
+  const [isParsingRubric, setIsParsingRubric] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const rubricFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleRubricUpload = async (file: File) => {
+    setIsParsingRubric(true);
+    setParseError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/context/parse-rubric', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.criteria) {
+        const parsed: Rubric = {
+          id: 'custom-uploaded',
+          name: file.name.replace(/\.[^.]+$/, ''),
+          totalPoints: data.totalPoints || data.criteria.reduce((sum: number, c: { weight: number }) => sum + (c.weight || 0), 0),
+          criteria: data.criteria.map((c: { name: string; description: string; weight: number }) => ({
+            name: c.name,
+            description: c.description || '',
+            points: c.weight || 0,
+          })),
+        };
+        setCustomRubric(parsed);
+        setSelectedRubric('custom-uploaded');
+      } else {
+        setParseError(data.error || 'Failed to parse rubric');
+      }
+    } catch (err) {
+      setParseError('Failed to upload rubric');
+      console.error(err);
+    } finally {
+      setIsParsingRubric(false);
+    }
+  };
+
+  const allRubrics = customRubric ? [customRubric, ...rubrics] : rubrics;
+  const currentRubric = allRubrics.find(r => r.id === selectedRubric);
 
   return (
     <div className="flex flex-col min-h-[600px]">
@@ -354,20 +372,93 @@ function Step2ContextRubric({
             <div className="w-6 h-6 rounded bg-primary-100 flex items-center justify-center flex-shrink-0">
               <FileText className="w-3.5 h-3.5 text-primary-600" />
             </div>
-            <h3 className="font-semibold text-surface-900">Select Rubric</h3>
+            <div>
+              <h3 className="font-semibold text-surface-900">Rubric</h3>
+              <p className="text-sm text-surface-500">Upload a rubric file or select from existing templates</p>
+            </div>
           </div>
 
-          <select
-            value={selectedRubric}
-            onChange={(e) => setSelectedRubric(e.target.value)}
-            className="w-full px-4 py-3 border border-surface-200 rounded-lg text-surface-900 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white mb-6"
-          >
-            <option value="">Choose a rubric...</option>
-            {rubrics.map((rubric) => (
-              <option key={rubric.id} value={rubric.id}>{rubric.name}</option>
+          {/* Mode Tabs */}
+          <div className="flex gap-2 mb-4">
+            {[
+              { id: 'upload', label: 'Upload Rubric' },
+              { id: 'select', label: 'Use Template' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setRubricMode(tab.id as typeof rubricMode)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  rubricMode === tab.id
+                    ? 'bg-primary-100 text-primary-700'
+                    : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
+                }`}
+              >
+                {tab.label}
+              </button>
             ))}
-          </select>
+          </div>
 
+          {/* Upload Mode */}
+          {rubricMode === 'upload' && (
+            <div className="mb-4">
+              <input
+                ref={rubricFileInputRef}
+                type="file"
+                accept=".pdf,.docx,.doc,.txt"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleRubricUpload(file);
+                }}
+                className="hidden"
+              />
+              <div
+                onClick={() => rubricFileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                  isParsingRubric
+                    ? 'border-primary-300 bg-primary-50'
+                    : 'border-surface-200 hover:border-primary-300 hover:bg-surface-50'
+                }`}
+              >
+                {isParsingRubric ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+                    <p className="text-sm text-surface-600">Parsing rubric...</p>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="w-8 h-8 text-surface-400 mx-auto mb-2" />
+                    <p className="text-sm font-medium text-surface-700">Click to upload rubric</p>
+                    <p className="text-xs text-surface-500 mt-1">Supports PDF, DOCX, DOC, TXT</p>
+                  </>
+                )}
+              </div>
+              {parseError && (
+                <p className="text-sm text-red-600 mt-2">{parseError}</p>
+              )}
+              {customRubric && (
+                <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                  <span className="text-sm text-emerald-700">Rubric parsed: {customRubric.name}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Select Mode */}
+          {rubricMode === 'select' && (
+            <select
+              value={selectedRubric}
+              onChange={(e) => setSelectedRubric(e.target.value)}
+              className="w-full px-4 py-3 border border-surface-200 rounded-lg text-surface-900 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white mb-4"
+            >
+              <option value="">Choose a rubric template...</option>
+              {rubrics.map((rubric) => (
+                <option key={rubric.id} value={rubric.id}>{rubric.name}</option>
+              ))}
+            </select>
+          )}
+
+          {/* Rubric Preview */}
           {currentRubric && (
             <>
               <h4 className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-3">Rubric Preview</h4>
@@ -705,11 +796,11 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses, defa
   // Step 1 state
   const [batchName, setBatchName] = useState('');
   const [selectedCourse, setSelectedCourse] = useState(defaultCourseId || '');
-  const [assignmentType, setAssignmentType] = useState<'individual' | 'group' | 'presentation'>('presentation');
 
   // Step 2 state
   const [classContext, setClassContext] = useState('');
   const [selectedRubric, setSelectedRubric] = useState(defaultRubrics[0].id);
+  const [customRubric, setCustomRubric] = useState<Rubric | null>(null);
 
   // Step 3 state
   const [files, setFiles] = useState<QueuedFile[]>([]);
@@ -727,9 +818,9 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses, defa
       setCurrentStep(1);
       setBatchName('');
       setSelectedCourse('');
-      setAssignmentType('presentation');
       setClassContext('');
       setSelectedRubric(defaultRubrics[0].id);
+      setCustomRubric(null);
       setFiles([]);
       setIsCreating(false);
     }
@@ -746,9 +837,13 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses, defa
         body: JSON.stringify({
           name: batchName,
           courseId: selectedCourse || undefined,
-          assignmentType,
           context: classContext,
           rubricId: selectedRubric,
+          customRubric: customRubric ? {
+            name: customRubric.name,
+            criteria: customRubric.criteria,
+            totalPoints: customRubric.totalPoints,
+          } : undefined,
         }),
       });
 
@@ -849,8 +944,6 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses, defa
               setBatchName={setBatchName}
               selectedCourse={selectedCourse}
               setSelectedCourse={setSelectedCourse}
-              assignmentType={assignmentType}
-              setAssignmentType={setAssignmentType}
               courses={courses}
               onCancel={onClose}
               onNext={() => setCurrentStep(2)}
@@ -864,6 +957,8 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses, defa
               selectedRubric={selectedRubric}
               setSelectedRubric={setSelectedRubric}
               rubrics={defaultRubrics}
+              customRubric={customRubric}
+              setCustomRubric={setCustomRubric}
               onBack={() => setCurrentStep(1)}
               onNext={() => setCurrentStep(3)}
             />
