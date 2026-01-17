@@ -17,10 +17,17 @@ interface Course {
   name: string;
 }
 
+interface RubricLevel {
+  score: number;
+  label: string;
+  description: string;
+}
+
 interface RubricCriterion {
   name: string;
   description: string;
   points: number;
+  levels?: RubricLevel[];
 }
 
 interface Rubric {
@@ -52,16 +59,23 @@ interface BatchWizardProps {
 // Mock Data
 // ============================================
 
+const defaultLevels: RubricLevel[] = [
+  { score: 1, label: 'Poor', description: 'Argument is incoherent or missing critical components.' },
+  { score: 2, label: 'Fair', description: 'Argument is present but lacks sufficient evidence or structure.' },
+  { score: 3, label: 'Good', description: 'Argument is clear and well-supported with relevant examples.' },
+  { score: 4, label: 'Excellent', description: 'Argument is compelling, highly organized, and uses sophisticated reasoning.' },
+];
+
 const defaultRubrics: Rubric[] = [
   {
     id: 'standard-presentation',
     name: 'Standard Presentation Rubric (University Level)',
     totalPoints: 100,
     criteria: [
-      { name: 'Content Quality', description: 'Depth of research and accuracy of information presented.', points: 40 },
-      { name: 'Visual Aids', description: 'Effectiveness of slides, charts, and media supporting the talk.', points: 20 },
-      { name: 'Delivery', description: 'Pacing, clarity of voice, and engagement with the audience.', points: 25 },
-      { name: 'Q&A Handling', description: 'Ability to answer follow-up questions accurately.', points: 15 },
+      { name: 'Content Quality', description: 'Depth of research and accuracy of information presented.', points: 40, levels: defaultLevels },
+      { name: 'Visual Aids', description: 'Effectiveness of slides, charts, and media supporting the talk.', points: 20, levels: defaultLevels },
+      { name: 'Delivery', description: 'Pacing, clarity of voice, and engagement with the audience.', points: 25, levels: defaultLevels },
+      { name: 'Q&A Handling', description: 'Ability to answer follow-up questions accurately.', points: 15, levels: defaultLevels },
     ],
   },
   {
@@ -69,9 +83,9 @@ const defaultRubrics: Rubric[] = [
     name: 'Basic Speech Rubric',
     totalPoints: 50,
     criteria: [
-      { name: 'Content', description: 'Quality and relevance of content.', points: 20 },
-      { name: 'Delivery', description: 'Speaking skills and clarity.', points: 20 },
-      { name: 'Time Management', description: 'Appropriate length and pacing.', points: 10 },
+      { name: 'Content', description: 'Quality and relevance of content.', points: 20, levels: defaultLevels },
+      { name: 'Delivery', description: 'Speaking skills and clarity.', points: 20, levels: defaultLevels },
+      { name: 'Time Management', description: 'Appropriate length and pacing.', points: 10, levels: defaultLevels },
     ],
   },
 ];
@@ -296,10 +310,11 @@ function Step2ContextRubric({
           id: 'custom-uploaded',
           name: file.name.replace(/\.[^.]+$/, ''),
           totalPoints: data.totalPoints || data.criteria.reduce((sum: number, c: { weight: number }) => sum + (c.weight || 0), 0),
-          criteria: data.criteria.map((c: { name: string; description: string; weight: number }) => ({
+          criteria: data.criteria.map((c: { name: string; description: string; weight: number; levels?: Array<{ score: number; label: string; description: string }> }) => ({
             name: c.name,
             description: c.description || '',
             points: c.weight || 0,
+            levels: c.levels || defaultLevels,
           })),
         };
         setCustomRubric(parsed);
@@ -462,30 +477,58 @@ function Step2ContextRubric({
           {currentRubric && (
             <>
               <h4 className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-3">Rubric Preview</h4>
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left text-xs text-surface-500 uppercase tracking-wide">
-                    <th className="pb-2 font-medium">Criteria</th>
-                    <th className="pb-2 font-medium">Description</th>
-                    <th className="pb-2 font-medium text-right">Points</th>
-                  </tr>
-                </thead>
-                <tbody className="text-sm">
-                  {currentRubric.criteria.map((criterion) => (
-                    <tr key={criterion.name} className="border-t border-surface-100">
-                      <td className="py-3 text-primary-600 font-medium">{criterion.name}</td>
-                      <td className="py-3 text-surface-600">{criterion.description}</td>
-                      <td className="py-3 text-right text-surface-900">{criterion.points}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t border-surface-200">
-                    <td colSpan={2} className="py-3 text-right font-semibold text-surface-700">Total Points</td>
-                    <td className="py-3 text-right font-bold text-primary-600">{currentRubric.totalPoints}</td>
-                  </tr>
-                </tfoot>
-              </table>
+              
+              {/* Criteria with Levels */}
+              <div className="space-y-4">
+                {currentRubric.criteria.map((criterion) => (
+                  <div key={criterion.name} className="border border-surface-200 rounded-xl overflow-hidden">
+                    {/* Criterion Header */}
+                    <div className="bg-surface-50 px-4 py-3 flex items-center justify-between">
+                      <div>
+                        <h5 className="font-semibold text-surface-900">{criterion.name}</h5>
+                        <p className="text-xs text-surface-500">{criterion.description}</p>
+                      </div>
+                      <span className="text-sm font-bold text-primary-600">{criterion.points} pts</span>
+                    </div>
+                    
+                    {/* Levels Grid */}
+                    {criterion.levels && criterion.levels.length > 0 && (
+                      <div className="p-3 grid grid-cols-4 gap-2">
+                        {criterion.levels.map((level, idx) => (
+                          <div
+                            key={level.score}
+                            className={`p-3 rounded-lg border text-sm ${
+                              idx === criterion.levels!.length - 1
+                                ? 'border-primary-200 bg-primary-50'
+                                : 'border-surface-200 bg-white'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className={`text-xs font-semibold ${
+                                idx === criterion.levels!.length - 1 ? 'text-primary-600' : 'text-surface-500'
+                              }`}>
+                                {level.label} ({level.score})
+                              </span>
+                              {idx === criterion.levels!.length - 1 && (
+                                <span className="w-4 h-4 bg-primary-500 rounded-full flex items-center justify-center">
+                                  <Check className="w-2.5 h-2.5 text-white" />
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-surface-600 leading-relaxed">{level.description}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Total Points */}
+              <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t border-surface-200">
+                <span className="text-sm font-semibold text-surface-700">Total Points</span>
+                <span className="text-lg font-bold text-primary-600">{currentRubric.totalPoints}</span>
+              </div>
 
               <button className="flex items-center gap-1.5 text-primary-600 text-sm font-medium mt-4 hover:text-primary-700">
                 <Edit2 className="w-4 h-4" />
