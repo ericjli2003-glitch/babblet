@@ -166,10 +166,8 @@ function AssignmentCard({
           {/* Card Header with Gradient */}
           <div className={`bg-gradient-to-br ${assignment.gradientClass} p-5 text-white relative`}>
             <div className="flex items-start justify-between mb-4">
-              <h3 className="font-semibold text-lg pr-8">{assignment.name}</h3>
-              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${status.className}`}>
-                {status.label}
-              </span>
+              <h3 className="font-semibold text-lg pr-20">{assignment.name}</h3>
+              {/* Status badge - positioned to leave room for menu */}
             </div>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
@@ -229,8 +227,11 @@ function AssignmentCard({
         </motion.div>
       </Link>
 
-      {/* Menu Button - positioned absolutely on top of card */}
-      <div className="absolute top-3 right-3 z-10">
+      {/* Status Badge + Menu Button - positioned absolutely on top of card */}
+      <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${status.className}`}>
+          {status.label}
+        </span>
         <button
           onClick={(e) => {
             e.preventDefault();
