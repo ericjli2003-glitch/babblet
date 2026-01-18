@@ -140,6 +140,7 @@ export default function SubmissionDetailPage() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [transcriptSearch, setTranscriptSearch] = useState('');
   const [questionCount, setQuestionCount] = useState(5);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [batchInfo, setBatchInfo] = useState<{ 
     id: string;
     name: string; 
@@ -342,6 +343,55 @@ export default function SubmissionDetailPage() {
       videoPanelRef.current.seekTo(timestampMs);
     }
   }, []);
+
+  // Regenerate questions with the selected count
+  const handleRegenerateQuestions = useCallback(async () => {
+    if (!submission || isRegenerating) return;
+    
+    setIsRegenerating(true);
+    try {
+      // Build transcript from segments
+      const fullTranscript = sortedSegments.map(s => s.text).join(' ');
+      
+      const res = await fetch('/api/generate-questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: submissionId,
+          context: {
+            transcript: fullTranscript,
+          },
+          settings: {
+            maxQuestions: questionCount,
+          },
+        }),
+      });
+      
+      const data = await res.json();
+      
+      if (data.success && data.questions) {
+        // Update submission with new questions
+        setSubmission(prev => prev ? {
+          ...prev,
+          questions: data.questions.map((q: { id: string; question: string; category: string; rationale?: string; rubricCriterion?: string }) => ({
+            id: q.id,
+            question: q.question,
+            category: q.category,
+            rationale: q.rationale,
+            rubricCriterion: q.rubricCriterion,
+          })),
+        } : null);
+      } else {
+        console.error('Failed to regenerate questions:', data.error);
+        alert('Failed to regenerate questions: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Error regenerating questions:', err);
+      alert('Error regenerating questions');
+    } finally {
+      setIsRegenerating(false);
+    }
+  }, [submission, submissionId, sortedSegments, questionCount, isRegenerating]);
 
   if (loading) {
     return (
@@ -691,19 +741,20 @@ export default function SubmissionDetailPage() {
                   {/* Header */}
                   <div className="flex items-start justify-between mb-6">
                     <div>
-                      <h2 className="text-lg font-semibold text-surface-900">AI-Generated Follow-up Questions</h2>
+                      <h2 className="text-lg font-semibold text-surface-900">Follow-up Questions</h2>
                       <p className="text-sm text-surface-500 mt-1">
-                        Based on the transcript analysis, these questions are designed to test the student&apos;s depth of understanding across different cognitive levels.
+                        Based on the transcript analysis, these questions test depth of understanding across different cognitive levels.
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
                       {/* Question Count Selector */}
                       <div className="flex items-center gap-2">
-                        <label className="text-sm text-surface-600">Show</label>
+                        <label className="text-sm text-surface-600">Generate</label>
                         <select
                           value={questionCount}
                           onChange={(e) => setQuestionCount(Number(e.target.value))}
                           className="px-3 py-1.5 border border-surface-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          disabled={isRegenerating}
                         >
                           <option value={3}>3 questions</option>
                           <option value={5}>5 questions</option>
@@ -712,12 +763,33 @@ export default function SubmissionDetailPage() {
                           <option value={20}>20 questions</option>
                         </select>
                       </div>
-                      <button className="flex items-center gap-2 px-4 py-2 text-primary-600 bg-white border border-primary-200 rounded-lg hover:bg-primary-50 text-sm font-medium">
-                        <RefreshCw className="w-4 h-4" />
-                        Regenerate
+                      <button 
+                        onClick={handleRegenerateQuestions}
+                        disabled={isRegenerating}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                          isRegenerating 
+                            ? 'bg-primary-100 text-primary-600 cursor-wait' 
+                            : 'text-primary-600 bg-white border border-primary-200 hover:bg-primary-50'
+                        }`}
+                      >
+                        <RefreshCw className={`w-4 h-4 ${isRegenerating ? 'animate-spin' : ''}`} />
+                        {isRegenerating ? 'Generating...' : 'Regenerate'}
                       </button>
                     </div>
                   </div>
+                  
+                  {/* Regenerating Indicator */}
+                  {isRegenerating && (
+                    <div className="bg-primary-50 border border-primary-200 rounded-xl p-4 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
+                        <RefreshCw className="w-4 h-4 text-primary-600 animate-spin" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-primary-900">Babblet is generating {questionCount} new questions...</p>
+                        <p className="text-xs text-primary-600">Analyzing transcript and creating targeted questions</p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Question Cards */}
                   <div className="space-y-4">
