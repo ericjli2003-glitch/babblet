@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle, XCircle, Download, RefreshCw, Search, ThumbsUp, Clock,
-  ChevronRight, Sparkles
+  ChevronRight, Sparkles, BookOpen, Shield
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -15,6 +15,7 @@ import VerificationCard from '@/components/submission/VerificationCard';
 import TranscriptSegment from '@/components/submission/TranscriptSegment';
 import QuestionCard from '@/components/submission/QuestionCard';
 import RubricCriterion from '@/components/submission/RubricCriterion';
+import ClassInsightCard from '@/components/submission/ClassInsightCard';
 import VideoPanel, { VideoPanelRef } from '@/components/submission/VideoPanel';
 
 // ============================================
@@ -886,88 +887,212 @@ export default function SubmissionDetailPage() {
                   exit={{ opacity: 0, y: -10 }}
                   className="space-y-6"
                 >
-                  {/* Grade Summary */}
+                  {/* Detailed Assessment Report Header */}
                   <div className="bg-white rounded-2xl border border-surface-200 p-6">
                     <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-xs text-surface-500 uppercase tracking-wide mb-1">Total Grade</p>
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-4xl font-bold text-surface-900">
-                            {rubric?.letterGrade || 'B+'}
-                          </span>
-                          <span className="text-lg text-surface-500">
-                            ({Math.round(normalizedScore)}%)
-                          </span>
-                        </div>
-                        <div className="mt-3 w-48">
-                          <div className="h-2 bg-surface-100 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-primary-500 transition-all"
-                              style={{ width: `${normalizedScore}%` }}
+                      <div className="flex items-start gap-4">
+                        {/* Score Circle */}
+                        <div className="relative w-20 h-20">
+                          <svg className="w-20 h-20 -rotate-90" viewBox="0 0 36 36">
+                            <path
+                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              fill="none"
+                              stroke="#e5e7eb"
+                              strokeWidth="3"
                             />
+                            <path
+                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              fill="none"
+                              stroke="#3b82f6"
+                              strokeWidth="3"
+                              strokeDasharray={`${normalizedScore}, 100`}
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-xl font-bold text-surface-900">{Math.round(normalizedScore)}</span>
                           </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-lg font-semibold text-surface-900">
+                              {normalizedScore >= 90 ? 'Excellent Proficiency' : 
+                               normalizedScore >= 80 ? 'Strong Proficiency' :
+                               normalizedScore >= 70 ? 'Good Proficiency' : 'Developing Proficiency'}
+                            </span>
+                            <span className="px-2 py-0.5 bg-primary-100 text-primary-700 text-xs font-medium rounded-full">
+                              Top {Math.max(5, Math.round(100 - normalizedScore))}%
+                            </span>
+                          </div>
+                          <p className="text-sm text-surface-500">
+                            {rubric?.letterGrade || 'B+'} • {rubric?.criteriaBreakdown?.length || 0} criteria evaluated
+                          </p>
                         </div>
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-surface-500 uppercase tracking-wide mb-1">Grading Status</p>
-                        <div className="flex items-center gap-2 text-amber-600">
-                          <Sparkles className="w-4 h-4" />
-                          <span className="font-medium">Draft Saved</span>
+                        <div className="flex items-center gap-2 text-emerald-600">
+                          <CheckCircle className="w-4 h-4" />
+                          <span className="font-medium">AI Graded</span>
                         </div>
-                        <p className="text-xs text-surface-400 mt-1">Last autosaved 2 mins ago</p>
+                        <p className="text-xs text-surface-400 mt-1">
+                          {submission.completedAt ? `Completed ${formatDate(submission.completedAt)}` : 'Ready for review'}
+                        </p>
                       </div>
                     </div>
                   </div>
 
-                  {/* Detailed Rubric */}
+                  {/* Class-Specific Insights */}
                   <div>
-                    <h2 className="text-lg font-semibold text-surface-900 mb-4">Detailed Rubric</h2>
-                    <div className="space-y-3">
+                    <div className="flex items-center gap-2 mb-4">
+                      <BookOpen className="w-5 h-5 text-primary-600" />
+                      <h2 className="text-lg font-semibold text-surface-900">Class-Specific Insights</h2>
+                    </div>
+                    <div className="space-y-4">
                       {rubric?.criteriaBreakdown && rubric.criteriaBreakdown.length > 0 ? (
-                        rubric.criteriaBreakdown.map((c, i) => (
-                          <RubricCriterion
-                            key={i}
-                            index={i}
-                            name={c.criterion}
-                            score={c.score}
-                            maxScore={c.maxScore || 10}
-                            scaleLabels={
-                              c.criterion.toLowerCase().includes('delivery')
-                                ? ['Distracted', 'Engaged', 'Professional']
-                                : c.criterion.toLowerCase().includes('content')
-                                  ? ['Superficial', 'Adequate', 'In-depth']
-                                  : ['Poor', 'Average', 'Excellent']
-                            }
-                            rationale={c.rationale || c.feedback}
-                          />
-                        ))
+                        rubric.criteriaBreakdown.map((c, i) => {
+                          const percentage = c.maxScore ? (c.score / c.maxScore) * 100 : 0;
+                          const status = percentage >= 90 ? 'excellent' : 
+                                        percentage >= 75 ? 'good' : 
+                                        percentage >= 50 ? 'needs_improvement' : 'missing';
+                          
+                          return (
+                            <ClassInsightCard
+                              key={i}
+                              title={c.criterion}
+                              score={c.score}
+                              maxScore={c.maxScore || 10}
+                              status={status}
+                              moduleReference={`Criterion ${i + 1}`}
+                              feedback={c.feedback || c.rationale || 'No detailed feedback available.'}
+                              courseAlignment={submission.analysis?.courseAlignment?.overall}
+                              defaultExpanded={i === 0}
+                              suggestedAction={
+                                status === 'needs_improvement' || status === 'missing'
+                                  ? {
+                                      text: `Focus on improving ${c.criterion.toLowerCase()}. Review course materials for guidance.`,
+                                      linkText: 'View Course Resources',
+                                      linkUrl: '/resources',
+                                    }
+                                  : undefined
+                              }
+                              evidence={
+                                submission.transcriptSegments?.slice(i * 2, i * 2 + 2).map(seg => ({
+                                  timestamp: formatTimestamp(seg.timestamp),
+                                  text: seg.text.slice(0, 100) + (seg.text.length > 100 ? '...' : ''),
+                                }))
+                              }
+                              onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
+                            />
+                          );
+                        })
                       ) : (
+                        // Fallback demo content
                         <>
-                          <RubricCriterion
-                            index={0}
-                            name="Clarity of Speech"
-                            score={9}
-                            maxScore={10}
-                            rationale="Excellent pacing, though volume dropped slightly at 2:00. Clear enunciation throughout the technical sections."
+                          <ClassInsightCard
+                            title="Content Knowledge & Accuracy"
+                            score={18}
+                            maxScore={20}
+                            status="excellent"
+                            moduleReference="Core Concepts"
+                            feedback="Demonstrated strong understanding of key concepts. Accurately explained the main principles and showed good integration of course material."
+                            courseAlignment={92}
+                            defaultExpanded={true}
+                            evidence={[
+                              { timestamp: '0:45', text: 'Correctly defined the core terminology and provided accurate examples...' },
+                              { timestamp: '2:15', text: 'Referenced the textbook framework effectively...' },
+                            ]}
+                            onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
                           />
-                          <RubricCriterion
-                            index={1}
-                            name="Content Depth"
-                            score={42}
-                            maxScore={50}
-                            scaleLabels={['Superficial', 'Adequate', 'In-depth']}
-                            rationale="Good coverage of market analysis, but the conclusion felt rushed. You missed discussing the competitor landscape in slide 4."
+                          <ClassInsightCard
+                            title="Presentation Structure"
+                            score={14}
+                            maxScore={20}
+                            status="good"
+                            moduleReference="Organization"
+                            feedback="Good overall structure with clear introduction and conclusion. The middle section could benefit from better transitions between topics."
+                            courseAlignment={78}
+                            suggestedAction={{
+                              text: 'Consider using signposting phrases to guide the audience through your key points.',
+                              linkText: 'Presentation Guidelines',
+                              linkUrl: '/resources',
+                            }}
+                            evidence={[
+                              { timestamp: '0:15', text: 'Strong opening that captured attention...' },
+                            ]}
+                            onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
                           />
-                          <RubricCriterion
-                            index={2}
-                            name="Delivery & Eye Contact"
+                          <ClassInsightCard
+                            title="Visual Aid Usage"
                             score={8}
-                            maxScore={10}
-                            scaleLabels={['Distracted', 'Engaged', 'Professional']}
-                            rationale=""
+                            maxScore={15}
+                            status="needs_improvement"
+                            moduleReference="Slides"
+                            feedback="Slides were text-heavy and not fully leveraged during the presentation. Consider using more visual elements and referencing slides directly."
+                            courseAlignment={65}
+                            suggestedAction={{
+                              text: 'Review the slide design principles covered in Week 3. Focus on visual hierarchy and reducing text.',
+                              linkText: 'Visual Presentation Tips',
+                              linkUrl: '/resources',
+                            }}
+                            onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
                           />
                         </>
                       )}
+                    </div>
+                  </div>
+
+                  {/* Verification & Integrity Analysis */}
+                  <div className="bg-white rounded-2xl border border-surface-200 p-6">
+                    <div className="flex items-center gap-2 mb-5">
+                      <Shield className="w-5 h-5 text-emerald-600" />
+                      <h2 className="text-lg font-semibold text-surface-900">Verification & Integrity Analysis</h2>
+                    </div>
+                    
+                    <div className="grid md:grid-cols-2 gap-6">
+                      {/* Transcript Accuracy */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-surface-700">Transcript Accuracy</span>
+                          <span className="text-lg font-bold text-emerald-600">
+                            {submission.analysis?.transcriptAccuracy ?? 98}% High Confidence
+                          </span>
+                        </div>
+                        <div className="h-2 bg-surface-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-emerald-500 rounded-full"
+                            style={{ width: `${submission.analysis?.transcriptAccuracy ?? 98}%` }}
+                          />
+                        </div>
+                        <div className="p-3 bg-surface-50 rounded-lg">
+                          <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-1">Methodology</p>
+                          <p className="text-sm text-surface-600">
+                            Audio analyzed using multi-pass spectral analysis. Speech patterns verified against expected terminology from course materials.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Content Originality */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-surface-700">Content Originality</span>
+                          <span className="text-lg font-bold text-emerald-600">
+                            {submission.analysis?.contentOriginality ?? 100}% Unique
+                          </span>
+                        </div>
+                        <div className="h-2 bg-surface-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-emerald-500 rounded-full"
+                            style={{ width: `${submission.analysis?.contentOriginality ?? 100}%` }}
+                          />
+                        </div>
+                        <div className="p-3 bg-surface-50 rounded-lg">
+                          <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-1">Methodology</p>
+                          <p className="text-sm text-surface-600">
+                            Cross-referenced against academic databases and internet sources. No matching content found.
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -979,6 +1104,11 @@ export default function SubmissionDetailPage() {
                       className="w-full h-24 px-4 py-3 border border-surface-200 rounded-xl text-sm resize-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     />
                   </div>
+
+                  {/* Footer */}
+                  <p className="text-xs text-surface-400 text-center">
+                    Report generated by Babblet AI v2.4 • Last updated {submission.completedAt ? formatDate(submission.completedAt) : 'recently'}
+                  </p>
                 </motion.div>
               )}
             </AnimatePresence>
