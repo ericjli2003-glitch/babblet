@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   Plus, Settings, Download, ChevronRight, Users, TrendingUp,
-  AlertCircle, Play, Eye, Loader2, BookOpen
+  AlertCircle, Play, Eye, Loader2, BookOpen, Trash2, MoreVertical
 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import BatchWizard from '@/components/BatchWizard';
@@ -108,84 +108,169 @@ function getStatusBadge(status: Assignment['status']) {
 // Components
 // ============================================
 
-function AssignmentCard({ assignment, courseId, courseName }: { assignment: Assignment; courseId: string; courseName?: string }) {
+function AssignmentCard({ 
+  assignment, 
+  courseId, 
+  courseName,
+  onDelete,
+}: { 
+  assignment: Assignment; 
+  courseId: string; 
+  courseName?: string;
+  onDelete?: (assignmentId: string) => void;
+}) {
+  const [showMenu, setShowMenu] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const status = getStatusBadge(assignment.status);
   const progress = assignment.totalSubmissions > 0
     ? (assignment.gradedCount / assignment.totalSubmissions) * 100
     : 0;
 
-  return (
-    <Link href={`/bulk/class/${courseId}/assignment/${assignment.id}/batch/${assignment.id}`}>
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="rounded-2xl overflow-hidden cursor-pointer hover:shadow-lg transition-shadow"
-      >
-        {/* Card Header with Gradient */}
-        <div className={`bg-gradient-to-br ${assignment.gradientClass} p-5 text-white`}>
-          <div className="flex items-start justify-between mb-4">
-            <h3 className="font-semibold text-lg">{assignment.name}</h3>
-            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${status.className}`}>
-              {status.label}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-white/70 text-xs uppercase tracking-wide">Class Avg</p>
-              <p className="text-2xl font-bold">
-                {assignment.classAverage ? `${assignment.classAverage}%` : '--'}
-              </p>
-            </div>
-            <div>
-              <p className="text-white/70 text-xs uppercase tracking-wide">Submissions</p>
-              <p className="text-2xl font-bold">{assignment.totalSubmissions}</p>
-            </div>
-          </div>
-        </div>
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!confirm(`Are you sure you want to delete "${assignment.name}"? This will permanently remove all submissions and cannot be undone.`)) {
+      return;
+    }
 
-        {/* Card Footer */}
-        <div className="bg-white p-4 border border-t-0 border-surface-200 rounded-b-2xl">
-          <div className="mb-3">
-            <div className="flex items-center justify-between text-xs text-surface-500 mb-1">
-              <span>Grading Progress</span>
-              <span>{assignment.gradedCount}/{assignment.totalSubmissions} Graded ({Math.round(progress)}%)</span>
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/bulk/batches?id=${assignment.id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        onDelete?.(assignment.id);
+      } else {
+        alert('Failed to delete assignment: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
+      alert('Failed to delete assignment');
+    } finally {
+      setIsDeleting(false);
+      setShowMenu(false);
+    }
+  };
+
+  return (
+    <div className="relative">
+      <Link href={`/bulk/class/${courseId}/assignment/${assignment.id}/batch/${assignment.id}`}>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`rounded-2xl overflow-hidden cursor-pointer hover:shadow-lg transition-shadow ${isDeleting ? 'opacity-50' : ''}`}
+        >
+          {/* Card Header with Gradient */}
+          <div className={`bg-gradient-to-br ${assignment.gradientClass} p-5 text-white relative`}>
+            <div className="flex items-start justify-between mb-4">
+              <h3 className="font-semibold text-lg pr-8">{assignment.name}</h3>
+              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${status.className}`}>
+                {status.label}
+              </span>
             </div>
-            <div className="h-1.5 bg-surface-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full bg-gradient-to-r ${assignment.gradientClass} transition-all`}
-                style={{ width: `${progress}%` }}
-              />
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-white/70 text-xs uppercase tracking-wide">Class Avg</p>
+                <p className="text-2xl font-bold">
+                  {assignment.classAverage ? `${assignment.classAverage}%` : '--'}
+                </p>
+              </div>
+              <div>
+                <p className="text-white/70 text-xs uppercase tracking-wide">Submissions</p>
+                <p className="text-2xl font-bold">{assignment.totalSubmissions}</p>
+              </div>
             </div>
           </div>
-          <div
-            className={`flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-medium transition-colors ${
-              assignment.status === 'completed'
-                ? 'bg-surface-100 text-surface-700 hover:bg-surface-200'
-                : assignment.status === 'in_progress'
-                  ? 'bg-white border border-surface-200 text-surface-700 hover:bg-surface-50'
-                  : 'bg-primary-500 text-white hover:bg-primary-600'
-            }`}
-          >
-            {assignment.status === 'completed' ? (
-              <>
-                <Eye className="w-4 h-4" />
-                View All Grades
-              </>
-            ) : assignment.status === 'in_progress' ? (
-              <>
-                <Play className="w-4 h-4" />
-                Launch Batch Grading
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4" />
-                Start Bulk Grading
-              </>
-            )}
+
+          {/* Card Footer */}
+          <div className="bg-white p-4 border border-t-0 border-surface-200 rounded-b-2xl">
+            <div className="mb-3">
+              <div className="flex items-center justify-between text-xs text-surface-500 mb-1">
+                <span>Grading Progress</span>
+                <span>{assignment.gradedCount}/{assignment.totalSubmissions} Graded ({Math.round(progress)}%)</span>
+              </div>
+              <div className="h-1.5 bg-surface-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full bg-gradient-to-r ${assignment.gradientClass} transition-all`}
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+            <div
+              className={`flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                assignment.status === 'completed'
+                  ? 'bg-surface-100 text-surface-700 hover:bg-surface-200'
+                  : assignment.status === 'in_progress'
+                    ? 'bg-white border border-surface-200 text-surface-700 hover:bg-surface-50'
+                    : 'bg-primary-500 text-white hover:bg-primary-600'
+              }`}
+            >
+              {assignment.status === 'completed' ? (
+                <>
+                  <Eye className="w-4 h-4" />
+                  View All Grades
+                </>
+              ) : assignment.status === 'in_progress' ? (
+                <>
+                  <Play className="w-4 h-4" />
+                  Launch Batch Grading
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4" />
+                  Start Bulk Grading
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      </motion.div>
-    </Link>
+        </motion.div>
+      </Link>
+
+      {/* Menu Button - positioned absolutely on top of card */}
+      <div className="absolute top-3 right-3 z-10">
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setShowMenu(!showMenu);
+          }}
+          className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors"
+        >
+          <MoreVertical className="w-4 h-4" />
+        </button>
+
+        {/* Dropdown Menu */}
+        {showMenu && (
+          <>
+            <div 
+              className="fixed inset-0 z-10" 
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowMenu(false);
+              }}
+            />
+            <div className="absolute right-0 top-8 bg-white rounded-lg shadow-lg border border-surface-200 py-1 z-20 min-w-[140px]">
+              <button
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -489,6 +574,24 @@ export default function CoursesPage() {
                     assignment={assignment}
                     courseId={selectedCourse.id}
                     courseName={selectedCourse.name}
+                    onDelete={(deletedId) => {
+                      // Remove the deleted assignment from the local state
+                      setSelectedCourse(prev => prev ? {
+                        ...prev,
+                        assignments: prev.assignments.filter(a => a.id !== deletedId),
+                        totalSubmissions: prev.totalSubmissions - (assignment.totalSubmissions || 0),
+                      } : null);
+                      // Also update the courses list
+                      setCourses(prev => prev.map(c => 
+                        c.id === selectedCourse.id 
+                          ? { 
+                              ...c, 
+                              assignments: c.assignments.filter(a => a.id !== deletedId),
+                              totalSubmissions: c.totalSubmissions - (assignment.totalSubmissions || 0),
+                            }
+                          : c
+                      ));
+                    }}
                   />
                 ))}
 
