@@ -262,6 +262,15 @@ function QuickStats({ course }: { course: Course }) {
 // Main Page
 // ============================================
 
+// Gradient classes for assignments
+const assignmentGradients = [
+  'from-primary-500 to-primary-600',
+  'from-teal-500 to-teal-600',
+  'from-violet-500 to-violet-600',
+  'from-amber-500 to-amber-600',
+  'from-rose-500 to-rose-600',
+];
+
 export default function CoursesPage() {
   const router = useRouter();
   const [courses, setCourses] = useState<Course[]>([]);
@@ -270,37 +279,89 @@ export default function CoursesPage() {
   const [activeTab, setActiveTab] = useState<'assignments' | 'students' | 'analytics'>('assignments');
   const [showBatchWizard, setShowBatchWizard] = useState(false);
 
-  useEffect(() => {
-    // Load courses from API or use mock data
-    const loadCourses = async () => {
-      try {
-        const res = await fetch('/api/context/courses');
-        const data = await res.json();
-        if (data.success && data.courses && data.courses.length > 0) {
-          // Map API courses to our format
-          const mappedCourses: Course[] = data.courses.map((c: { id: string; name: string; courseCode?: string; term?: string }) => ({
+  const loadCoursesAndBatches = async () => {
+    try {
+      // Fetch courses and batches in parallel
+      const [coursesRes, batchesRes] = await Promise.all([
+        fetch('/api/context/courses'),
+        fetch('/api/bulk/batches'),
+      ]);
+      
+      const coursesData = await coursesRes.json();
+      const batchesData = await batchesRes.json();
+
+      if (coursesData.success && coursesData.courses && coursesData.courses.length > 0) {
+        // Create a map of courseId -> batches
+        const batchesByCourse: Record<string, Assignment[]> = {};
+        const allBatches = batchesData.batches || [];
+        
+        for (const batch of allBatches) {
+          if (batch.courseId) {
+            if (!batchesByCourse[batch.courseId]) {
+              batchesByCourse[batch.courseId] = [];
+            }
+            
+            // Determine status based on batch data
+            let status: Assignment['status'] = 'not_started';
+            if (batch.processedCount > 0 && batch.processedCount >= batch.totalSubmissions && batch.totalSubmissions > 0) {
+              status = 'completed';
+            } else if (batch.processedCount > 0 || batch.status === 'processing') {
+              status = 'in_progress';
+            }
+            
+            // Calculate class average if available
+            const classAverage = batch.averageScore ? Math.round(batch.averageScore) : undefined;
+            
+            batchesByCourse[batch.courseId].push({
+              id: batch.id,
+              name: batch.name,
+              status,
+              classAverage,
+              totalSubmissions: batch.totalSubmissions || 0,
+              gradedCount: batch.processedCount || 0,
+              gradientClass: assignmentGradients[batchesByCourse[batch.courseId].length % assignmentGradients.length],
+            });
+          }
+        }
+
+        // Map API courses to our format with their assignments
+        const mappedCourses: Course[] = coursesData.courses.map((c: { id: string; name: string; courseCode?: string; term?: string }) => {
+          const courseAssignments = batchesByCourse[c.id] || [];
+          const totalSubmissions = courseAssignments.reduce((sum, a) => sum + a.totalSubmissions, 0);
+          
+          return {
             id: c.id,
             name: c.name,
             courseCode: c.courseCode,
             term: c.term,
             section: '',
-            assignments: [],
-            totalSubmissions: 0,
-          }));
-          setCourses(mappedCourses);
-          // Don't auto-select - show course list first
-        } else {
-          // Use mock data but don't auto-select
-          setCourses(mockCourses);
+            assignments: courseAssignments,
+            totalSubmissions,
+          };
+        });
+        
+        setCourses(mappedCourses);
+        
+        // Update selected course if it exists
+        if (selectedCourse) {
+          const updatedCourse = mappedCourses.find(c => c.id === selectedCourse.id);
+          if (updatedCourse) {
+            setSelectedCourse(updatedCourse);
+          }
         }
-      } catch {
+      } else {
+        // Use mock data
         setCourses(mockCourses);
-        setSelectedCourse(mockCourses[0]);
-      } finally {
-        setLoading(false);
       }
-    };
-    loadCourses();
+    } catch {
+      setCourses(mockCourses);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCoursesAndBatches();
   }, []);
 
   if (loading) {
@@ -477,8 +538,10 @@ export default function CoursesPage() {
         <BatchWizard
           isOpen={showBatchWizard}
           onClose={() => setShowBatchWizard(false)}
-          onComplete={(batchId) => {
+          onComplete={async (batchId) => {
             setShowBatchWizard(false);
+            // Refresh course data to show new assignment
+            await loadCoursesAndBatches();
             // Navigate to the batch detail view
             router.push(`/bulk?batchId=${batchId}`);
           }}
