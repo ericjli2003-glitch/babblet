@@ -139,6 +139,7 @@ export default function SubmissionDetailPage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'transcript' | 'questions' | 'rubric'>('overview');
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [transcriptSearch, setTranscriptSearch] = useState('');
+  const [questionCount, setQuestionCount] = useState(5);
   const [batchInfo, setBatchInfo] = useState<{ 
     id: string;
     name: string; 
@@ -695,16 +696,33 @@ export default function SubmissionDetailPage() {
                         Based on the transcript analysis, these questions are designed to test the student&apos;s depth of understanding across different cognitive levels.
                       </p>
                     </div>
-                    <button className="flex items-center gap-2 px-4 py-2 text-primary-600 bg-white border border-primary-200 rounded-lg hover:bg-primary-50 text-sm font-medium">
-                      <RefreshCw className="w-4 h-4" />
-                      Regenerate Questions
-                    </button>
+                    <div className="flex items-center gap-3">
+                      {/* Question Count Selector */}
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-surface-600">Show</label>
+                        <select
+                          value={questionCount}
+                          onChange={(e) => setQuestionCount(Number(e.target.value))}
+                          className="px-3 py-1.5 border border-surface-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        >
+                          <option value={3}>3 questions</option>
+                          <option value={5}>5 questions</option>
+                          <option value={10}>10 questions</option>
+                          <option value={15}>15 questions</option>
+                          <option value={20}>20 questions</option>
+                        </select>
+                      </div>
+                      <button className="flex items-center gap-2 px-4 py-2 text-primary-600 bg-white border border-primary-200 rounded-lg hover:bg-primary-50 text-sm font-medium">
+                        <RefreshCw className="w-4 h-4" />
+                        Regenerate
+                      </button>
+                    </div>
                   </div>
 
                   {/* Question Cards */}
                   <div className="space-y-4">
                     {submission.questions && submission.questions.length > 0 ? (
-                      submission.questions.map((q, i) => {
+                      submission.questions.slice(0, questionCount).map((q, i) => {
                         // Calculate estimated timestamp for this question
                         const questionsLength = submission.questions?.length || 1;
                         const segmentIndex = Math.min(
@@ -714,8 +732,8 @@ export default function SubmissionDetailPage() {
                         const segment = sortedSegments[segmentIndex];
                         const timestampMs = segment ? normalizeTimestamp(segment.timestamp) : (i + 1) * 60000;
                         
-                        // Get transcript preview from nearby segments
-                        const transcriptPreview = segment?.text?.slice(0, 150) + (segment?.text?.length > 150 ? '...' : '');
+                        // Get a brief context description from the segment
+                        const segmentPreview = segment?.text?.slice(0, 60) || q.category.replace('-', ' ');
                         
                         return (
                           <QuestionCard
@@ -723,11 +741,8 @@ export default function SubmissionDetailPage() {
                             category={getQuestionCategory(q.category)}
                             question={q.question}
                             context={{
-                              text: `Referenced during the ${q.category.replace('-', ' ')} segment`,
+                              text: `Referenced during the ${segmentPreview.toLowerCase()}${segment?.text && segment.text.length > 60 ? '...' : ''} segment at`,
                               timestamps: [formatTimestamp(timestampMs)],
-                              transcriptPreview: transcriptPreview || undefined,
-                              rationale: q.rationale,
-                              rubricCriterion: q.rubricCriterion,
                             }}
                             onTimestampClick={(ts) => {
                               // Parse timestamp string like "01:30" to milliseconds
@@ -749,10 +764,8 @@ export default function SubmissionDetailPage() {
                           category="basic"
                           question="You mentioned that customer acquisition costs have been volatile since early 2022. Can you specify which specific platforms showed the highest volatility index according to your research?"
                           context={{
-                            text: 'Referenced during the slide on customer acquisition',
+                            text: 'Referenced during the slide on customer acquisition costs at',
                             timestamps: ['00:45'],
-                            transcriptPreview: 'The customer acquisition landscape has shifted dramatically since 2022, with platform costs varying by as much as 40%...',
-                            rationale: 'Tests recall of specific data points mentioned in the presentation to verify understanding of key metrics.',
                           }}
                           onTimestampClick={() => handleSegmentClick(45000)}
                         />
@@ -760,11 +773,8 @@ export default function SubmissionDetailPage() {
                           category="intermediate"
                           question="How does the lack of a personalized onboarding flow in Company X's product directly create an opportunity for your proposed solution, and what risks are involved in focusing solely on this differentiator?"
                           context={{
-                            text: 'Based on the Competitor Analysis segment',
+                            text: 'Based on the Competitor Analysis segment at',
                             timestamps: ['02:45'],
-                            transcriptPreview: 'Looking at Company X, their onboarding is entirely self-service with no personalization...',
-                            rationale: 'Probes analytical thinking about competitive positioning and strategic risks.',
-                            rubricCriterion: 'Critical Analysis & Strategic Thinking',
                           }}
                           onTimestampClick={() => handleSegmentClick(165000)}
                         />
@@ -772,17 +782,21 @@ export default function SubmissionDetailPage() {
                           category="advanced"
                           question="Given the market volatility and steady LTV you discovered, how would you justify the budget allocation for Phase 2 if acquisition costs were to unexpectedly rise by another 15% next quarter?"
                           context={{
-                            text: 'Synthesized from Q3 results and budget discussion',
+                            text: 'Synthesized from Q3 results and budget discussion at',
                             timestamps: ['02:10', '03:30'],
-                            transcriptPreview: 'Our LTV has remained surprisingly stable at $2,400 despite the volatility in acquisition costs...',
-                            rationale: 'Requires synthesis of multiple data points and scenario planning under uncertainty.',
-                            rubricCriterion: 'Financial Reasoning & Justification',
                           }}
                           onTimestampClick={() => handleSegmentClick(130000)}
                         />
                       </>
                     )}
                   </div>
+                  
+                  {/* Show more indicator */}
+                  {submission.questions && submission.questions.length > questionCount && (
+                    <p className="text-sm text-surface-500 text-center">
+                      Showing {questionCount} of {submission.questions.length} questions. Adjust the selector above to see more.
+                    </p>
+                  )}
 
                   {/* Footer */}
                   <p className="text-xs text-surface-400 text-center pt-6">
