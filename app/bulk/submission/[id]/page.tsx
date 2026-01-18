@@ -78,6 +78,13 @@ interface Submission {
     contentOriginality?: number;
     duration?: number; // in seconds
     sentiment?: string;
+    // Speech delivery metrics
+    speechMetrics?: {
+      fillerWordCount: number;
+      speakingRateWpm: number;
+      pauseFrequency: number;
+      wordCount: number;
+    };
   };
   verificationFindings?: Array<{
     status: string;
@@ -224,6 +231,54 @@ export default function SubmissionDetailPage() {
     });
     return items;
   }, [rubric]);
+
+  // Compute speech metrics from transcript
+  const speechMetrics = useMemo(() => {
+    // Use stored metrics if available
+    if (submission?.analysis?.speechMetrics) {
+      return submission.analysis.speechMetrics;
+    }
+
+    // Otherwise, calculate from transcript
+    const transcript = submission?.transcript || '';
+    const segments = submission?.transcriptSegments || [];
+    
+    if (!transcript && segments.length === 0) {
+      return { fillerWordCount: 0, speakingRateWpm: 0, pauseFrequency: 0, wordCount: 0 };
+    }
+
+    // Get full transcript text
+    const fullText = transcript || segments.map(s => s.text).join(' ');
+    
+    // Count words
+    const words = fullText.split(/\s+/).filter(w => w.length > 0);
+    const wordCount = words.length;
+
+    // Count filler words
+    const fillerPatterns = /\b(um|uh|like|you know|i mean|so|basically|actually|literally|right|okay|well)\b/gi;
+    const fillerMatches = fullText.match(fillerPatterns);
+    const fillerWordCount = fillerMatches ? fillerMatches.length : 0;
+
+    // Calculate duration in minutes
+    let durationMinutes = 1;
+    if (submission?.analysis?.duration) {
+      durationMinutes = submission.analysis.duration / 60;
+    } else if (segments.length > 0) {
+      // Estimate from last segment timestamp
+      const lastTimestamp = Math.max(...segments.map(s => s.timestamp));
+      // Assume milliseconds unless very small
+      const lastMs = lastTimestamp > 36000 ? lastTimestamp : lastTimestamp * 1000;
+      durationMinutes = Math.max(1, lastMs / 60000);
+    }
+
+    // Speaking rate (words per minute)
+    const speakingRateWpm = Math.round(wordCount / durationMinutes);
+
+    // Pause frequency (estimated from number of segments divided by duration)
+    const pauseFrequency = parseFloat((segments.length / durationMinutes).toFixed(1));
+
+    return { fillerWordCount, speakingRateWpm, pauseFrequency, wordCount };
+  }, [submission]);
 
   // Detect if timestamps are in seconds or milliseconds based on the data
   const timestampUnit = useMemo(() => {
@@ -603,70 +658,89 @@ export default function SubmissionDetailPage() {
                   {/* Speech Delivery */}
                   <CollapsibleSection
                     title="Speech Delivery"
-                    subtitle="AI-analyzed vocal metrics"
+                    subtitle="Vocal analysis from transcript"
                     icon={<Mic className="w-4 h-4" />}
                     defaultExpanded={true}
                   >
                     <div className="grid grid-cols-3 gap-6">
                       {/* Filler Word Count */}
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-surface-700">Filler Word Count</span>
-                        </div>
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-3xl font-bold text-surface-900">
-                            {Math.max(5, Math.round(20 - (submission.analysis?.overallStrength || 3) * 3))}
-                          </span>
+                      <div className="bg-surface-50 rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-sm font-medium text-surface-700">Filler Words</span>
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                            (submission.analysis?.overallStrength || 3) >= 4 
+                            speechMetrics.fillerWordCount <= 10 
                               ? 'bg-emerald-100 text-emerald-700' 
-                              : 'bg-amber-100 text-amber-700'
+                              : speechMetrics.fillerWordCount <= 20
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-red-100 text-red-700'
                           }`}>
-                            {(submission.analysis?.overallStrength || 3) >= 4 ? 'Good' : 'Average'}
+                            {speechMetrics.fillerWordCount <= 10 ? 'Excellent' : speechMetrics.fillerWordCount <= 20 ? 'Good' : 'Needs Work'}
                           </span>
                         </div>
-                        <p className="text-xs text-surface-400 mt-1">Student: {Math.max(5, Math.round(20 - (submission.analysis?.overallStrength || 3) * 3))} • Class Avg: 18</p>
-                        <p className="text-xs text-surface-400">Includes "um", "uh", "like"</p>
+                        <div className="flex items-baseline gap-2 mb-2">
+                          <span className="text-3xl font-bold text-surface-900">
+                            {speechMetrics.fillerWordCount}
+                          </span>
+                          <span className="text-sm text-surface-500">total</span>
+                        </div>
+                        <p className="text-xs text-surface-500 leading-relaxed">
+                          Words like &quot;um&quot;, &quot;uh&quot;, &quot;like&quot;, &quot;you know&quot; detected in the transcript.
+                          Fewer filler words indicate more confident delivery.
+                        </p>
                       </div>
 
                       {/* Speaking Rate */}
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-surface-700">Speaking Rate</span>
+                      <div className="bg-surface-50 rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-sm font-medium text-surface-700">Speaking Pace</span>
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                            speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180
+                              ? 'bg-emerald-100 text-emerald-700' 
+                              : speechMetrics.speakingRateWpm < 100 || speechMetrics.speakingRateWpm > 200
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180 
+                              ? 'Optimal' 
+                              : speechMetrics.speakingRateWpm < 120 
+                                ? 'Slow' 
+                                : 'Fast'}
+                          </span>
                         </div>
-                        <div className="flex items-baseline gap-2">
+                        <div className="flex items-baseline gap-2 mb-2">
                           <span className="text-3xl font-bold text-surface-900">
-                            {Math.round(120 + (submission.analysis?.overallStrength || 3) * 8)}
+                            {speechMetrics.speakingRateWpm}
                           </span>
-                          <span className="text-sm text-surface-500">wpm</span>
-                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                            Optimal
-                          </span>
+                          <span className="text-sm text-surface-500">words/min</span>
                         </div>
-                        <p className="text-xs text-surface-400 mt-1">Student: {Math.round(120 + (submission.analysis?.overallStrength || 3) * 8)} • Class Avg: 150</p>
-                        <p className="text-xs text-surface-400">Ideal range: 140-160 wpm</p>
+                        <p className="text-xs text-surface-500 leading-relaxed">
+                          Average speaking speed. Ideal range is 120-180 WPM for presentations.
+                          Based on {speechMetrics.wordCount.toLocaleString()} words spoken.
+                        </p>
                       </div>
 
                       {/* Pause Frequency */}
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-surface-700">Pause Frequency</span>
-                        </div>
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-3xl font-bold text-surface-900">
-                            {(6 + (submission.analysis?.overallStrength || 3) * 0.5).toFixed(1)}
-                          </span>
-                          <span className="text-sm text-surface-500">/min</span>
+                      <div className="bg-surface-50 rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-sm font-medium text-surface-700">Speech Segments</span>
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                            (submission.analysis?.overallStrength || 3) >= 4 
-                              ? 'bg-red-100 text-red-700' 
+                            speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8
+                              ? 'bg-emerald-100 text-emerald-700' 
                               : 'bg-amber-100 text-amber-700'
                           }`}>
-                            {(submission.analysis?.overallStrength || 3) >= 4 ? 'High' : 'Medium'}
+                            {speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8 ? 'Good Pacing' : 'Review Pacing'}
                           </span>
                         </div>
-                        <p className="text-xs text-surface-400 mt-1">Student: {(6 + (submission.analysis?.overallStrength || 3) * 0.5).toFixed(1)} • Class Avg: 4.2</p>
-                        <p className="text-xs text-surface-400">Significantly higher than peers</p>
+                        <div className="flex items-baseline gap-2 mb-2">
+                          <span className="text-3xl font-bold text-surface-900">
+                            {speechMetrics.pauseFrequency.toFixed(1)}
+                          </span>
+                          <span className="text-sm text-surface-500">per min</span>
+                        </div>
+                        <p className="text-xs text-surface-500 leading-relaxed">
+                          Number of natural speech segments per minute.
+                          Indicates pauses for emphasis or transitions.
+                        </p>
                       </div>
                     </div>
                   </CollapsibleSection>
