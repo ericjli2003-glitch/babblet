@@ -614,6 +614,9 @@ export default function SubmissionDetailPage() {
                     </div>
                     <div className="flex items-center gap-4">
                       <span className="text-sm text-surface-500">
+                        <span className="font-medium">Video:</span> {formatTimestamp(currentVideoTime)}
+                      </span>
+                      <span className="text-sm text-surface-500">
                         <span className="font-medium">Confidence:</span> 98%
                       </span>
                       <button className="p-2 text-surface-400 hover:text-surface-600 hover:bg-surface-100 rounded-lg">
