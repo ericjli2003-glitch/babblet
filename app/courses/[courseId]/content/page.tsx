@@ -175,40 +175,33 @@ export default function ContextLibraryPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
 
-  // Extract insights from document names
-  const extractedInsights = useMemo(() => {
-    if (documents.length === 0) return [];
+  // Content summary stats
+  const contentSummary = useMemo(() => {
+    if (documents.length === 0) return null;
 
-    const keywords = new Set<string>();
+    const totalSize = documents.reduce((sum, doc) => sum + (doc.fileSize || 0), 0);
     
-    // Common words to filter out
-    const stopWords = new Set([
-      'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with',
-      'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had',
-      'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must',
-      'pdf', 'docx', 'pptx', 'ppt', 'doc', 'txt', 'mp4', 'mp3', 'wav', 'mov', 'webm',
-      'week', 'chapter', 'lecture', 'notes', 'slides', 'reading', 'assignment', 'file',
-      '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'i', 'ii', 'iii', 'iv', 'v',
-    ]);
-
+    // Compute type counts locally
+    const counts: Record<string, number> = {};
     for (const doc of documents) {
-      // Extract meaningful words from document name
-      const name = doc.name.replace(/\.[^.]+$/, ''); // Remove extension
-      const words = name
-        .replace(/[-_]/g, ' ')
-        .replace(/([a-z])([A-Z])/g, '$1 $2') // Split camelCase
-        .split(/\s+/)
-        .map(w => w.toLowerCase().trim())
-        .filter(w => w.length > 2 && !stopWords.has(w));
-
-      for (const word of words) {
-        // Capitalize first letter for display
-        keywords.add(word.charAt(0).toUpperCase() + word.slice(1));
-      }
+      counts[doc.type] = (counts[doc.type] || 0) + 1;
     }
+    
+    const typeBreakdown = Object.entries(counts)
+      .filter(([, count]) => count > 0)
+      .sort((a, b) => b[1] - a[1]);
+    
+    const recentDocs = [...documents]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 3);
 
-    // Return top 8 unique keywords
-    return Array.from(keywords).slice(0, 8);
+    return {
+      totalDocs: documents.length,
+      totalSize,
+      typeBreakdown,
+      recentDocs,
+      indexedCount: documents.filter(d => d.indexed !== false).length,
+    };
   }, [documents]);
 
   // Load course and documents
@@ -481,24 +474,75 @@ export default function ContextLibraryPage() {
           </AnimatePresence>
         </div>
 
-        {/* Extracted Insights */}
-        {extractedInsights.length > 0 && (
+        {/* Content Summary */}
+        {contentSummary && (
           <div className="bg-white rounded-2xl border border-surface-200 p-6">
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-2 mb-5">
               <div className="w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center">
                 <Sparkles className="w-4 h-4 text-primary-600" />
               </div>
-              <h3 className="font-semibold text-surface-900">Extracted Insights</h3>
+              <h3 className="font-semibold text-surface-900">Content Summary</h3>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {extractedInsights.map((insight, idx) => (
-                <span
-                  key={idx}
-                  className="px-3 py-1.5 bg-surface-100 text-surface-700 rounded-lg text-sm font-medium"
-                >
-                  {insight}
-                </span>
-              ))}
+
+            <div className="grid md:grid-cols-3 gap-6">
+              {/* Stats */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-surface-500">Total Files</span>
+                  <span className="text-lg font-semibold text-surface-900">{contentSummary.totalDocs}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-surface-500">Indexed</span>
+                  <span className="text-lg font-semibold text-emerald-600">{contentSummary.indexedCount}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-surface-500">Total Size</span>
+                  <span className="text-lg font-semibold text-surface-900">{formatFileSize(contentSummary.totalSize)}</span>
+                </div>
+              </div>
+
+              {/* Material Breakdown */}
+              <div>
+                <p className="text-xs text-surface-500 uppercase tracking-wide mb-3">By Type</p>
+                <div className="space-y-2">
+                  {contentSummary.typeBreakdown.slice(0, 4).map(([type, count]) => {
+                    const config = MATERIAL_TYPES[type as keyof typeof MATERIAL_TYPES] || MATERIAL_TYPES.other;
+                    const percentage = Math.round((count / contentSummary.totalDocs) * 100);
+                    return (
+                      <div key={type} className="flex items-center gap-3">
+                        <div className={`w-6 h-6 rounded-md ${config.color} flex items-center justify-center flex-shrink-0`}>
+                          <config.icon className="w-3 h-3" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-surface-700 truncate">{config.label}</span>
+                            <span className="text-xs text-surface-500">{count}</span>
+                          </div>
+                          <div className="h-1.5 bg-surface-100 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-primary-400 rounded-full transition-all"
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Recent Uploads */}
+              <div>
+                <p className="text-xs text-surface-500 uppercase tracking-wide mb-3">Recent Uploads</p>
+                <div className="space-y-2">
+                  {contentSummary.recentDocs.map((doc) => (
+                    <div key={doc.id} className="flex items-center gap-2 p-2 bg-surface-50 rounded-lg">
+                      <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                      <span className="text-sm text-surface-700 truncate flex-1">{doc.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
