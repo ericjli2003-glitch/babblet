@@ -64,9 +64,55 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
   const handleVideoTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
     const video = e.currentTarget;
     if (onTimeUpdate) {
-      onTimeUpdate(video.currentTime * 1000);
+      // Round to nearest 100ms to reduce unnecessary updates
+      const timeMs = Math.round(video.currentTime * 10) * 100;
+      onTimeUpdate(timeMs);
     }
   };
+
+  // Also update during play using requestAnimationFrame for smoother tracking
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    let animationId: number;
+    let lastReportedTime = 0;
+
+    const updateTime = () => {
+      if (video && !video.paused && onTimeUpdate) {
+        const currentMs = Math.round(video.currentTime * 10) * 100;
+        if (currentMs !== lastReportedTime) {
+          lastReportedTime = currentMs;
+          onTimeUpdate(currentMs);
+        }
+      }
+      animationId = requestAnimationFrame(updateTime);
+    };
+
+    const handlePlay = () => {
+      animationId = requestAnimationFrame(updateTime);
+    };
+
+    const handlePause = () => {
+      if (animationId) cancelAnimationFrame(animationId);
+    };
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('ended', handlePause);
+
+    // If already playing, start the animation loop
+    if (!video.paused) {
+      animationId = requestAnimationFrame(updateTime);
+    }
+
+    return () => {
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('ended', handlePause);
+      if (animationId) cancelAnimationFrame(animationId);
+    };
+  }, [onTimeUpdate]);
 
   const handleVideoLoadedMetadata = (e: React.SyntheticEvent<HTMLVideoElement>) => {
     const video = e.currentTarget;

@@ -324,7 +324,8 @@ export default function SubmissionDetailPage() {
       const container = transcriptContainerRef.current;
       const currentElement = container.querySelector(`[data-segment-index="${currentSegmentIndex}"]`);
       if (currentElement) {
-        currentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Use 'auto' for instant scroll, no animation delay
+        currentElement.scrollIntoView({ behavior: 'auto', block: 'center' });
       }
     }
   }, [currentSegmentIndex, activeTab]);
