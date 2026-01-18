@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle, XCircle, Download, RefreshCw, Search, ThumbsUp, Clock,
-  ChevronRight, Sparkles, BookOpen, Shield
+  ChevronRight, Sparkles, BookOpen, Shield, ArrowLeft
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -151,8 +151,11 @@ export default function SubmissionDetailPage() {
     assignmentName?: string;
   } | null>(null);
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
+  const [videoPanelWidth, setVideoPanelWidth] = useState(420);
+  const [isResizing, setIsResizing] = useState(false);
   const videoPanelRef = useRef<VideoPanelRef>(null);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
+  const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
   const loadSubmission = useCallback(async () => {
     try {
@@ -302,6 +305,37 @@ export default function SubmissionDetailPage() {
     setCurrentVideoTime(timeMs);
   }, []);
 
+  // Handle video panel resizing
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    resizeRef.current = { startX: e.clientX, startWidth: videoPanelWidth };
+  }, [videoPanelWidth]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing || !resizeRef.current) return;
+      const delta = resizeRef.current.startX - e.clientX;
+      const newWidth = Math.min(800, Math.max(300, resizeRef.current.startWidth + delta));
+      setVideoPanelWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      resizeRef.current = null;
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
   // Build transcript entries for video panel sidebar
   const transcriptEntries = useMemo(() => {
     if (sortedSegments.length === 0) return [];
@@ -425,30 +459,43 @@ export default function SubmissionDetailPage() {
       <div className="h-full flex flex-col">
         {/* Header */}
         <div className="bg-white border-b border-surface-200 px-6 py-4">
-          {/* Breadcrumb */}
-          <nav className="flex items-center gap-2 text-sm text-surface-500 mb-3">
-            <Link href="/courses" className="hover:text-primary-600">Home</Link>
-            <ChevronRight className="w-4 h-4" />
-            <Link href="/courses" className="hover:text-primary-600">
-              {batchInfo?.courseCode ? `${batchInfo.courseCode} - ` : ''}{batchInfo?.courseName || 'Courses'}
+          {/* Back Button + Breadcrumb */}
+          <div className="flex items-center gap-4 mb-3">
+            <Link
+              href={batchInfo?.courseId 
+                ? `/bulk/class/${batchInfo.courseId}/assignment/${batchInfo.id}/batch/${batchInfo.id}`
+                : batchInfo?.id 
+                  ? `/bulk?batchId=${batchInfo.id}`
+                  : '/bulk'
+              }
+              className="flex items-center justify-center w-9 h-9 rounded-lg bg-white border border-surface-200 hover:bg-surface-50 hover:border-primary-300 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4 text-surface-600" />
             </Link>
-            <ChevronRight className="w-4 h-4" />
-            {batchInfo?.id && (
-              <>
-                <Link 
-                  href={batchInfo.courseId 
-                    ? `/bulk/class/${batchInfo.courseId}/assignment/${batchInfo.id}/batch/${batchInfo.id}`
-                    : `/bulk?batchId=${batchInfo.id}`
-                  } 
-                  className="hover:text-primary-600"
-                >
-                  {batchInfo.name}
-                </Link>
-                <ChevronRight className="w-4 h-4" />
-              </>
-            )}
-            <span className="text-surface-900 font-medium">{submission.studentName}</span>
-          </nav>
+            <nav className="flex items-center gap-2 text-sm text-surface-500">
+              <Link href="/courses" className="hover:text-primary-600 transition-colors">Home</Link>
+              <ChevronRight className="w-4 h-4" />
+              <Link href={batchInfo?.courseId ? `/courses?courseId=${batchInfo.courseId}` : '/courses'} className="hover:text-primary-600 transition-colors">
+                {batchInfo?.courseCode ? `${batchInfo.courseCode} - ` : ''}{batchInfo?.courseName || 'Courses'}
+              </Link>
+              <ChevronRight className="w-4 h-4" />
+              {batchInfo?.id && (
+                <>
+                  <Link 
+                    href={batchInfo.courseId 
+                      ? `/bulk/class/${batchInfo.courseId}/assignment/${batchInfo.id}/batch/${batchInfo.id}`
+                      : `/bulk?batchId=${batchInfo.id}`
+                    } 
+                    className="hover:text-primary-600 transition-colors"
+                  >
+                    {batchInfo.name}
+                  </Link>
+                  <ChevronRight className="w-4 h-4" />
+                </>
+              )}
+              <span className="text-surface-900 font-medium">{submission.studentName}</span>
+            </nav>
+          </div>
 
           {/* Title Row */}
           <div className="flex items-start justify-between">
@@ -1114,23 +1161,34 @@ export default function SubmissionDetailPage() {
             </AnimatePresence>
           </div>
 
-          {/* Right Video Panel */}
-          <VideoPanel
-            ref={videoPanelRef}
-            videoUrl={videoUrl}
-            filename={submission.originalFilename}
-            uploadDate={formatDate(submission.createdAt)}
-            fileSize={formatFileSize(submission.fileSize || 0)}
-            alerts={[
-              { type: 'pacing', label: 'Pacing Good' },
-              { type: 'volume', label: 'Low Volume', timeRange: '02:00-02:15' },
-            ]}
-            transcriptEntries={transcriptEntries}
-            onViewFullTranscript={() => setActiveTab('transcript')}
-            onTimeUpdate={handleVideoTimeUpdate}
-            onDurationChange={setVideoDuration}
-            currentTimeMs={currentVideoTime}
+          {/* Resizer Handle */}
+          <div
+            onMouseDown={handleResizeStart}
+            className={`w-1.5 bg-surface-200 hover:bg-primary-400 cursor-col-resize flex-shrink-0 transition-colors ${
+              isResizing ? 'bg-primary-500' : ''
+            }`}
+            title="Drag to resize video panel"
           />
+
+          {/* Right Video Panel */}
+          <div style={{ width: videoPanelWidth }} className="flex-shrink-0">
+            <VideoPanel
+              ref={videoPanelRef}
+              videoUrl={videoUrl}
+              filename={submission.originalFilename}
+              uploadDate={formatDate(submission.createdAt)}
+              fileSize={formatFileSize(submission.fileSize || 0)}
+              alerts={[
+                { type: 'pacing', label: 'Pacing Good' },
+                { type: 'volume', label: 'Low Volume', timeRange: '02:00-02:15' },
+              ]}
+              transcriptEntries={transcriptEntries}
+              onViewFullTranscript={() => setActiveTab('transcript')}
+              onTimeUpdate={handleVideoTimeUpdate}
+              onDurationChange={setVideoDuration}
+              currentTimeMs={currentVideoTime}
+            />
+          </div>
         </div>
       </div>
     </DashboardLayout>
