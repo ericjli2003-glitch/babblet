@@ -56,6 +56,9 @@ interface Submission {
     id: string;
     question: string;
     category: string;
+    rationale?: string;
+    rubricCriterion?: string;
+    rubricJustification?: string;
   }>;
   analysis?: {
     overallStrength: number;
@@ -701,42 +704,81 @@ export default function SubmissionDetailPage() {
                   {/* Question Cards */}
                   <div className="space-y-4">
                     {submission.questions && submission.questions.length > 0 ? (
-                      submission.questions.map((q, i) => (
-                        <QuestionCard
-                          key={q.id}
-                          category={getQuestionCategory(q.category)}
-                          question={q.question}
-                          context={{
-                            text: `Referenced during the ${q.category.toLowerCase()} segment`,
-                            timestamps: [formatTimestamp((i + 1) * 60000)],
-                          }}
-                        />
-                      ))
+                      submission.questions.map((q, i) => {
+                        // Calculate estimated timestamp for this question
+                        const questionsLength = submission.questions?.length || 1;
+                        const segmentIndex = Math.min(
+                          Math.floor((i / questionsLength) * sortedSegments.length),
+                          sortedSegments.length - 1
+                        );
+                        const segment = sortedSegments[segmentIndex];
+                        const timestampMs = segment ? normalizeTimestamp(segment.timestamp) : (i + 1) * 60000;
+                        
+                        // Get transcript preview from nearby segments
+                        const transcriptPreview = segment?.text?.slice(0, 150) + (segment?.text?.length > 150 ? '...' : '');
+                        
+                        return (
+                          <QuestionCard
+                            key={q.id}
+                            category={getQuestionCategory(q.category)}
+                            question={q.question}
+                            context={{
+                              text: `Referenced during the ${q.category.replace('-', ' ')} segment`,
+                              timestamps: [formatTimestamp(timestampMs)],
+                              transcriptPreview: transcriptPreview || undefined,
+                              rationale: q.rationale,
+                              rubricCriterion: q.rubricCriterion,
+                            }}
+                            onTimestampClick={(ts) => {
+                              // Parse timestamp string like "01:30" to milliseconds
+                              const parts = ts.split(':').map(Number);
+                              let ms = 0;
+                              if (parts.length === 2) {
+                                ms = (parts[0] * 60 + parts[1]) * 1000;
+                              } else if (parts.length === 3) {
+                                ms = (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
+                              }
+                              handleSegmentClick(ms);
+                            }}
+                          />
+                        );
+                      })
                     ) : (
                       <>
                         <QuestionCard
                           category="basic"
                           question="You mentioned that customer acquisition costs have been volatile since early 2022. Can you specify which specific platforms showed the highest volatility index according to your research?"
                           context={{
-                            text: 'Referenced during the slide on customer acquisition costs at',
+                            text: 'Referenced during the slide on customer acquisition',
                             timestamps: ['00:45'],
+                            transcriptPreview: 'The customer acquisition landscape has shifted dramatically since 2022, with platform costs varying by as much as 40%...',
+                            rationale: 'Tests recall of specific data points mentioned in the presentation to verify understanding of key metrics.',
                           }}
+                          onTimestampClick={() => handleSegmentClick(45000)}
                         />
                         <QuestionCard
                           category="intermediate"
                           question="How does the lack of a personalized onboarding flow in Company X's product directly create an opportunity for your proposed solution, and what risks are involved in focusing solely on this differentiator?"
                           context={{
-                            text: 'Based on the Competitor Analysis segment at',
+                            text: 'Based on the Competitor Analysis segment',
                             timestamps: ['02:45'],
+                            transcriptPreview: 'Looking at Company X, their onboarding is entirely self-service with no personalization...',
+                            rationale: 'Probes analytical thinking about competitive positioning and strategic risks.',
+                            rubricCriterion: 'Critical Analysis & Strategic Thinking',
                           }}
+                          onTimestampClick={() => handleSegmentClick(165000)}
                         />
                         <QuestionCard
                           category="advanced"
                           question="Given the market volatility and steady LTV you discovered, how would you justify the budget allocation for Phase 2 if acquisition costs were to unexpectedly rise by another 15% next quarter?"
                           context={{
-                            text: 'Synthesized from Q3 results',
+                            text: 'Synthesized from Q3 results and budget discussion',
                             timestamps: ['02:10', '03:30'],
+                            transcriptPreview: 'Our LTV has remained surprisingly stable at $2,400 despite the volatility in acquisition costs...',
+                            rationale: 'Requires synthesis of multiple data points and scenario planning under uncertainty.',
+                            rubricCriterion: 'Financial Reasoning & Justification',
                           }}
+                          onTimestampClick={() => handleSegmentClick(130000)}
                         />
                       </>
                     )}

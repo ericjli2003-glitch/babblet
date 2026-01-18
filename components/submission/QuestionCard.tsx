@@ -1,12 +1,15 @@
 'use client';
 
-import { Check } from 'lucide-react';
+import { Check, MessageSquareQuote, Target, Lightbulb, Clock, PlayCircle } from 'lucide-react';
 
 type QuestionCategory = 'basic' | 'intermediate' | 'advanced';
 
 interface ContextReference {
   text: string;
   timestamps: string[];
+  transcriptPreview?: string;
+  rationale?: string;
+  rubricCriterion?: string;
 }
 
 interface QuestionCardProps {
@@ -15,20 +18,24 @@ interface QuestionCardProps {
   context?: ContextReference;
   isSelected?: boolean;
   onToggle?: () => void;
+  onTimestampClick?: (timestamp: string) => void;
 }
 
 const categoryConfig = {
   basic: {
     label: 'Basic Recall',
     color: 'bg-blue-100 text-blue-700 border-blue-200',
+    icon: MessageSquareQuote,
   },
   intermediate: {
     label: 'Intermediate Analysis',
     color: 'bg-amber-100 text-amber-700 border-amber-200',
+    icon: Lightbulb,
   },
   advanced: {
     label: 'Advanced Synthesis',
     color: 'bg-violet-100 text-violet-700 border-violet-200',
+    icon: Target,
   },
 };
 
@@ -38,6 +45,7 @@ export default function QuestionCard({
   context,
   isSelected = false,
   onToggle,
+  onTimestampClick,
 }: QuestionCardProps) {
   const config = categoryConfig[category];
 
@@ -65,22 +73,73 @@ export default function QuestionCard({
       </div>
 
       {/* Question */}
-      <p className="text-surface-800 leading-relaxed mb-3">{question}</p>
+      <p className="text-surface-800 leading-relaxed mb-4">{question}</p>
 
-      {/* Context */}
+      {/* Enhanced Context Section */}
       {context && (
-        <div className="pt-3 border-t border-surface-100">
-          <p className="text-xs text-surface-500">
-            <span className="text-primary-600 font-medium">Context:</span>{' '}
-            {context.text}{' '}
-            {context.timestamps.map((ts, i) => (
-              <span key={i}>
-                <button className="text-primary-600 hover:underline">[{ts}]</button>
-                {i < context.timestamps.length - 1 && ' and '}
-              </span>
-            ))}
-            .
-          </p>
+        <div className="bg-surface-50 rounded-lg p-4 space-y-3">
+          {/* Transcript Preview */}
+          {context.transcriptPreview && (
+            <div className="flex gap-3">
+              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center">
+                <MessageSquareQuote className="w-4 h-4 text-primary-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-surface-600 mb-1">From Presentation</p>
+                <p className="text-sm text-surface-700 italic leading-relaxed">
+                  &ldquo;{context.transcriptPreview}&rdquo;
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Rationale */}
+          {context.rationale && (
+            <div className="flex gap-3">
+              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                <Lightbulb className="w-4 h-4 text-amber-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-surface-600 mb-1">Why This Question</p>
+                <p className="text-sm text-surface-700 leading-relaxed">
+                  {context.rationale}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Rubric Criterion */}
+          {context.rubricCriterion && (
+            <div className="flex gap-3">
+              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">
+                <Target className="w-4 h-4 text-violet-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-surface-600 mb-1">Targets Criterion</p>
+                <p className="text-sm text-surface-700 leading-relaxed">
+                  {context.rubricCriterion}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Timestamp Reference */}
+          <div className="flex items-center gap-2 pt-2 border-t border-surface-200">
+            <Clock className="w-3.5 h-3.5 text-surface-400" />
+            <span className="text-xs text-surface-500">{context.text}</span>
+            <div className="flex items-center gap-1">
+              {context.timestamps.map((ts, i) => (
+                <button
+                  key={i}
+                  onClick={() => onTimestampClick?.(ts)}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-100 text-primary-700 rounded text-xs font-medium hover:bg-primary-200 transition-colors"
+                >
+                  <PlayCircle className="w-3 h-3" />
+                  {ts}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
