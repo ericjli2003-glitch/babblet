@@ -274,8 +274,10 @@ export default function SubmissionDetailPage() {
     // based on proportional progress through the video
     if (videoDuration > 0 && sortedSegments.length > 0) {
       const progress = currentVideoTime / videoDuration;
-      const segmentIndex = Math.floor(progress * sortedSegments.length);
-      return Math.min(segmentIndex, sortedSegments.length - 1);
+      // Add a small offset (0.5 segment) to stay ahead rather than behind
+      // This makes the current segment feel more in sync with audio
+      const segmentIndex = Math.floor(progress * sortedSegments.length + 0.5);
+      return Math.min(Math.max(0, segmentIndex), sortedSegments.length - 1);
     }
     
     // Fallback: try timestamp-based matching
