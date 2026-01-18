@@ -108,83 +108,84 @@ function getStatusBadge(status: Assignment['status']) {
 // Components
 // ============================================
 
-function AssignmentCard({ assignment, courseId }: { assignment: Assignment; courseId: string }) {
+function AssignmentCard({ assignment, courseId, courseName }: { assignment: Assignment; courseId: string; courseName?: string }) {
   const status = getStatusBadge(assignment.status);
   const progress = assignment.totalSubmissions > 0
     ? (assignment.gradedCount / assignment.totalSubmissions) * 100
     : 0;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl overflow-hidden"
-    >
-      {/* Card Header with Gradient */}
-      <div className={`bg-gradient-to-br ${assignment.gradientClass} p-5 text-white`}>
-        <div className="flex items-start justify-between mb-4">
-          <h3 className="font-semibold text-lg">{assignment.name}</h3>
-          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${status.className}`}>
-            {status.label}
-          </span>
-        </div>
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-white/70 text-xs uppercase tracking-wide">Class Avg</p>
-            <p className="text-2xl font-bold">
-              {assignment.classAverage ? `${assignment.classAverage}%` : '--'}
-            </p>
+    <Link href={`/bulk/class/${courseId}/assignment/${assignment.id}/batch/${assignment.id}`}>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="rounded-2xl overflow-hidden cursor-pointer hover:shadow-lg transition-shadow"
+      >
+        {/* Card Header with Gradient */}
+        <div className={`bg-gradient-to-br ${assignment.gradientClass} p-5 text-white`}>
+          <div className="flex items-start justify-between mb-4">
+            <h3 className="font-semibold text-lg">{assignment.name}</h3>
+            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${status.className}`}>
+              {status.label}
+            </span>
           </div>
-          <div>
-            <p className="text-white/70 text-xs uppercase tracking-wide">Submissions</p>
-            <p className="text-2xl font-bold">{assignment.totalSubmissions}</p>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <p className="text-white/70 text-xs uppercase tracking-wide">Class Avg</p>
+              <p className="text-2xl font-bold">
+                {assignment.classAverage ? `${assignment.classAverage}%` : '--'}
+              </p>
+            </div>
+            <div>
+              <p className="text-white/70 text-xs uppercase tracking-wide">Submissions</p>
+              <p className="text-2xl font-bold">{assignment.totalSubmissions}</p>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Card Footer */}
-      <div className="bg-white p-4 border border-t-0 border-surface-200 rounded-b-2xl">
-        <div className="mb-3">
-          <div className="flex items-center justify-between text-xs text-surface-500 mb-1">
-            <span>Grading Progress</span>
-            <span>{assignment.gradedCount}/{assignment.totalSubmissions} Graded ({Math.round(progress)}%)</span>
+        {/* Card Footer */}
+        <div className="bg-white p-4 border border-t-0 border-surface-200 rounded-b-2xl">
+          <div className="mb-3">
+            <div className="flex items-center justify-between text-xs text-surface-500 mb-1">
+              <span>Grading Progress</span>
+              <span>{assignment.gradedCount}/{assignment.totalSubmissions} Graded ({Math.round(progress)}%)</span>
+            </div>
+            <div className="h-1.5 bg-surface-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full bg-gradient-to-r ${assignment.gradientClass} transition-all`}
+                style={{ width: `${progress}%` }}
+              />
+            </div>
           </div>
-          <div className="h-1.5 bg-surface-100 rounded-full overflow-hidden">
-            <div
-              className={`h-full bg-gradient-to-r ${assignment.gradientClass} transition-all`}
-              style={{ width: `${progress}%` }}
-            />
+          <div
+            className={`flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              assignment.status === 'completed'
+                ? 'bg-surface-100 text-surface-700 hover:bg-surface-200'
+                : assignment.status === 'in_progress'
+                  ? 'bg-white border border-surface-200 text-surface-700 hover:bg-surface-50'
+                  : 'bg-primary-500 text-white hover:bg-primary-600'
+            }`}
+          >
+            {assignment.status === 'completed' ? (
+              <>
+                <Eye className="w-4 h-4" />
+                View All Grades
+              </>
+            ) : assignment.status === 'in_progress' ? (
+              <>
+                <Play className="w-4 h-4" />
+                Launch Batch Grading
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4" />
+                Start Bulk Grading
+              </>
+            )}
           </div>
         </div>
-        <Link
-          href={`/bulk?courseId=${courseId}&assignmentId=${assignment.id}`}
-          className={`flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-medium transition-colors ${
-            assignment.status === 'completed'
-              ? 'bg-surface-100 text-surface-700 hover:bg-surface-200'
-              : assignment.status === 'in_progress'
-                ? 'bg-white border border-surface-200 text-surface-700 hover:bg-surface-50'
-                : 'bg-primary-500 text-white hover:bg-primary-600'
-          }`}
-        >
-          {assignment.status === 'completed' ? (
-            <>
-              <Eye className="w-4 h-4" />
-              View All Grades
-            </>
-          ) : assignment.status === 'in_progress' ? (
-            <>
-              <Play className="w-4 h-4" />
-              Launch Batch Grading
-            </>
-          ) : (
-            <>
-              <Play className="w-4 h-4" />
-              Start Bulk Grading
-            </>
-          )}
-        </Link>
-      </div>
-    </motion.div>
+      </motion.div>
+    </Link>
   );
 }
 
@@ -487,6 +488,7 @@ export default function CoursesPage() {
                     key={assignment.id}
                     assignment={assignment}
                     courseId={selectedCourse.id}
+                    courseName={selectedCourse.name}
                   />
                 ))}
 
