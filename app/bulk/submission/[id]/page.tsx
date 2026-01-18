@@ -215,15 +215,44 @@ export default function SubmissionDetailPage() {
     return items;
   }, [rubric]);
 
+  // Detect if timestamps are in seconds or milliseconds based on the data
+  const timestampUnit = useMemo(() => {
+    if (!submission?.transcriptSegments || submission.transcriptSegments.length === 0) return 'ms';
+    
+    // Look at the range of timestamps
+    const timestamps = submission.transcriptSegments.map(s => s.timestamp);
+    const maxTimestamp = Math.max(...timestamps);
+    const minTimestamp = Math.min(...timestamps.filter(t => t > 0));
+    
+    // If max timestamp is less than 36000 (10 hours in seconds, or 36 seconds in ms)
+    // and there are gaps consistent with seconds, assume seconds
+    // A typical video is < 1 hour, so timestamps in seconds would be < 3600
+    // Timestamps in ms would be < 3,600,000
+    if (maxTimestamp < 36000) {
+      // Could be seconds (up to 10 hours) or milliseconds (36 seconds)
+      // Check if gaps between segments make sense as seconds
+      const avgGap = timestamps.length > 1 
+        ? (maxTimestamp - minTimestamp) / (timestamps.length - 1)
+        : maxTimestamp;
+      
+      // If average gap is > 100, probably milliseconds; if < 100, probably seconds
+      return avgGap > 100 ? 'ms' : 's';
+    } else if (maxTimestamp < 3600000) {
+      // Between 36000 and 3,600,000 - likely milliseconds (up to 1 hour)
+      return 'ms';
+    } else {
+      // Very large - likely milliseconds
+      return 'ms';
+    }
+  }, [submission?.transcriptSegments]);
+
   // Normalize timestamp to milliseconds
   const normalizeTimestamp = useCallback((timestamp: number): number => {
-    // If timestamp is very small (likely seconds), convert to ms
-    // Heuristic: if < 10000, assume seconds (covers up to ~2.7 hours in seconds)
-    if (timestamp < 10000) {
+    if (timestampUnit === 's') {
       return timestamp * 1000;
     }
     return timestamp;
-  }, []);
+  }, [timestampUnit]);
 
   // Sort segments by timestamp for proper ordering
   const sortedSegments = useMemo(() => {
@@ -239,7 +268,7 @@ export default function SubmissionDetailPage() {
   const currentSegmentIndex = useMemo(() => {
     if (sortedSegments.length === 0) return -1;
     
-    // currentVideoTime is in milliseconds
+    // currentVideoTime is in milliseconds from the video element
     const videoTimeMs = currentVideoTime;
     
     // Find the last segment whose timestamp is <= current video time
