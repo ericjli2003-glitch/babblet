@@ -60,35 +60,20 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
     },
   }));
 
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+  // Handle time updates directly via React event handler
+  const handleVideoTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    const video = e.currentTarget;
+    if (onTimeUpdate) {
+      onTimeUpdate(video.currentTime * 1000);
+    }
+  };
 
-    const handleTimeUpdate = () => {
-      if (onTimeUpdate) {
-        onTimeUpdate(video.currentTime * 1000);
-      }
-    };
-
-    const handleLoadedMetadata = () => {
-      if (onDurationChange && video.duration) {
-        onDurationChange(video.duration * 1000);
-      }
-    };
-
-    video.addEventListener('timeupdate', handleTimeUpdate);
-    video.addEventListener('loadedmetadata', handleLoadedMetadata);
-    
-    // Also check if already loaded
-    if (video.duration && onDurationChange) {
+  const handleVideoLoadedMetadata = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    const video = e.currentTarget;
+    if (onDurationChange && video.duration) {
       onDurationChange(video.duration * 1000);
     }
-    
-    return () => {
-      video.removeEventListener('timeupdate', handleTimeUpdate);
-      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-    };
-  }, [onTimeUpdate, onDurationChange]);
+  };
 
   const seekTo = (timestampMs: number) => {
     if (videoRef.current) {
@@ -108,6 +93,8 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
               src={videoUrl}
               controls
               className="w-full h-full object-cover"
+              onTimeUpdate={handleVideoTimeUpdate}
+              onLoadedMetadata={handleVideoLoadedMetadata}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-surface-700 to-surface-900">
