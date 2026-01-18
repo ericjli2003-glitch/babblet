@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
-import { Play, Calendar, Volume2, Gauge } from 'lucide-react';
+import { useRef, useEffect, useImperativeHandle, forwardRef, useState } from 'react';
+import { Play, Calendar, Volume2, Gauge, ChevronDown, ChevronUp, Minimize2, Maximize2 } from 'lucide-react';
 
 interface TranscriptEntry {
   timestamp: string;
@@ -47,6 +47,8 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
   currentTimeMs = 0,
 }, ref) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const [isMinimized, setIsMinimized] = useState(false);
 
   useImperativeHandle(ref, () => ({
     seekTo: (timestampMs: number) => {
@@ -114,6 +116,16 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
     };
   }, [onTimeUpdate]);
 
+  // Auto-scroll to highlighted segment
+  useEffect(() => {
+    if (transcriptRef.current) {
+      const highlighted = transcriptRef.current.querySelector('[data-highlighted="true"]');
+      if (highlighted) {
+        highlighted.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [transcriptEntries]);
+
   const handleVideoLoadedMetadata = (e: React.SyntheticEvent<HTMLVideoElement>) => {
     const video = e.currentTarget;
     if (onDurationChange && video.duration) {
@@ -129,10 +141,10 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
   };
 
   return (
-    <div className="w-full bg-surface-800 text-white h-full overflow-y-auto">
-      {/* Video Player */}
-      <div className="p-4">
-        <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
+    <div className="w-full bg-surface-800 text-white h-full flex flex-col">
+      {/* Video Player Section */}
+      <div className={`flex-shrink-0 transition-all duration-300 ${isMinimized ? 'p-2' : 'p-4'}`}>
+        <div className={`relative rounded-xl overflow-hidden bg-black ${isMinimized ? 'aspect-video max-h-24' : 'aspect-video'}`}>
           {videoUrl ? (
             <video
               ref={videoRef}
@@ -151,56 +163,76 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
           )}
         </div>
 
-        {/* File Info */}
-        <div className="mt-4">
-          <h3 className="font-medium text-sm truncate">{filename}</h3>
-          <div className="flex items-center gap-2 mt-1.5 text-xs text-surface-400">
-            <Calendar className="w-3.5 h-3.5" />
-            <span>Uploaded {uploadDate}</span>
-            <span>•</span>
-            <span>{fileSize}</span>
-          </div>
-        </div>
+        {/* File Info - Hidden when minimized */}
+        {!isMinimized && (
+          <>
+            <div className="mt-4">
+              <h3 className="font-medium text-sm truncate">{filename}</h3>
+              <div className="flex items-center gap-2 mt-1.5 text-xs text-surface-400">
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Uploaded {uploadDate}</span>
+                <span>•</span>
+                <span>{fileSize}</span>
+              </div>
+            </div>
 
-        {/* Alert Badges */}
-        {alerts.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-3">
-            {alerts.map((alert, i) => (
-              <span
-                key={i}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                  alert.type === 'pacing'
-                    ? 'bg-emerald-500/20 text-emerald-300'
-                    : 'bg-amber-500/20 text-amber-300'
-                }`}
-              >
-                {alert.type === 'pacing' ? (
-                  <Gauge className="w-3 h-3" />
-                ) : (
-                  <Volume2 className="w-3 h-3" />
-                )}
-                {alert.label}
-                {alert.timeRange && (
-                  <span className="text-white/60">({alert.timeRange})</span>
-                )}
-              </span>
-            ))}
-          </div>
+            {/* Alert Badges */}
+            {alerts.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {alerts.map((alert, i) => (
+                  <span
+                    key={i}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                      alert.type === 'pacing'
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : 'bg-amber-500/20 text-amber-300'
+                    }`}
+                  >
+                    {alert.type === 'pacing' ? (
+                      <Gauge className="w-3 h-3" />
+                    ) : (
+                      <Volume2 className="w-3 h-3" />
+                    )}
+                    {alert.label}
+                    {alert.timeRange && (
+                      <span className="text-white/60">({alert.timeRange})</span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* Full Transcript */}
-      <div className="border-t border-surface-700">
-        <div className="px-4 py-3 border-b border-surface-700 flex items-center justify-between sticky top-0 bg-surface-800 z-10">
-          <h4 className="font-semibold text-sm uppercase tracking-wide">Full Transcript</h4>
-          <span className="text-xs text-surface-400">{transcriptEntries.length} segments</span>
-        </div>
+      {/* Full Transcript - Scrollable */}
+      <div className="flex-1 border-t border-surface-700 flex flex-col min-h-0">
+        <button
+          onClick={() => setIsMinimized(!isMinimized)}
+          className="px-4 py-3 border-b border-surface-700 flex items-center justify-between bg-surface-800 hover:bg-surface-700/50 transition-colors flex-shrink-0"
+        >
+          <div className="flex items-center gap-2">
+            <h4 className="font-semibold text-sm uppercase tracking-wide">Full Transcript</h4>
+            <span className="text-xs text-surface-400">{transcriptEntries.length} segments</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {isMinimized ? (
+              <Maximize2 className="w-4 h-4 text-surface-400" />
+            ) : (
+              <Minimize2 className="w-4 h-4 text-surface-400" />
+            )}
+          </div>
+        </button>
 
-        <div className="p-4 space-y-2">
+        <div 
+          ref={transcriptRef}
+          className="flex-1 overflow-y-auto p-4 space-y-2"
+        >
           {transcriptEntries.length > 0 ? (
             transcriptEntries.map((entry, i) => (
               <div
                 key={i}
+                data-highlighted={entry.isHighlighted}
                 onClick={() => seekTo(entry.timestampMs)}
                 className={`cursor-pointer rounded-lg p-3 transition-colors ${
                   entry.isHighlighted
