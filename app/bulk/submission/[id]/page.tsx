@@ -123,7 +123,14 @@ export default function SubmissionDetailPage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'transcript' | 'questions' | 'rubric'>('overview');
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [transcriptSearch, setTranscriptSearch] = useState('');
-  const [batchInfo, setBatchInfo] = useState<{ name: string; courseName?: string; assignmentName?: string } | null>(null);
+  const [batchInfo, setBatchInfo] = useState<{ 
+    id: string;
+    name: string; 
+    courseName?: string; 
+    courseId?: string;
+    courseCode?: string;
+    assignmentName?: string;
+  } | null>(null);
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const videoPanelRef = useRef<VideoPanelRef>(null);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
@@ -140,8 +147,11 @@ export default function SubmissionDetailPage() {
             const batchData = await batchRes.json();
             if (batchData.success && batchData.batch) {
               setBatchInfo({
+                id: batchData.batch.id,
                 name: batchData.batch.name,
                 courseName: batchData.batch.courseName,
+                courseId: batchData.batch.courseId,
+                courseCode: batchData.batch.courseCode,
                 assignmentName: batchData.batch.assignmentName,
               });
             }
@@ -290,12 +300,26 @@ export default function SubmissionDetailPage() {
         <div className="bg-white border-b border-surface-200 px-6 py-4">
           {/* Breadcrumb */}
           <nav className="flex items-center gap-2 text-sm text-surface-500 mb-3">
-            <Link href="/" className="hover:text-primary-600">Home</Link>
+            <Link href="/courses" className="hover:text-primary-600">Home</Link>
             <ChevronRight className="w-4 h-4" />
-            <Link href="/bulk" className="hover:text-primary-600">
-              {batchInfo?.courseName || 'Batches'}
+            <Link href="/courses" className="hover:text-primary-600">
+              {batchInfo?.courseCode ? `${batchInfo.courseCode} - ` : ''}{batchInfo?.courseName || 'Courses'}
             </Link>
             <ChevronRight className="w-4 h-4" />
+            {batchInfo?.id && (
+              <>
+                <Link 
+                  href={batchInfo.courseId 
+                    ? `/bulk/class/${batchInfo.courseId}/assignment/${batchInfo.id}/batch/${batchInfo.id}`
+                    : `/bulk?batchId=${batchInfo.id}`
+                  } 
+                  className="hover:text-primary-600"
+                >
+                  {batchInfo.name}
+                </Link>
+                <ChevronRight className="w-4 h-4" />
+              </>
+            )}
             <span className="text-surface-900 font-medium">{submission.studentName}</span>
           </nav>
 
