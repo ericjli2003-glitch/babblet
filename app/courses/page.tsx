@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
@@ -358,7 +358,7 @@ const assignmentGradients = [
   'from-rose-500 to-rose-600',
 ];
 
-export default function CoursesPage() {
+function CoursesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const courseIdParam = searchParams.get('courseId');
@@ -671,5 +671,20 @@ export default function CoursesPage() {
         />
       </div>
     </DashboardLayout>
+  );
+}
+
+// Wrap in Suspense for useSearchParams
+export default function CoursesPage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-full">
+          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+        </div>
+      </DashboardLayout>
+    }>
+      <CoursesContent />
+    </Suspense>
   );
 }
