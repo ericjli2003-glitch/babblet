@@ -1588,14 +1588,26 @@ function BulkUploadPageContent() {
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-6"
               >
-                {/* Breadcrumb */}
-                <nav className="flex items-center gap-2 text-sm text-surface-500">
-                  <button onClick={goToBatchList} className="hover:text-primary-600 transition-colors">Home</button>
-                  <ChevronRight className="w-4 h-4" />
-                  <button onClick={goToBatchList} className="hover:text-primary-600 transition-colors">Batches</button>
-                  <ChevronRight className="w-4 h-4" />
-                  <span className="text-surface-900 font-medium">{currentBatch?.name || 'Batch'}</span>
-                </nav>
+                {/* Back Button + Breadcrumb */}
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={goToBatchList}
+                    className="flex items-center justify-center w-9 h-9 rounded-lg bg-white border border-surface-200 hover:bg-surface-50 hover:border-primary-300 transition-colors"
+                  >
+                    <ArrowLeft className="w-4 h-4 text-surface-600" />
+                  </button>
+                  <nav className="flex items-center gap-2 text-sm text-surface-500">
+                    <button onClick={goToBatchList} className="hover:text-primary-600 transition-colors">Batches</button>
+                    <ChevronRight className="w-4 h-4" />
+                    {currentBatch?.courseName && (
+                      <>
+                        <span className="text-surface-600">{currentBatch.courseName}</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </>
+                    )}
+                    <span className="text-surface-900 font-medium">{currentBatch?.name || 'Batch'}</span>
+                  </nav>
+                </div>
 
                 {/* Page Header */}
                 <div className="flex items-start justify-between">

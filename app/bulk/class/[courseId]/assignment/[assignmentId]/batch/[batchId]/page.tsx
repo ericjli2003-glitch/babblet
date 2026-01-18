@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   Download, RefreshCw, ChevronLeft, ChevronRight, Filter,
   Loader2, AlertTriangle, TrendingUp, Clock, Flag, Eye,
-  Play, AlertCircle, CheckCircle
+  Play, AlertCircle, CheckCircle, ArrowLeft
 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
@@ -305,14 +305,24 @@ export default function AssignmentDashboardPage() {
   return (
     <DashboardLayout>
       <div className="p-8">
-        {/* Breadcrumb */}
-        <nav className="text-sm text-surface-500 mb-4">
-          <Link href="/courses" className="hover:text-primary-600">Courses</Link>
-          <span className="mx-2">›</span>
-          <Link href={`/courses`} className="hover:text-primary-600">{batch.courseName || 'Course'}</Link>
-          <span className="mx-2">›</span>
-          <span className="text-surface-900 font-medium">{batch.name}</span>
-        </nav>
+        {/* Back Button + Breadcrumb */}
+        <div className="flex items-center gap-4 mb-4">
+          <Link
+            href={`/courses?courseId=${courseId}`}
+            className="flex items-center justify-center w-9 h-9 rounded-lg bg-white border border-surface-200 hover:bg-surface-50 hover:border-primary-300 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4 text-surface-600" />
+          </Link>
+          <nav className="flex items-center gap-2 text-sm text-surface-500">
+            <Link href="/courses" className="hover:text-primary-600 transition-colors">Courses</Link>
+            <ChevronRight className="w-4 h-4" />
+            <Link href={`/courses?courseId=${courseId}`} className="hover:text-primary-600 transition-colors">
+              {batch.courseName || 'Course'}
+            </Link>
+            <ChevronRight className="w-4 h-4" />
+            <span className="text-surface-900 font-medium">{batch.name}</span>
+          </nav>
+        </div>
 
         {/* Header */}
         <div className="flex items-start justify-between mb-8">
