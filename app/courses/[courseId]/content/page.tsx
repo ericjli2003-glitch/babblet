@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -32,11 +32,6 @@ interface Course {
   name: string;
   courseCode: string;
   term: string;
-}
-
-interface ExtractedInsight {
-  id: string;
-  label: string;
 }
 
 // ============================================
@@ -180,13 +175,41 @@ export default function ContextLibraryPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
 
-  // Extracted insights (mock for now, could be derived from embeddings)
-  const [insights, setInsights] = useState<ExtractedInsight[]>([
-    { id: '1', label: 'Ethics in AI' },
-    { id: '2', label: 'Case Study Analysis' },
-    { id: '3', label: 'Presentation Rubrics' },
-    { id: '4', label: 'Academic Integrity' },
-  ]);
+  // Extract insights from document names
+  const extractedInsights = useMemo(() => {
+    if (documents.length === 0) return [];
+
+    const keywords = new Set<string>();
+    
+    // Common words to filter out
+    const stopWords = new Set([
+      'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with',
+      'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had',
+      'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must',
+      'pdf', 'docx', 'pptx', 'ppt', 'doc', 'txt', 'mp4', 'mp3', 'wav', 'mov', 'webm',
+      'week', 'chapter', 'lecture', 'notes', 'slides', 'reading', 'assignment', 'file',
+      '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'i', 'ii', 'iii', 'iv', 'v',
+    ]);
+
+    for (const doc of documents) {
+      // Extract meaningful words from document name
+      const name = doc.name.replace(/\.[^.]+$/, ''); // Remove extension
+      const words = name
+        .replace(/[-_]/g, ' ')
+        .replace(/([a-z])([A-Z])/g, '$1 $2') // Split camelCase
+        .split(/\s+/)
+        .map(w => w.toLowerCase().trim())
+        .filter(w => w.length > 2 && !stopWords.has(w));
+
+      for (const word of words) {
+        // Capitalize first letter for display
+        keywords.add(word.charAt(0).toUpperCase() + word.slice(1));
+      }
+    }
+
+    // Return top 8 unique keywords
+    return Array.from(keywords).slice(0, 8);
+  }, [documents]);
 
   // Load course and documents
   const loadData = useCallback(async () => {
@@ -319,13 +342,25 @@ export default function ContextLibraryPage() {
   return (
     <DashboardLayout>
       <div className="p-6 max-w-6xl mx-auto">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-surface-500 mb-6">
-          <Link href="/courses" className="hover:text-primary-600 transition-colors">
-            Home
+        {/* Back Button + Breadcrumb */}
+        <div className="flex items-center gap-4 mb-6">
+          <Link
+            href="/courses"
+            className="flex items-center justify-center w-9 h-9 rounded-lg bg-white border border-surface-200 hover:bg-surface-50 hover:border-primary-300 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4 text-surface-600" />
           </Link>
-          <ChevronRight className="w-4 h-4" />
-          <span className="text-primary-600 font-medium">Smart Content Manager</span>
+          <div className="flex items-center gap-2 text-sm text-surface-500">
+            <Link href="/courses" className="hover:text-primary-600 transition-colors">
+              Courses
+            </Link>
+            <ChevronRight className="w-4 h-4" />
+            <Link href="/courses" className="hover:text-primary-600 transition-colors">
+              {course?.name || 'Course'}
+            </Link>
+            <ChevronRight className="w-4 h-4" />
+            <span className="text-surface-900 font-medium">Context Library</span>
+          </div>
         </div>
 
         {/* Header */}
@@ -333,7 +368,7 @@ export default function ContextLibraryPage() {
           <div>
             <h1 className="text-2xl font-bold text-surface-900">Context Library</h1>
             <p className="text-surface-500 mt-1">
-              {course?.name} • {course?.courseCode}
+              Manage course materials for {course?.name}
             </p>
           </div>
 
@@ -446,9 +481,8 @@ export default function ContextLibraryPage() {
           </AnimatePresence>
         </div>
 
-        {/* Bottom Cards */}
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Extracted Insights */}
+        {/* Extracted Insights */}
+        {extractedInsights.length > 0 && (
           <div className="bg-white rounded-2xl border border-surface-200 p-6">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center">
@@ -457,39 +491,17 @@ export default function ContextLibraryPage() {
               <h3 className="font-semibold text-surface-900">Extracted Insights</h3>
             </div>
             <div className="flex flex-wrap gap-2">
-              {insights.map((insight) => (
+              {extractedInsights.map((insight, idx) => (
                 <span
-                  key={insight.id}
+                  key={idx}
                   className="px-3 py-1.5 bg-surface-100 text-surface-700 rounded-lg text-sm font-medium"
                 >
-                  {insight.label}
+                  {insight}
                 </span>
               ))}
-              {insights.length === 0 && (
-                <p className="text-sm text-surface-500">
-                  Upload materials to see extracted topics and themes
-                </p>
-              )}
             </div>
           </div>
-
-          {/* Smart Manager Info */}
-          <div className="bg-gradient-to-br from-primary-50 to-blue-50 rounded-2xl border border-primary-200 p-6">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
-                <Info className="w-4 h-4 text-primary-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-primary-900 mb-2">Smart Manager</h3>
-                <p className="text-sm text-primary-700 leading-relaxed">
-                  Babblet processes your diverse course materials to understand your specific grading criteria. 
-                  Uploading more context like <strong>Slides</strong> and <strong>Recordings</strong> significantly 
-                  improves AI accuracy.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Upload Modal */}
