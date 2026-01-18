@@ -28,6 +28,9 @@ export async function POST(request: NextRequest) {
     const { sessionId, context, settings } = body;
 
     console.log('[generate-questions] Session:', sessionId, 'Has context:', !!context, 'Has settings:', !!settings);
+    if (settings?.maxQuestions) {
+      console.log('[generate-questions] Requested question count:', settings.maxQuestions);
+    }
 
     if (!sessionId) {
       return NextResponse.json(

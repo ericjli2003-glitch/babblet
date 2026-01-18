@@ -246,12 +246,14 @@ ${settings.existingQuestions.slice(-config.ui.existingQuestionsContext).map((q, 
   }
 
   const wantsEvidence = !!settings?.rubricCriteria?.match(/evidence|source|citation|cite|references|data|study|studies|research/i);
-  const remaining = Math.max(0, settings?.remainingQuestions ?? settings?.maxQuestions ?? 10);
-  const returnCount = Math.max(0, Math.min(3, remaining));
+  const requestedCount = settings?.maxQuestions ?? settings?.remainingQuestions ?? 5;
+  const returnCount = Math.max(1, Math.min(requestedCount, 25)); // Allow up to 25 questions
   const candidateCount = Math.max(
-    6,
-    Math.min(config.limits.maxQuestionCandidates, Math.max(returnCount * 3, 12))
+    returnCount + 5,
+    Math.min(config.limits.maxQuestionCandidates || 50, Math.max(returnCount * 2, 15))
   );
+  
+  console.log('[Babblet AI] Requested:', requestedCount, 'Return count:', returnCount, 'Candidates:', candidateCount);
 
   const difficultyGuidance =
     settings?.targetDifficulty && settings.targetDifficulty !== 'mixed'
