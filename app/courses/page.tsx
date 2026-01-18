@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   Plus, Settings, Download, ChevronRight, Users, TrendingUp,
-  AlertCircle, Play, Eye, Loader2, BookOpen, Trash2, MoreVertical
+  AlertCircle, Play, Eye, Loader2, BookOpen, Trash2, MoreVertical, Library
 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import BatchWizard from '@/components/BatchWizard';
@@ -535,6 +535,13 @@ export default function CoursesPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Link
+              href={`/courses/${selectedCourse.id}/content`}
+              className="flex items-center gap-2 px-4 py-2 text-primary-600 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100 text-sm font-medium"
+            >
+              <Library className="w-4 h-4" />
+              Manage Resources
+            </Link>
             <button className="flex items-center gap-2 px-4 py-2 text-surface-600 bg-white border border-surface-200 rounded-lg hover:bg-surface-50 text-sm font-medium">
               <Download className="w-4 h-4" />
               Export Report

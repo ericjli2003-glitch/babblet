@@ -13,6 +13,7 @@ import {
   User,
   Search,
   BarChart3,
+  Library,
 } from 'lucide-react';
 
 interface DashboardLayoutProps {
@@ -22,6 +23,7 @@ interface DashboardLayoutProps {
 const sideNavItems = [
   { href: '/courses', label: 'Courses', icon: BookOpen },
   { href: '/bulk', label: 'Batches', icon: FolderOpen },
+  { href: '/resources', label: 'Resources', icon: Library },
   { href: '/students', label: 'Students', icon: Users },
   { href: '/rubrics', label: 'Rubrics', icon: FileText },
 ];

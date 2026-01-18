@@ -252,7 +252,7 @@ ${settings.existingQuestions.slice(-config.ui.existingQuestionsContext).map((q, 
     returnCount + 5,
     Math.min(config.limits.maxQuestionCandidates || 50, Math.max(returnCount * 2, 15))
   );
-  
+
   console.log('[Babblet AI] Requested:', requestedCount, 'Return count:', returnCount, 'Candidates:', candidateCount);
 
   const difficultyGuidance =
@@ -567,21 +567,21 @@ function findMatchingSegment(
   segments: TranscriptSegmentInput[]
 ): { segmentId: string; timestamp: number; snippet: string } | null {
   if (!quote || !segments.length) return null;
-  
+
   const normalizedQuote = quote.toLowerCase().trim();
   if (normalizedQuote.length < 10) return null;
-  
+
   // Try exact substring match first
   for (const seg of segments) {
     if (seg.text.toLowerCase().includes(normalizedQuote)) {
       return { segmentId: seg.id, timestamp: seg.timestamp, snippet: quote };
     }
   }
-  
+
   // Try fuzzy matching using Dice coefficient
   let bestMatch: TranscriptSegmentInput | null = null;
   let bestScore = 0;
-  
+
   for (const seg of segments) {
     const score = diceCoefficient(quote, seg.text);
     if (score > bestScore && score > 0.3) {
@@ -589,11 +589,11 @@ function findMatchingSegment(
       bestMatch = seg;
     }
   }
-  
+
   if (bestMatch) {
     return { segmentId: bestMatch.id, timestamp: bestMatch.timestamp, snippet: quote };
   }
-  
+
   return null;
 }
 
@@ -632,10 +632,10 @@ export async function evaluateWithClaude(
   // =========================================================
   // PROFESSOR ROLE PRIMER - Makes Babblet behave like a professor
   // =========================================================
-  const subjectContext = professorContext?.subjectArea 
+  const subjectContext = professorContext?.subjectArea
     ? `${professorContext.subjectArea}${professorContext.academicLevel ? ` at the ${professorContext.academicLevel} level` : ''}`
     : 'the relevant academic subject';
-  
+
   const courseContext = professorContext?.courseName
     ? `\nYou are teaching "${professorContext.courseName}"${professorContext.courseCode ? ` (${professorContext.courseCode})` : ''}${professorContext.term ? ` for ${professorContext.term}` : ''}.`
     : '';
@@ -661,7 +661,7 @@ CRITICAL RULES:
   // =========================================================
   let scaleInstructions = '';
   const effectiveScale = gradingScale || { type: 'none', maxScore: 100 };
-  
+
   switch (effectiveScale.type) {
     case 'points':
       scaleInstructions = `
@@ -872,12 +872,12 @@ Respond ONLY with valid JSON.`;
     // Helper to extract strengths/improvements with transcript references
     const extractWithRefs = (items: any[], criterionId?: string, criterionName?: string) => {
       if (!Array.isArray(items)) return [];
-      
+
       return items.map((item: any) => {
         // Handle both old string format and new object format
         const text = typeof item === 'string' ? item : (item.text || item);
         const quote = typeof item === 'object' ? item.quote : null;
-        
+
         // Find matching segment if we have segments and a quote
         const transcriptRefs: Array<{ segmentId: string; timestamp: number; snippet: string }> = [];
         if (quote && transcriptSegments?.length) {
@@ -886,7 +886,7 @@ Respond ONLY with valid JSON.`;
             transcriptRefs.push(match);
           }
         }
-        
+
         return {
           text: String(text),
           criterionId,
@@ -907,7 +907,7 @@ Respond ONLY with valid JSON.`;
     let bandLabel: string | undefined;
     const parsedGradingScale = parsed.gradingScaleUsed || effectiveScale.type;
     const parsedMaxScore = parsed.maxPossibleScore || effectiveScale.maxScore || 100;
-    
+
     if (parsedGradingScale === 'letter' && effectiveScale.letterGrades?.length) {
       const score = parsed.overallScore || 0;
       const grade = effectiveScale.letterGrades.find(g => score >= g.minScore && score <= g.maxScore);
@@ -948,7 +948,7 @@ Respond ONLY with valid JSON.`;
           .map((c: any) => {
             const criterionId = c.criterionId || `criterion-${Math.random().toString(36).slice(2, 8)}`;
             const criterionName = typeof c.criterion === 'string' ? c.criterion : 'Criterion';
-            
+
             // Extract transcript references from relevant quotes
             const transcriptRefs: Array<{ segmentId: string; timestamp: number; snippet: string }> = [];
             if (Array.isArray(c.relevantQuotes) && transcriptSegments?.length) {
@@ -959,7 +959,7 @@ Respond ONLY with valid JSON.`;
                 }
               }
             }
-            
+
             return {
               criterionId,
               criterion: criterionName,
