@@ -25,6 +25,7 @@ interface VideoPanelProps {
   transcriptEntries: TranscriptEntry[];
   onViewFullTranscript?: () => void;
   onTimeUpdate?: (currentTimeMs: number) => void;
+  onDurationChange?: (durationMs: number) => void;
   currentTimeMs?: number;
 }
 
@@ -42,6 +43,7 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
   transcriptEntries,
   onViewFullTranscript,
   onTimeUpdate,
+  onDurationChange,
   currentTimeMs = 0,
 }, ref) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -68,9 +70,25 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
       }
     };
 
+    const handleLoadedMetadata = () => {
+      if (onDurationChange && video.duration) {
+        onDurationChange(video.duration * 1000);
+      }
+    };
+
     video.addEventListener('timeupdate', handleTimeUpdate);
-    return () => video.removeEventListener('timeupdate', handleTimeUpdate);
-  }, [onTimeUpdate]);
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    
+    // Also check if already loaded
+    if (video.duration && onDurationChange) {
+      onDurationChange(video.duration * 1000);
+    }
+    
+    return () => {
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+    };
+  }, [onTimeUpdate, onDurationChange]);
 
   const seekTo = (timestampMs: number) => {
     if (videoRef.current) {

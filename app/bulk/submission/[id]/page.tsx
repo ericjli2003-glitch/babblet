@@ -254,32 +254,40 @@ export default function SubmissionDetailPage() {
     return timestamp;
   }, [timestampUnit]);
 
-  // Sort segments by timestamp for proper ordering
+  // Use segments in their original order (Deepgram transcription order)
+  // Don't sort by timestamp since Deepgram sometimes returns incorrect timestamps
   const sortedSegments = useMemo(() => {
     if (!submission?.transcriptSegments) return [];
-    return [...submission.transcriptSegments].sort((a, b) => {
-      const aMs = normalizeTimestamp(a.timestamp);
-      const bMs = normalizeTimestamp(b.timestamp);
-      return aMs - bMs;
-    });
-  }, [submission?.transcriptSegments, normalizeTimestamp]);
+    return submission.transcriptSegments;
+  }, [submission?.transcriptSegments]);
+
+  // Get estimated video duration from the last segment or video element
+  const [videoDuration, setVideoDuration] = useState(0);
 
   // Find the current segment based on video time
+  // Since Deepgram timestamps can be unreliable, we use proportional progress
   const currentSegmentIndex = useMemo(() => {
     if (sortedSegments.length === 0) return -1;
+    if (currentVideoTime === 0) return 0;
     
-    // currentVideoTime is in milliseconds from the video element
+    // If we have video duration, calculate which segment we should be on
+    // based on proportional progress through the video
+    if (videoDuration > 0 && sortedSegments.length > 0) {
+      const progress = currentVideoTime / videoDuration;
+      const segmentIndex = Math.floor(progress * sortedSegments.length);
+      return Math.min(segmentIndex, sortedSegments.length - 1);
+    }
+    
+    // Fallback: try timestamp-based matching
     const videoTimeMs = currentVideoTime;
-    
-    // Find the last segment whose timestamp is <= current video time
     for (let i = sortedSegments.length - 1; i >= 0; i--) {
       const segTimeMs = normalizeTimestamp(sortedSegments[i].timestamp);
       if (videoTimeMs >= segTimeMs) {
         return i;
       }
     }
-    return 0; // Default to first segment
-  }, [sortedSegments, currentVideoTime, normalizeTimestamp]);
+    return 0;
+  }, [sortedSegments, currentVideoTime, videoDuration, normalizeTimestamp]);
 
   // Handle video time updates
   const handleVideoTimeUpdate = useCallback((timeMs: number) => {
@@ -856,6 +864,7 @@ export default function SubmissionDetailPage() {
             transcriptEntries={transcriptEntries}
             onViewFullTranscript={() => setActiveTab('transcript')}
             onTimeUpdate={handleVideoTimeUpdate}
+            onDurationChange={setVideoDuration}
             currentTimeMs={currentVideoTime}
           />
         </div>
