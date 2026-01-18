@@ -129,7 +129,7 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
   };
 
   return (
-    <div className="w-full bg-surface-800 text-white flex flex-col h-full">
+    <div className="w-full bg-surface-800 text-white h-full overflow-y-auto">
       {/* Video Player */}
       <div className="p-4">
         <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
@@ -190,13 +190,13 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
       </div>
 
       {/* Full Transcript */}
-      <div className="flex-1 border-t border-surface-700 flex flex-col overflow-hidden">
-        <div className="px-4 py-3 border-b border-surface-700 flex items-center justify-between">
+      <div className="border-t border-surface-700">
+        <div className="px-4 py-3 border-b border-surface-700 flex items-center justify-between sticky top-0 bg-surface-800 z-10">
           <h4 className="font-semibold text-sm uppercase tracking-wide">Full Transcript</h4>
           <span className="text-xs text-surface-400">{transcriptEntries.length} segments</span>
         </div>
 
-        <div className="flex-1 overflow-auto p-4 space-y-2">
+        <div className="p-4 space-y-2">
           {transcriptEntries.length > 0 ? (
             transcriptEntries.map((entry, i) => (
               <div
