@@ -129,7 +129,7 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
   };
 
   return (
-    <div className="w-96 bg-surface-800 text-white flex flex-col h-full">
+    <div className="w-full bg-surface-800 text-white flex flex-col h-full">
       {/* Video Player */}
       <div className="p-4">
         <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
