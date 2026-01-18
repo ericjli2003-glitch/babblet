@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   Plus, Settings, Download, ChevronRight, Users, TrendingUp,
@@ -360,6 +360,9 @@ const assignmentGradients = [
 
 export default function CoursesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const courseIdParam = searchParams.get('courseId');
+  
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
@@ -429,8 +432,13 @@ export default function CoursesPage() {
         
         setCourses(mappedCourses);
         
-        // Update selected course if it exists
-        if (selectedCourse) {
+        // Auto-select course from URL param or update existing selection
+        if (courseIdParam) {
+          const courseFromParam = mappedCourses.find(c => c.id === courseIdParam);
+          if (courseFromParam) {
+            setSelectedCourse(courseFromParam);
+          }
+        } else if (selectedCourse) {
           const updatedCourse = mappedCourses.find(c => c.id === selectedCourse.id);
           if (updatedCourse) {
             setSelectedCourse(updatedCourse);

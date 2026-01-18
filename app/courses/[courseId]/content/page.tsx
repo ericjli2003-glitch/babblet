@@ -345,7 +345,7 @@ export default function ContextLibraryPage() {
         {/* Back Button + Breadcrumb */}
         <div className="flex items-center gap-4 mb-6">
           <Link
-            href="/courses"
+            href={`/courses?courseId=${courseId}`}
             className="flex items-center justify-center w-9 h-9 rounded-lg bg-white border border-surface-200 hover:bg-surface-50 hover:border-primary-300 transition-colors"
           >
             <ArrowLeft className="w-4 h-4 text-surface-600" />
@@ -355,7 +355,7 @@ export default function ContextLibraryPage() {
               Courses
             </Link>
             <ChevronRight className="w-4 h-4" />
-            <Link href="/courses" className="hover:text-primary-600 transition-colors">
+            <Link href={`/courses?courseId=${courseId}`} className="hover:text-primary-600 transition-colors">
               {course?.name || 'Course'}
             </Link>
             <ChevronRight className="w-4 h-4" />
