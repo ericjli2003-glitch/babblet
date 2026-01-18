@@ -189,41 +189,42 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
         )}
       </div>
 
-      {/* Live Transcript */}
+      {/* Full Transcript */}
       <div className="flex-1 border-t border-surface-700 flex flex-col overflow-hidden">
         <div className="px-4 py-3 border-b border-surface-700 flex items-center justify-between">
-          <h4 className="font-semibold text-sm uppercase tracking-wide">Live Transcript</h4>
-          {onViewFullTranscript && (
-            <button
-              onClick={onViewFullTranscript}
-              className="text-xs text-primary-400 hover:text-primary-300 font-medium"
-            >
-              View Full
-            </button>
-          )}
+          <h4 className="font-semibold text-sm uppercase tracking-wide">Full Transcript</h4>
+          <span className="text-xs text-surface-400">{transcriptEntries.length} segments</span>
         </div>
 
-        <div className="flex-1 overflow-auto p-4 space-y-3">
-          {transcriptEntries.map((entry, i) => (
-            <div
-              key={i}
-              onClick={() => seekTo(entry.timestampMs)}
-              className={`cursor-pointer rounded-lg p-2 -mx-2 transition-colors ${
-                entry.isHighlighted
-                  ? 'bg-primary-500/20'
-                  : 'hover:bg-surface-700/50'
-              }`}
-            >
-              <span className="text-primary-400 font-mono text-xs block mb-1">
-                {entry.timestamp}
-              </span>
-              <p className={`text-xs leading-relaxed ${
-                entry.isHighlighted ? 'text-white' : 'text-surface-300'
-              }`}>
-                {entry.text}
-              </p>
+        <div className="flex-1 overflow-auto p-4 space-y-2">
+          {transcriptEntries.length > 0 ? (
+            transcriptEntries.map((entry, i) => (
+              <div
+                key={i}
+                onClick={() => seekTo(entry.timestampMs)}
+                className={`cursor-pointer rounded-lg p-3 transition-colors ${
+                  entry.isHighlighted
+                    ? 'bg-primary-500/30 border-l-2 border-primary-400'
+                    : 'hover:bg-surface-700/50'
+                }`}
+              >
+                <span className={`font-mono text-xs block mb-1 ${
+                  entry.isHighlighted ? 'text-primary-300' : 'text-primary-400'
+                }`}>
+                  {entry.timestamp}
+                </span>
+                <p className={`text-sm leading-relaxed ${
+                  entry.isHighlighted ? 'text-white font-medium' : 'text-surface-300'
+                }`}>
+                  {entry.text}
+                </p>
+              </div>
+            ))
+          ) : (
+            <div className="flex items-center justify-center h-32 text-surface-500 text-sm">
+              No transcript available
             </div>
-          ))}
+          )}
         </div>
       </div>
     </div>
