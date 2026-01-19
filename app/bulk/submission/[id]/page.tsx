@@ -401,10 +401,11 @@ export default function SubmissionDetailPage() {
         timestamp: formatTimestamp(timestampMs),
         timestampMs: timestampMs,
         text: seg.text,
+        speaker: seg.speaker || (submission?.studentName ? `${submission.studentName}` : 'Speaker'),
         isHighlighted: i === currentSegmentIndex,
       };
     });
-  }, [sortedSegments, currentSegmentIndex, normalizeTimestamp]);
+  }, [sortedSegments, currentSegmentIndex, normalizeTimestamp, submission?.studentName]);
 
   // Filter transcript segments by search (uses sorted segments)
   const filteredSegments = useMemo(() => {

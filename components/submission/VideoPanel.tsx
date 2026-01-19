@@ -8,6 +8,7 @@ interface TranscriptEntry {
   timestamp: string;
   timestampMs: number;
   text: string;
+  speaker?: string;
   isHighlighted?: boolean;
 }
 
