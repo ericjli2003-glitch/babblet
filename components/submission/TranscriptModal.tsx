@@ -57,12 +57,13 @@ export default function TranscriptModal({
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   // Filter entries by search
+  const safeEntries = transcriptEntries || [];
   const filteredEntries = searchQuery
-    ? transcriptEntries.filter(e => 
+    ? safeEntries.filter(e => 
         e.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
         e.speaker?.toLowerCase().includes(searchQuery.toLowerCase())
       )
-    : transcriptEntries;
+    : safeEntries;
 
   // Auto-scroll to current segment
   useEffect(() => {

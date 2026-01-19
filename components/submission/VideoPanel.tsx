@@ -212,7 +212,7 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
         >
           <div className="flex items-center gap-2">
             <h4 className="font-semibold text-sm uppercase tracking-wide">Full Transcript</h4>
-            <span className="text-xs text-surface-400">{transcriptEntries.length} segments</span>
+            <span className="text-xs text-surface-400">{(transcriptEntries || []).length} segments</span>
           </div>
           <Expand className="w-4 h-4 text-surface-400" />
         </button>
@@ -221,8 +221,8 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
           ref={transcriptRef}
           className="flex-1 overflow-y-auto p-4 space-y-2"
         >
-          {transcriptEntries.length > 0 ? (
-            transcriptEntries.map((entry, i) => (
+          {(transcriptEntries || []).length > 0 ? (
+            (transcriptEntries || []).map((entry, i) => (
               <div
                 key={i}
                 data-highlighted={entry.isHighlighted}
@@ -259,7 +259,7 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
         onClose={() => setIsModalOpen(false)}
         title={presentationTitle}
         videoUrl={videoUrl}
-        transcriptEntries={transcriptEntries}
+        transcriptEntries={transcriptEntries || []}
         onSeek={seekTo}
         currentTimeMs={currentTimeMs}
       />
