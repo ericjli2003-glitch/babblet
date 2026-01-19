@@ -96,20 +96,21 @@ export default function TranscriptModal({
     }
   };
 
+  // Early return if not open
+  if (!isOpen) return null;
+
   // Group entries by speaker for visual grouping
-  const groupedEntries = filteredEntries.reduce((groups, entry, index) => {
+  const groupedEntries = (filteredEntries || []).reduce((groups, entry, index) => {
     const prevEntry = filteredEntries[index - 1];
     const isSameSpeaker = prevEntry?.speaker === entry.speaker;
     
     if (!isSameSpeaker) {
       groups.push({ speaker: entry.speaker || 'Speaker', entries: [entry] });
-    } else {
+    } else if (groups.length > 0) {
       groups[groups.length - 1].entries.push(entry);
     }
     return groups;
   }, [] as { speaker: string; entries: TranscriptEntry[] }[]);
-
-  if (!isOpen) return null;
 
   return (
     <AnimatePresence>
