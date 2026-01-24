@@ -28,13 +28,6 @@ const sideNavItems = [
   { href: '/rubrics', label: 'Rubrics', icon: FileText },
 ];
 
-const topNavItems = [
-  { href: '/courses', label: 'Dashboard' },
-  { href: '/courses', label: 'Courses' },
-  { href: '/reports', label: 'Reports' },
-  { href: '/settings', label: 'Settings' },
-];
-
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
 
@@ -104,29 +97,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top Navigation Bar */}
-        <header className="h-14 bg-white border-b border-surface-200 flex items-center justify-between px-6">
-          <nav className="flex items-center gap-6">
-            {topNavItems.map((item) => {
-              const isActive = item.href === '/courses' 
-                ? pathname === '/courses' || pathname?.startsWith('/courses/')
-                : pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'text-primary-600'
-                      : 'text-surface-500 hover:text-surface-900'
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-          
+        {/* Top Bar - Search and User only */}
+        <header className="h-14 bg-white border-b border-surface-200 flex items-center justify-end px-6">
           <div className="flex items-center gap-4">
             {/* Search */}
             <div className="relative">
