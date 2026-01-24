@@ -225,29 +225,42 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
           className="flex-1 overflow-y-auto p-4 space-y-2"
         >
           {(transcriptEntries || []).length > 0 ? (
-            (transcriptEntries || []).map((entry, i) => (
-              <div
-                key={i}
-                data-highlighted={entry.isHighlighted}
-                onClick={() => seekTo(entry.timestampMs)}
-                className={`cursor-pointer rounded-lg p-3 transition-colors ${
-                  entry.isHighlighted
-                    ? 'bg-primary-500/30 border-l-2 border-primary-400'
-                    : 'hover:bg-surface-700/50'
-                }`}
-              >
-                <span className={`font-mono text-xs block mb-1 ${
-                  entry.isHighlighted ? 'text-primary-300' : 'text-primary-400'
-                }`}>
-                  {entry.timestamp}
-                </span>
-                <p className={`text-sm leading-relaxed ${
-                  entry.isHighlighted ? 'text-white font-medium' : 'text-surface-300'
-                }`}>
-                  {entry.text}
-                </p>
-              </div>
-            ))
+            <>
+              {/* Show only first 8 segments in condensed view */}
+              {(transcriptEntries || []).slice(0, 8).map((entry, i) => (
+                <div
+                  key={i}
+                  data-highlighted={entry.isHighlighted}
+                  onClick={() => seekTo(entry.timestampMs)}
+                  className={`cursor-pointer rounded-lg p-3 transition-colors ${
+                    entry.isHighlighted
+                      ? 'bg-primary-500/30 border-l-2 border-primary-400'
+                      : 'hover:bg-surface-700/50'
+                  }`}
+                >
+                  <span className={`font-mono text-xs block mb-1 ${
+                    entry.isHighlighted ? 'text-primary-300' : 'text-primary-400'
+                  }`}>
+                    {entry.timestamp}
+                  </span>
+                  <p className={`text-sm leading-relaxed ${
+                    entry.isHighlighted ? 'text-white font-medium' : 'text-surface-300'
+                  }`}>
+                    {entry.text}
+                  </p>
+                </div>
+              ))}
+              {/* Show "View more" if there are more segments */}
+              {(transcriptEntries || []).length > 8 && (
+                <button
+                  onClick={() => setIsModalOpen(true)}
+                  className="w-full py-3 text-sm text-primary-400 hover:text-primary-300 hover:bg-surface-700/50 rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  <span>View {(transcriptEntries || []).length - 8} more segments</span>
+                  <Expand className="w-4 h-4" />
+                </button>
+              )}
+            </>
           ) : (
             <div className="flex items-center justify-center h-32 text-surface-500 text-sm">
               No transcript available

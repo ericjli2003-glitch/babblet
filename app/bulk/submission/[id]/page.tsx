@@ -429,10 +429,19 @@ export default function SubmissionDetailPage() {
   const handleRegenerateQuestions = useCallback(async () => {
     if (!submission || isRegenerating) return;
     
+    // Check if we have transcript content
+    const fullTranscript = sortedSegments.length > 0 
+      ? sortedSegments.map(s => s.text).join(' ')
+      : submission.transcript || '';
+    
+    if (!fullTranscript || fullTranscript.trim().length < 50) {
+      alert('Not enough transcript content to generate questions. Please ensure the video has been transcribed.');
+      return;
+    }
+    
     setIsRegenerating(true);
     try {
-      // Build transcript from segments
-      const fullTranscript = sortedSegments.map(s => s.text).join(' ');
+      console.log('[Regenerate] Starting with transcript length:', fullTranscript.length, 'questionCount:', questionCount);
       
       const res = await fetch('/api/generate-questions', {
         method: 'POST',
@@ -449,8 +458,9 @@ export default function SubmissionDetailPage() {
       });
       
       const data = await res.json();
+      console.log('[Regenerate] API response:', data.success, 'questions count:', data.questions?.length);
       
-      if (data.success && data.questions) {
+      if (data.success && data.questions && data.questions.length > 0) {
         // Update submission with new questions
         setSubmission(prev => prev ? {
           ...prev,
@@ -464,11 +474,11 @@ export default function SubmissionDetailPage() {
         } : null);
       } else {
         console.error('Failed to regenerate questions:', data.error);
-        alert('Failed to regenerate questions: ' + (data.error || 'Unknown error'));
+        alert('Failed to regenerate questions: ' + (data.error || 'No questions generated'));
       }
     } catch (err) {
       console.error('Error regenerating questions:', err);
-      alert('Error regenerating questions');
+      alert('Error regenerating questions. Please try again.');
     } finally {
       setIsRegenerating(false);
     }
