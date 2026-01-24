@@ -1139,83 +1139,83 @@ function BulkUploadPageContent() {
   return (
     <DashboardLayout>
       <div className="min-h-full bg-surface-50">
-        {/* Class Context Header - Persistent when class-scoped */}
-        {isClassScoped && classScopedInfo && (
-          <div className="bg-gradient-to-r from-teal-600 to-cyan-600 text-white">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-                    <GraduationCap className="w-5 h-5" />
+      {/* Class Context Header - Persistent when class-scoped */}
+      {isClassScoped && classScopedInfo && (
+        <div className="bg-gradient-to-r from-teal-600 to-cyan-600 text-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                  <GraduationCap className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">{classScopedInfo.courseName}</span>
+                    {classScopedInfo.courseCode && (
+                      <span className="text-teal-200">({classScopedInfo.courseCode})</span>
+                    )}
+                    {classScopedInfo.term && (
+                      <span className="text-teal-200">· {classScopedInfo.term}</span>
+                    )}
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">{classScopedInfo.courseName}</span>
-                      {classScopedInfo.courseCode && (
-                        <span className="text-teal-200">({classScopedInfo.courseCode})</span>
-                      )}
-                      {classScopedInfo.term && (
-                        <span className="text-teal-200">· {classScopedInfo.term}</span>
-                      )}
-                    </div>
-                    <div className="text-teal-100 text-sm">
-                      {classScopedInfo.assignmentName}
-                    </div>
+                  <div className="text-teal-100 text-sm">
+                    {classScopedInfo.assignmentName}
                   </div>
-                  <span className="ml-2 px-2 py-0.5 bg-white/20 text-xs font-medium rounded-full">
-                    Class-scoped upload
+                </div>
+                <span className="ml-2 px-2 py-0.5 bg-white/20 text-xs font-medium rounded-full">
+                  Class-scoped upload
+                </span>
+              </div>
+
+              {/* Context Status Indicators */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className={`flex items-center gap-1 ${classScopedInfo.hasRubric ? 'text-white' : 'text-teal-300'}`}>
+                    {classScopedInfo.hasRubric ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                    Rubric
+                  </span>
+                  <span className={`flex items-center gap-1 ${classScopedInfo.hasPrompt ? 'text-white' : 'text-teal-300'}`}>
+                    {classScopedInfo.hasPrompt ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                    Prompt
+                  </span>
+                  <span className={`flex items-center gap-1 ${classScopedInfo.hasMaterials ? 'text-white' : 'text-teal-300'}`}>
+                    {classScopedInfo.hasMaterials ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                    Materials
                   </span>
                 </div>
-
-                {/* Context Status Indicators */}
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className={`flex items-center gap-1 ${classScopedInfo.hasRubric ? 'text-white' : 'text-teal-300'}`}>
-                      {classScopedInfo.hasRubric ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-                      Rubric
-                    </span>
-                    <span className={`flex items-center gap-1 ${classScopedInfo.hasPrompt ? 'text-white' : 'text-teal-300'}`}>
-                      {classScopedInfo.hasPrompt ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-                      Prompt
-                    </span>
-                    <span className={`flex items-center gap-1 ${classScopedInfo.hasMaterials ? 'text-white' : 'text-teal-300'}`}>
-                      {classScopedInfo.hasMaterials ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-                      Materials
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => setShowContextPanel(true)}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm transition-colors"
-                  >
-                    <Eye className="w-4 h-4" />
-                    View Context
-                  </button>
-                </div>
+                <button
+                  onClick={() => setShowContextPanel(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm transition-colors"
+                >
+                  <Eye className="w-4 h-4" />
+                  View Context
+                </button>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Main Content */}
+      {/* Main Content */}
         <main className="p-8">
-          <AnimatePresence mode="wait">
-            {/* Batches List View */}
-            {view === 'list' && (
-              <motion.div
-                key="list"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-              >
+        <AnimatePresence mode="wait">
+          {/* Batches List View */}
+          {view === 'list' && (
+            <motion.div
+              key="list"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+            >
                 {/* Page Header */}
                 <div className="flex items-center justify-between mb-8">
-                  <div>
+                <div>
                     <h1 className="text-2xl font-bold text-surface-900">Presentation Batches</h1>
                     <p className="text-surface-500 mt-1">Manage, track, and grade your student presentation groups</p>
-                  </div>
-                  <div className="flex items-center gap-3">
+                </div>
+                <div className="flex items-center gap-3">
                     {/* Course Filter */}
-                    {!isClassScoped && availableCourses.length > 0 && (
+                  {!isClassScoped && availableCourses.length > 0 && (
                       <select
                         value={courseFilter}
                         onChange={(e) => setCourseFilter(e.target.value)}
@@ -1228,88 +1228,88 @@ function BulkUploadPageContent() {
                           </option>
                         ))}
                       </select>
-                    )}
-                    <button
+                  )}
+                  <button
                       onClick={() => setShowBatchWizard(true)}
                       className="flex items-center gap-2 px-4 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors font-medium"
                     >
                       <Plus className="w-4 h-4" />
                       New Batch
+                  </button>
+                </div>
+              </div>
+
+              {/* Filtered batches */}
+              {(() => {
+                const filteredBatches = courseFilter
+                  ? batches.filter(b => b.courseId === courseFilter)
+                  : batches;
+
+                return loadingBatches ? (
+                  <div className="flex items-center justify-center h-64">
+                    <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+                  </div>
+                ) : batches.length === 0 ? (
+                  <div className={`bg-white rounded-2xl shadow-sm border p-12 text-center ${isClassScoped ? 'border-teal-200' : 'border-surface-200'}`}>
+                    {isClassScoped && classScopedInfo ? (
+                      <>
+                        <div className="w-16 h-16 rounded-2xl bg-teal-100 flex items-center justify-center mx-auto mb-4">
+                          <GraduationCap className="w-8 h-8 text-teal-600" />
+                        </div>
+                        <h3 className="text-lg font-semibold text-surface-900 mb-2">
+                          No batches for {classScopedInfo.assignmentName}
+                        </h3>
+                        <p className="text-surface-600 mb-2">
+                          Create a batch to start uploading student presentations for this assignment
+                        </p>
+                        <p className="text-sm text-teal-600 mb-6">
+                          Context: {classScopedInfo.courseName} ({classScopedInfo.term})
+                        </p>
+                        <button
+                            onClick={() => setShowBatchWizard(true)}
+                          className="inline-flex items-center gap-2 px-6 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-colors"
+                        >
+                          <Plus className="w-5 h-5" />
+                          Create Batch for Assignment
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <FolderOpen className="w-16 h-16 text-surface-300 mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold text-surface-900 mb-2">No batches yet</h3>
+                        <p className="text-surface-600 mb-6">Create your first batch to start uploading presentations</p>
+                        <button
+                            onClick={() => setShowBatchWizard(true)}
+                          className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors"
+                        >
+                          <Plus className="w-5 h-5" />
+                          Create Batch
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ) : filteredBatches.length === 0 ? (
+                  <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-12 text-center">
+                    <FolderOpen className="w-16 h-16 text-surface-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-surface-900 mb-2">No batches for this course</h3>
+                    <p className="text-surface-600 mb-6">No batches found for the selected course filter</p>
+                    <button
+                      onClick={() => setCourseFilter('')}
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-surface-100 text-surface-700 rounded-xl hover:bg-surface-200 transition-colors"
+                    >
+                      Clear Filter
                     </button>
                   </div>
-                </div>
-
-                {/* Filtered batches */}
-                {(() => {
-                  const filteredBatches = courseFilter
-                    ? batches.filter(b => b.courseId === courseFilter)
-                    : batches;
-
-                  return loadingBatches ? (
-                    <div className="flex items-center justify-center h-64">
-                      <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-                    </div>
-                  ) : batches.length === 0 ? (
-                    <div className={`bg-white rounded-2xl shadow-sm border p-12 text-center ${isClassScoped ? 'border-teal-200' : 'border-surface-200'}`}>
-                      {isClassScoped && classScopedInfo ? (
-                        <>
-                          <div className="w-16 h-16 rounded-2xl bg-teal-100 flex items-center justify-center mx-auto mb-4">
-                            <GraduationCap className="w-8 h-8 text-teal-600" />
-                          </div>
-                          <h3 className="text-lg font-semibold text-surface-900 mb-2">
-                            No batches for {classScopedInfo.assignmentName}
-                          </h3>
-                          <p className="text-surface-600 mb-2">
-                            Create a batch to start uploading student presentations for this assignment
-                          </p>
-                          <p className="text-sm text-teal-600 mb-6">
-                            Context: {classScopedInfo.courseName} ({classScopedInfo.term})
-                          </p>
-                          <button
-                            onClick={() => setShowBatchWizard(true)}
-                            className="inline-flex items-center gap-2 px-6 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-colors"
-                          >
-                            <Plus className="w-5 h-5" />
-                            Create Batch for Assignment
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <FolderOpen className="w-16 h-16 text-surface-300 mx-auto mb-4" />
-                          <h3 className="text-lg font-semibold text-surface-900 mb-2">No batches yet</h3>
-                          <p className="text-surface-600 mb-6">Create your first batch to start uploading presentations</p>
-                          <button
-                            onClick={() => setShowBatchWizard(true)}
-                            className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors"
-                          >
-                            <Plus className="w-5 h-5" />
-                            Create Batch
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  ) : filteredBatches.length === 0 ? (
-                    <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-12 text-center">
-                      <FolderOpen className="w-16 h-16 text-surface-300 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-surface-900 mb-2">No batches for this course</h3>
-                      <p className="text-surface-600 mb-6">No batches found for the selected course filter</p>
-                      <button
-                        onClick={() => setCourseFilter('')}
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-surface-100 text-surface-700 rounded-xl hover:bg-surface-200 transition-colors"
-                      >
-                        Clear Filter
-                      </button>
-                    </div>
-                  ) : (
+                ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {filteredBatches.map(batch => (
-                        <motion.div
-                          key={batch.id}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
+                    {filteredBatches.map(batch => (
+                      <motion.div
+                        key={batch.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
                           className="bg-white rounded-xl border border-surface-200 p-5 hover:shadow-lg hover:border-primary-200 transition-all cursor-pointer group"
-                          onClick={() => openBatch(batch.id)}
-                        >
+                        onClick={() => openBatch(batch.id)}
+                      >
                           {/* Card Header */}
                           <div className="flex items-start justify-between mb-3">
                             <div>
@@ -1343,7 +1343,7 @@ function BulkUploadPageContent() {
                               {batch.status === 'completed' && <CheckCircle className="w-3 h-3" />}
                               {batch.status === 'completed' ? 'Completed' : batch.status === 'processing' ? 'Processing' : 'Queued'}
                             </span>
-                          </div>
+                        </div>
 
                           {/* Progress / Stats */}
                           {batch.status === 'processing' && batch.totalSubmissions > 0 && (
@@ -1355,14 +1355,14 @@ function BulkUploadPageContent() {
                               <div className="h-1.5 bg-surface-100 rounded-full overflow-hidden">
                                 <div
                                   className="h-full bg-primary-500 transition-all"
-                                  style={{ width: `${(batch.processedCount / batch.totalSubmissions) * 100}%` }}
-                                />
-                              </div>
+                                style={{ width: `${(batch.processedCount / batch.totalSubmissions) * 100}%` }}
+                              />
+                            </div>
                               <p className="text-xs text-surface-500 mt-2">
                                 {batch.processedCount} of {batch.totalSubmissions} processed
                               </p>
-                            </div>
-                          )}
+                          </div>
+                        )}
 
                           {batch.status === 'completed' && (
                             <div className="mb-4">
@@ -1387,8 +1387,8 @@ function BulkUploadPageContent() {
                               </span>
                             )}
                           </div>
-                        </motion.div>
-                      ))}
+                      </motion.div>
+                    ))}
 
                       {/* Create New Batch Card */}
                       <motion.div
@@ -1403,19 +1403,19 @@ function BulkUploadPageContent() {
                         <p className="font-medium text-surface-700">Create New Batch</p>
                         <p className="text-sm text-surface-500">Upload student presentations</p>
                       </motion.div>
-                    </div>
-                  );
-                })()}
-              </motion.div>
-            )}
+                  </div>
+                );
+              })()}
+            </motion.div>
+          )}
 
-            {/* Create Batch View */}
-            {view === 'create' && (
-              <motion.div
-                key="create"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
+          {/* Create Batch View */}
+          {view === 'create' && (
+            <motion.div
+              key="create"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
                 className="space-y-6"
               >
                 {/* Page Header with Back Button */}
@@ -1429,165 +1429,165 @@ function BulkUploadPageContent() {
                   <h1 className="text-2xl font-bold text-surface-900">Create New Batch</h1>
                 </div>
 
-                <div className={`bg-white rounded-2xl shadow-sm border p-8 ${isClassScoped ? 'border-teal-200' : 'border-surface-200'}`}>
+              <div className={`bg-white rounded-2xl shadow-sm border p-8 ${isClassScoped ? 'border-teal-200' : 'border-surface-200'}`}>
 
-                  <div className="space-y-6 max-w-xl">
-                    {/* Context Selection Banner */}
-                    {selectedContextVersion ? (
-                      <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <BookOpen className="w-5 h-5 text-emerald-600" />
-                            <div>
-                              <p className="font-medium text-emerald-900">
-                                Using Class Context v{selectedContextVersion.version}
-                              </p>
-                              <p className="text-sm text-emerald-700">
-                                {selectedContextCourse?.name} • {selectedContextAssignment?.name}
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            onClick={clearSelectedContext}
-                            className="text-sm text-emerald-600 hover:text-emerald-700"
-                          >
-                            Change
-                          </button>
-                        </div>
-                      </div>
-                    ) : availableContexts.length > 0 ? (
-                      <div className="p-4 bg-violet-50 rounded-xl border border-violet-200">
-                        <div className="flex items-center gap-2 mb-3">
-                          <BookOpen className="w-5 h-5 text-violet-600" />
-                          <span className="font-medium text-violet-900">Select Class Context</span>
-                        </div>
-                        <select
-                          value={selectedContextId}
-                          onChange={(e) => handleContextSelect(e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border border-violet-300 focus:ring-2 focus:ring-violet-500 text-sm"
-                        >
-                          <option value="">Choose a course & assignment...</option>
-                          {availableContexts.map(ctx => (
-                            <option key={ctx.versionId} value={ctx.versionId}>
-                              {ctx.courseName} • {ctx.assignmentName} (v{ctx.version})
-                            </option>
-                          ))}
-                        </select>
-                        <p className="text-xs text-violet-600 mt-2">
-                          Using class context improves AI grading accuracy
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+                <div className="space-y-6 max-w-xl">
+                  {/* Context Selection Banner */}
+                  {selectedContextVersion ? (
+                    <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+                      <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <BookOpen className="w-5 h-5 text-amber-600" />
-                          <div className="flex-1">
-                            <p className="font-medium text-amber-900">No Class Context Set Up</p>
-                            <p className="text-sm text-amber-700">
-                              Set up rubrics and course materials for better AI grading
+                          <BookOpen className="w-5 h-5 text-emerald-600" />
+                          <div>
+                            <p className="font-medium text-emerald-900">
+                              Using Class Context v{selectedContextVersion.version}
+                            </p>
+                            <p className="text-sm text-emerald-700">
+                              {selectedContextCourse?.name} • {selectedContextAssignment?.name}
                             </p>
                           </div>
-                          <Link
-                            href="/context"
-                            className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700"
-                          >
-                            Set Up
-                          </Link>
                         </div>
+                        <button
+                          onClick={clearSelectedContext}
+                          className="text-sm text-emerald-600 hover:text-emerald-700"
+                        >
+                          Change
+                        </button>
                       </div>
-                    )}
-
-                    <div>
-                      <label className="block text-sm font-medium text-surface-700 mb-2">
-                        Batch Name *
-                      </label>
-                      <input
-                        type="text"
-                        value={batchName}
-                        onChange={(e) => setBatchName(e.target.value)}
-                        placeholder="e.g., COMM 101 Final Presentations"
-                        className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
                     </div>
-
-                    {/* Show manual course/assignment fields only if no context selected */}
-                    {!selectedContextVersion && (
-                      <>
-                        <div>
-                          <label className="block text-sm font-medium text-surface-700 mb-2">
-                            Course Name (optional)
-                          </label>
-                          <input
-                            type="text"
-                            value={courseName}
-                            onChange={(e) => setCourseName(e.target.value)}
-                            placeholder="e.g., COMM 101"
-                            className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-surface-700 mb-2">
-                            Assignment Name (optional)
-                          </label>
-                          <input
-                            type="text"
-                            value={assignmentName}
-                            onChange={(e) => setAssignmentName(e.target.value)}
-                            placeholder="e.g., Persuasive Speech"
-                            className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-surface-700 mb-2">
-                            Rubric Criteria (optional)
-                          </label>
-                          <textarea
-                            value={rubricCriteria}
-                            onChange={(e) => setRubricCriteria(e.target.value)}
-                            placeholder="Paste your rubric criteria here..."
-                            rows={4}
-                            className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                          />
-                          <p className="text-xs text-surface-500 mt-1">
-                            Babblet will use this to generate more targeted feedback
+                  ) : availableContexts.length > 0 ? (
+                    <div className="p-4 bg-violet-50 rounded-xl border border-violet-200">
+                      <div className="flex items-center gap-2 mb-3">
+                        <BookOpen className="w-5 h-5 text-violet-600" />
+                        <span className="font-medium text-violet-900">Select Class Context</span>
+                      </div>
+                      <select
+                        value={selectedContextId}
+                        onChange={(e) => handleContextSelect(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-violet-300 focus:ring-2 focus:ring-violet-500 text-sm"
+                      >
+                        <option value="">Choose a course & assignment...</option>
+                        {availableContexts.map(ctx => (
+                          <option key={ctx.versionId} value={ctx.versionId}>
+                            {ctx.courseName} • {ctx.assignmentName} (v{ctx.version})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-violet-600 mt-2">
+                        Using class context improves AI grading accuracy
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+                      <div className="flex items-center gap-3">
+                        <BookOpen className="w-5 h-5 text-amber-600" />
+                        <div className="flex-1">
+                          <p className="font-medium text-amber-900">No Class Context Set Up</p>
+                          <p className="text-sm text-amber-700">
+                            Set up rubrics and course materials for better AI grading
                           </p>
                         </div>
+                        <Link
+                          href="/context"
+                          className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700"
+                        >
+                          Set Up
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-surface-700 mb-2">
+                      Batch Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={batchName}
+                      onChange={(e) => setBatchName(e.target.value)}
+                      placeholder="e.g., COMM 101 Final Presentations"
+                      className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                  </div>
+
+                  {/* Show manual course/assignment fields only if no context selected */}
+                  {!selectedContextVersion && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 mb-2">
+                          Course Name (optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={courseName}
+                          onChange={(e) => setCourseName(e.target.value)}
+                          placeholder="e.g., COMM 101"
+                          className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 mb-2">
+                          Assignment Name (optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={assignmentName}
+                          onChange={(e) => setAssignmentName(e.target.value)}
+                          placeholder="e.g., Persuasive Speech"
+                          className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 mb-2">
+                          Rubric Criteria (optional)
+                        </label>
+                        <textarea
+                          value={rubricCriteria}
+                          onChange={(e) => setRubricCriteria(e.target.value)}
+                          placeholder="Paste your rubric criteria here..."
+                          rows={4}
+                          className="w-full px-4 py-3 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                        <p className="text-xs text-surface-500 mt-1">
+                          Babblet will use this to generate more targeted feedback
+                        </p>
+                      </div>
+                    </>
+                  )}
+
+                  <button
+                    onClick={createBatch}
+                    disabled={!batchName.trim() || creating}
+                    className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {creating ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-5 h-5" />
+                        Create Batch
                       </>
                     )}
-
-                    <button
-                      onClick={createBatch}
-                      disabled={!batchName.trim() || creating}
-                      className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {creating ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          Creating...
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="w-5 h-5" />
-                          Create Batch
-                        </>
-                      )}
-                    </button>
-                  </div>
+                  </button>
                 </div>
-              </motion.div>
-            )}
+              </div>
+            </motion.div>
+          )}
 
-            {/* Batch Detail View */}
-            {view === 'batch' && selectedBatchId && (
-              <motion.div
-                key="batch"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="space-y-6"
-              >
+          {/* Batch Detail View */}
+          {view === 'batch' && selectedBatchId && (
+            <motion.div
+              key="batch"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-6"
+            >
                 {/* Back Button + Breadcrumb */}
                 <div className="flex items-center gap-4">
                   <button
@@ -1607,7 +1607,7 @@ function BulkUploadPageContent() {
                     )}
                     <span className="text-surface-900 font-medium">{currentBatch?.name || 'Batch'}</span>
                   </nav>
-                </div>
+                      </div>
 
                 {/* Page Header */}
                 <div className="flex items-start justify-between">
@@ -1620,12 +1620,12 @@ function BulkUploadPageContent() {
                         <span className="inline-flex items-center gap-1.5 text-xs bg-primary-100 text-primary-700 px-2.5 py-1 rounded-full font-medium">
                           <FileText className="w-3 h-3" />
                           Rubric V2
-                        </span>
+                          </span>
                       )}
                       <span className="text-sm text-surface-500">
                         Created {currentBatch?.createdAt ? formatDate(currentBatch.createdAt) : ''} • {currentBatch?.assignmentName}
                       </span>
-                    </div>
+                        </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {/* Re-grade All Button */}
@@ -1677,11 +1677,11 @@ function BulkUploadPageContent() {
                     >
                       <Trash2 className="w-5 h-5" />
                     </button>
+                    </div>
                   </div>
-                </div>
 
                 {/* Stats Cards Row */}
-                <div className="grid grid-cols-4 gap-4">
+                  <div className="grid grid-cols-4 gap-4">
                   <div className="bg-white rounded-xl border border-surface-200 p-4 flex items-center gap-4">
                     <div className="w-10 h-10 rounded-lg bg-surface-100 flex items-center justify-center">
                       <FileText className="w-5 h-5 text-surface-500" />
@@ -1690,7 +1690,7 @@ function BulkUploadPageContent() {
                       <p className="text-xs text-surface-500 uppercase tracking-wide">Total Files</p>
                       <p className="text-2xl font-bold text-surface-900">{stats.total}</p>
                     </div>
-                  </div>
+                    </div>
                   <div className="bg-white rounded-xl border border-surface-200 p-4 flex items-center gap-4">
                     <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
                       <Loader2 className="w-5 h-5 text-amber-600 animate-spin" />
@@ -1698,34 +1698,34 @@ function BulkUploadPageContent() {
                     <div>
                       <p className="text-xs text-surface-500 uppercase tracking-wide">Processing</p>
                       <p className="text-2xl font-bold text-amber-600">{stats.processing}</p>
-                    </div>
                   </div>
+                      </div>
                   <div className="bg-white rounded-xl border border-surface-200 p-4 flex items-center gap-4">
                     <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
                       <CheckCircle className="w-5 h-5 text-emerald-600" />
-                    </div>
+                      </div>
                     <div>
                       <p className="text-xs text-surface-500 uppercase tracking-wide">Complete</p>
                       <p className="text-2xl font-bold text-emerald-600">{stats.complete}</p>
+                      </div>
                     </div>
-                  </div>
                   <div className="bg-white rounded-xl border border-surface-200 p-4 flex items-center gap-4">
                     <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
                       <AlertTriangle className="w-5 h-5 text-red-600" />
-                    </div>
+                </div>
                     <div>
                       <p className="text-xs text-surface-500 uppercase tracking-wide">Failed</p>
                       <p className="text-2xl font-bold text-red-600">{stats.failed}</p>
-                    </div>
+                  </div>
                   </div>
                 </div>
 
                 {/* Upload Drop Zone */}
                 <div className="bg-white rounded-xl border border-surface-200 p-6">
-                  <div
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={handleDrop}
-                    onClick={() => fileInputRef.current?.click()}
+                <div
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
                     className="border-2 border-dashed border-surface-200 rounded-xl p-8 text-center cursor-pointer hover:border-primary-300 hover:bg-primary-50/30 transition-colors"
                   >
                     <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center mx-auto mb-4">
@@ -1742,29 +1742,29 @@ function BulkUploadPageContent() {
                     >
                       Browse Files
                     </button>
-                  </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept="video/*,audio/*"
-                    onChange={(e) => handleFilesSelected(e.target.files)}
-                    className="hidden"
-                  />
                 </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="video/*,audio/*"
+                  onChange={(e) => handleFilesSelected(e.target.files)}
+                  className="hidden"
+                />
+              </div>
 
                 {/* Submissions Table */}
-                {pipeline.length > 0 && (
+              {pipeline.length > 0 && (
                   <div className="bg-white rounded-xl border border-surface-200">
                     {/* Table Header */}
                     <div className="px-6 py-4 border-b border-surface-100 flex items-center justify-between">
                       <h3 className="font-semibold text-surface-900">Submissions</h3>
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
                         <button className="p-2 text-surface-400 hover:text-surface-600 hover:bg-surface-50 rounded-lg">
                           <Download className="w-4 h-4" />
                         </button>
-                      </div>
                     </div>
+                  </div>
 
                     {/* Table */}
                     <div className="overflow-x-auto">
@@ -1779,9 +1779,9 @@ function BulkUploadPageContent() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-surface-100">
-                          {pipeline.map(file => {
-                            const stageInfo = getStageInfo(file.stage);
-                            const isClickable = file.stage === 'complete' && file.submissionId;
+                    {pipeline.map(file => {
+                      const stageInfo = getStageInfo(file.stage);
+                      const isClickable = file.stage === 'complete' && file.submissionId;
                             const initials = file.studentName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
                             const avatarColors = ['bg-primary-100 text-primary-700', 'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700', 'bg-violet-100 text-violet-700', 'bg-rose-100 text-rose-700'];
                             const colorIndex = file.studentName.charCodeAt(0) % avatarColors.length;
@@ -1796,20 +1796,20 @@ function BulkUploadPageContent() {
                                   <div className="flex items-center gap-3">
                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${avatarColors[colorIndex]}`}>
                                       {initials || '??'}
-                                    </div>
+                            </div>
                                     <div>
-                                      {file.stage === 'pending' ? (
-                                        <input
-                                          type="text"
-                                          value={file.studentName}
-                                          onChange={(e) => updateStudentName(file.id, e.target.value)}
-                                          onClick={(e) => e.stopPropagation()}
+                            {file.stage === 'pending' ? (
+                              <input
+                                type="text"
+                                value={file.studentName}
+                                onChange={(e) => updateStudentName(file.id, e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
                                           className="text-sm font-medium text-surface-900 bg-transparent border-none p-0 focus:ring-0 w-full"
-                                          placeholder="Student name"
-                                        />
-                                      ) : (
+                                placeholder="Student name"
+                              />
+                            ) : (
                                         <p className="text-sm font-medium text-surface-900">{file.studentName}</p>
-                                      )}
+                            )}
                                     </div>
                                   </div>
                                 </td>
@@ -1817,16 +1817,16 @@ function BulkUploadPageContent() {
                                 {/* Filename */}
                                 <td className="px-6 py-4">
                                   <p className="text-sm text-surface-600 truncate max-w-[200px]">{file.filename}</p>
-                                  {file.stage === 'uploading' && (
+                            {file.stage === 'uploading' && (
                                     <div className="mt-1 w-32">
                                       <div className="h-1 bg-surface-200 rounded-full overflow-hidden">
-                                        <div
+                                  <div
                                           className="h-full bg-primary-500 transition-all duration-300"
-                                          style={{ width: `${file.uploadProgress}%` }}
-                                        />
-                                      </div>
-                                    </div>
-                                  )}
+                                    style={{ width: `${file.uploadProgress}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
                                 </td>
 
                                 {/* Uploaded Date */}
@@ -1855,7 +1855,7 @@ function BulkUploadPageContent() {
                                           file.stage === 'transcribing' || file.stage === 'analyzing' ? 'Processing' :
                                             'Queued'}
                                   </span>
-                                  {file.errorMessage && (
+                            {file.errorMessage && (
                                     <p className="text-xs text-red-500 mt-1 max-w-[150px] truncate" title={file.errorMessage}>
                                       {file.errorMessage}
                                     </p>
@@ -1870,24 +1870,24 @@ function BulkUploadPageContent() {
                                         <Eye className="w-4 h-4" />
                                       </button>
                                     )}
-                                    {file.stage === 'pending' && (
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); removeFile(file.id); }}
+                            {file.stage === 'pending' && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); removeFile(file.id); }}
                                         className="p-1.5 text-surface-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                                         title="Remove"
-                                      >
+                              >
                                         <Trash2 className="w-4 h-4" />
-                                      </button>
-                                    )}
-                                  </div>
+                              </button>
+                            )}
+                          </div>
                                 </td>
                               </tr>
-                            );
+                      );
 
-                            return isClickable ? (
+                      return isClickable ? (
                               <Link key={file.id} href={`/bulk/submission/${file.submissionId}`} className="contents">
                                 {row}
-                              </Link>
+                        </Link>
                             ) : row;
                           })}
                         </tbody>
@@ -1901,152 +1901,152 @@ function BulkUploadPageContent() {
                         <button disabled className="px-3 py-1.5 text-surface-400 bg-surface-50 rounded-lg">Previous</button>
                         <button disabled className="px-3 py-1.5 text-surface-400 bg-surface-50 rounded-lg">Next</button>
                       </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Empty State */}
-                {!initialLoading && pipeline.length === 0 && (
-                  <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-12 text-center">
-                    <FileVideo className="w-16 h-16 text-surface-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-surface-900 mb-2">No files yet</h3>
-                    <p className="text-surface-600">Drag and drop files above to get started</p>
-                  </div>
-                )}
-
-                {initialLoading && (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-                  </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </main>
-
-        {/* Context Panel (Side Drawer) - Class-scoped only */}
-        <AnimatePresence>
-          {showContextPanel && isClassScoped && classScopedInfo && (
-            <>
-              {/* Backdrop */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black/30 z-50"
-                onClick={() => setShowContextPanel(false)}
-              />
-
-              {/* Panel */}
-              <motion.div
-                initial={{ x: '100%' }}
-                animate={{ x: 0 }}
-                exit={{ x: '100%' }}
-                transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-white shadow-2xl z-50 overflow-y-auto"
-              >
-                <div className="sticky top-0 bg-gradient-to-r from-teal-600 to-cyan-600 text-white p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <GraduationCap className="w-6 h-6" />
-                      <h2 className="text-lg font-semibold">Class Context</h2>
-                    </div>
-                    <button
-                      onClick={() => setShowContextPanel(false)}
-                      className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
                   </div>
                 </div>
+              )}
 
-                <div className="p-4 space-y-6">
-                  {/* Course Info */}
-                  <div className="bg-teal-50 rounded-xl p-4">
-                    <h3 className="text-sm font-medium text-teal-600 uppercase tracking-wider mb-2">Course</h3>
-                    <p className="font-semibold text-teal-900">{classScopedInfo.courseName}</p>
-                    {classScopedInfo.courseCode && (
-                      <p className="text-sm text-teal-700">{classScopedInfo.courseCode}</p>
-                    )}
-                    {classScopedInfo.term && (
-                      <p className="text-sm text-teal-600">{classScopedInfo.term}</p>
-                    )}
-                  </div>
-
-                  {/* Assignment Info */}
-                  <div className="bg-surface-50 rounded-xl p-4">
-                    <h3 className="text-sm font-medium text-surface-600 uppercase tracking-wider mb-2">Assignment</h3>
-                    <p className="font-semibold text-surface-900">{classScopedInfo.assignmentName}</p>
-                  </div>
-
-                  {/* Context Status */}
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-medium text-surface-600 uppercase tracking-wider">Context Attached</h3>
-
-                    <div className={`flex items-center gap-3 p-3 rounded-xl ${classScopedInfo.hasRubric ? 'bg-emerald-50' : 'bg-amber-50'}`}>
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${classScopedInfo.hasRubric ? 'bg-emerald-200' : 'bg-amber-200'}`}>
-                        {classScopedInfo.hasRubric ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-amber-600" />}
-                      </div>
-                      <div>
-                        <p className={`font-medium ${classScopedInfo.hasRubric ? 'text-emerald-900' : 'text-amber-900'}`}>
-                          Grading Rubric
-                        </p>
-                        <p className={`text-xs ${classScopedInfo.hasRubric ? 'text-emerald-600' : 'text-amber-600'}`}>
-                          {classScopedInfo.hasRubric ? 'Attached and ready' : 'Not configured'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className={`flex items-center gap-3 p-3 rounded-xl ${classScopedInfo.hasPrompt ? 'bg-emerald-50' : 'bg-amber-50'}`}>
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${classScopedInfo.hasPrompt ? 'bg-emerald-200' : 'bg-amber-200'}`}>
-                        {classScopedInfo.hasPrompt ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-amber-600" />}
-                      </div>
-                      <div>
-                        <p className={`font-medium ${classScopedInfo.hasPrompt ? 'text-emerald-900' : 'text-amber-900'}`}>
-                          Assignment Instructions
-                        </p>
-                        <p className={`text-xs ${classScopedInfo.hasPrompt ? 'text-emerald-600' : 'text-amber-600'}`}>
-                          {classScopedInfo.hasPrompt ? 'Attached and ready' : 'Not configured'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className={`flex items-center gap-3 p-3 rounded-xl ${classScopedInfo.hasMaterials ? 'bg-emerald-50' : 'bg-surface-50'}`}>
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${classScopedInfo.hasMaterials ? 'bg-emerald-200' : 'bg-surface-200'}`}>
-                        {classScopedInfo.hasMaterials ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <FileText className="w-4 h-4 text-surface-400" />}
-                      </div>
-                      <div>
-                        <p className={`font-medium ${classScopedInfo.hasMaterials ? 'text-emerald-900' : 'text-surface-700'}`}>
-                          Class Materials
-                        </p>
-                        <p className={`text-xs ${classScopedInfo.hasMaterials ? 'text-emerald-600' : 'text-surface-500'}`}>
-                          {classScopedInfo.hasMaterials ? 'Available for context' : 'None uploaded'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Info Box */}
-                  <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
-                    <p className="text-sm text-teal-800">
-                      <strong>How it works:</strong> Submissions uploaded here will be graded using the rubric
-                      and context from this class. Babblet will reference class materials when providing feedback.
-                    </p>
-                  </div>
-
-                  {/* Edit Context Link */}
-                  <Link
-                    href={`/context?courseId=${classScopedInfo.courseId}&assignmentId=${classScopedInfo.assignmentId}`}
-                    className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-colors"
-                  >
-                    <BookOpen className="w-4 h-4" />
-                    Edit Class Context
-                  </Link>
+              {/* Empty State */}
+              {!initialLoading && pipeline.length === 0 && (
+                <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-12 text-center">
+                  <FileVideo className="w-16 h-16 text-surface-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-surface-900 mb-2">No files yet</h3>
+                  <p className="text-surface-600">Drag and drop files above to get started</p>
                 </div>
-              </motion.div>
-            </>
+              )}
+
+              {initialLoading && (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+                </div>
+              )}
+            </motion.div>
           )}
         </AnimatePresence>
+      </main>
+
+      {/* Context Panel (Side Drawer) - Class-scoped only */}
+      <AnimatePresence>
+        {showContextPanel && isClassScoped && classScopedInfo && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/30 z-50"
+              onClick={() => setShowContextPanel(false)}
+            />
+
+            {/* Panel */}
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-white shadow-2xl z-50 overflow-y-auto"
+            >
+              <div className="sticky top-0 bg-gradient-to-r from-teal-600 to-cyan-600 text-white p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <GraduationCap className="w-6 h-6" />
+                    <h2 className="text-lg font-semibold">Class Context</h2>
+                  </div>
+                  <button
+                    onClick={() => setShowContextPanel(false)}
+                    className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 space-y-6">
+                {/* Course Info */}
+                <div className="bg-teal-50 rounded-xl p-4">
+                  <h3 className="text-sm font-medium text-teal-600 uppercase tracking-wider mb-2">Course</h3>
+                  <p className="font-semibold text-teal-900">{classScopedInfo.courseName}</p>
+                  {classScopedInfo.courseCode && (
+                    <p className="text-sm text-teal-700">{classScopedInfo.courseCode}</p>
+                  )}
+                  {classScopedInfo.term && (
+                    <p className="text-sm text-teal-600">{classScopedInfo.term}</p>
+                  )}
+                </div>
+
+                {/* Assignment Info */}
+                <div className="bg-surface-50 rounded-xl p-4">
+                  <h3 className="text-sm font-medium text-surface-600 uppercase tracking-wider mb-2">Assignment</h3>
+                  <p className="font-semibold text-surface-900">{classScopedInfo.assignmentName}</p>
+                </div>
+
+                {/* Context Status */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium text-surface-600 uppercase tracking-wider">Context Attached</h3>
+
+                  <div className={`flex items-center gap-3 p-3 rounded-xl ${classScopedInfo.hasRubric ? 'bg-emerald-50' : 'bg-amber-50'}`}>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${classScopedInfo.hasRubric ? 'bg-emerald-200' : 'bg-amber-200'}`}>
+                      {classScopedInfo.hasRubric ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-amber-600" />}
+                    </div>
+                    <div>
+                      <p className={`font-medium ${classScopedInfo.hasRubric ? 'text-emerald-900' : 'text-amber-900'}`}>
+                        Grading Rubric
+                      </p>
+                      <p className={`text-xs ${classScopedInfo.hasRubric ? 'text-emerald-600' : 'text-amber-600'}`}>
+                        {classScopedInfo.hasRubric ? 'Attached and ready' : 'Not configured'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className={`flex items-center gap-3 p-3 rounded-xl ${classScopedInfo.hasPrompt ? 'bg-emerald-50' : 'bg-amber-50'}`}>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${classScopedInfo.hasPrompt ? 'bg-emerald-200' : 'bg-amber-200'}`}>
+                      {classScopedInfo.hasPrompt ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-amber-600" />}
+                    </div>
+                    <div>
+                      <p className={`font-medium ${classScopedInfo.hasPrompt ? 'text-emerald-900' : 'text-amber-900'}`}>
+                        Assignment Instructions
+                      </p>
+                      <p className={`text-xs ${classScopedInfo.hasPrompt ? 'text-emerald-600' : 'text-amber-600'}`}>
+                        {classScopedInfo.hasPrompt ? 'Attached and ready' : 'Not configured'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className={`flex items-center gap-3 p-3 rounded-xl ${classScopedInfo.hasMaterials ? 'bg-emerald-50' : 'bg-surface-50'}`}>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${classScopedInfo.hasMaterials ? 'bg-emerald-200' : 'bg-surface-200'}`}>
+                      {classScopedInfo.hasMaterials ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <FileText className="w-4 h-4 text-surface-400" />}
+                    </div>
+                    <div>
+                      <p className={`font-medium ${classScopedInfo.hasMaterials ? 'text-emerald-900' : 'text-surface-700'}`}>
+                        Class Materials
+                      </p>
+                      <p className={`text-xs ${classScopedInfo.hasMaterials ? 'text-emerald-600' : 'text-surface-500'}`}>
+                        {classScopedInfo.hasMaterials ? 'Available for context' : 'None uploaded'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Info Box */}
+                <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
+                  <p className="text-sm text-teal-800">
+                    <strong>How it works:</strong> Submissions uploaded here will be graded using the rubric
+                    and context from this class. Babblet will reference class materials when providing feedback.
+                  </p>
+                </div>
+
+                {/* Edit Context Link */}
+                <Link
+                  href={`/context?courseId=${classScopedInfo.courseId}&assignmentId=${classScopedInfo.assignmentId}`}
+                  className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-colors"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  Edit Class Context
+                </Link>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
         {/* Batch Creation Wizard */}
         <BatchWizard
@@ -2060,7 +2060,7 @@ function BulkUploadPageContent() {
           }}
           courses={availableCourses.map(c => ({ id: c.id, name: c.name }))}
         />
-      </div>
+    </div>
     </DashboardLayout>
   );
 }

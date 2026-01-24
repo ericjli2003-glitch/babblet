@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
+import { 
   CheckCircle, XCircle, Download, RefreshCw, Search, ThumbsUp, Clock,
   ChevronRight, Sparkles, BookOpen, Shield, ArrowLeft, Mic, BarChart3, Target
 } from 'lucide-react';
@@ -479,7 +479,7 @@ export default function SubmissionDetailPage() {
       <DashboardLayout>
         <div className="flex items-center justify-center h-full">
           <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
-        </div>
+      </div>
       </DashboardLayout>
     );
   }
@@ -488,14 +488,14 @@ export default function SubmissionDetailPage() {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-full">
-          <div className="text-center">
-            <XCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-surface-900">Submission not found</h2>
-            <Link href="/bulk" className="text-primary-600 hover:text-primary-700 mt-4 inline-block">
+        <div className="text-center">
+          <XCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-surface-900">Submission not found</h2>
+          <Link href="/bulk" className="text-primary-600 hover:text-primary-700 mt-4 inline-block">
               Back to Batches
-            </Link>
-          </div>
+          </Link>
         </div>
+      </div>
       </DashboardLayout>
     );
   }
@@ -503,11 +503,11 @@ export default function SubmissionDetailPage() {
   return (
     <DashboardLayout>
       <div className="h-full flex flex-col">
-        {/* Header */}
+      {/* Header */}
         <div className="bg-white border-b border-surface-200 px-6 py-4">
           {/* Back Button + Breadcrumb */}
           <div className="flex items-center gap-4 mb-3">
-            <Link
+              <Link 
               href={batchInfo?.courseId 
                 ? `/bulk/class/${batchInfo.courseId}/assignment/${batchInfo.id}/batch/${batchInfo.id}`
                 : batchInfo?.id 
@@ -517,7 +517,7 @@ export default function SubmissionDetailPage() {
               className="flex items-center justify-center w-9 h-9 rounded-lg bg-white border border-surface-200 hover:bg-surface-50 hover:border-primary-300 transition-colors"
             >
               <ArrowLeft className="w-4 h-4 text-surface-600" />
-            </Link>
+              </Link>
             <nav className="flex items-center gap-2 text-sm text-surface-500">
               <Link href="/courses" className="hover:text-primary-600 transition-colors">Home</Link>
               <ChevronRight className="w-4 h-4" />
@@ -557,8 +557,8 @@ export default function SubmissionDetailPage() {
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full">
                       <CheckCircle className="w-3.5 h-3.5" />
                       Submitted on time
-                    </span>
-                  )}
+                  </span>
+                )}
                 </div>
                 <p className="text-sm text-surface-500 mt-0.5">
                   Submission: {batchInfo?.assignmentName || 'Assignment'} • {formatDate(submission.createdAt)}
@@ -576,25 +576,25 @@ export default function SubmissionDetailPage() {
               </Link>
               <button className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-semibold">
                 Finalize Grade
-              </button>
+                </button>
+                </div>
             </div>
-          </div>
 
-          {/* Tabs */}
+        {/* Tabs */}
           <div className="flex gap-1 mt-4 -mb-4">
             {(['overview', 'questions', 'rubric'] as const).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
                 className={`px-4 py-2.5 text-sm font-medium transition-colors ${
-                  activeTab === tab
+                activeTab === tab
                     ? 'text-primary-600 border-b-2 border-primary-500'
                     : 'text-surface-500 hover:text-surface-700'
-                }`}
-              >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </button>
-            ))}
+              }`}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
           </div>
         </div>
 
@@ -603,12 +603,12 @@ export default function SubmissionDetailPage() {
           {/* Left Content Area */}
           <div className="flex-1 overflow-auto bg-surface-50 p-6">
             <AnimatePresence mode="wait">
-              {/* Overview Tab */}
-              {activeTab === 'overview' && (
-                <motion.div
+        {/* Overview Tab */}
+        {activeTab === 'overview' && (
+          <motion.div
                   key="overview"
                   initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
+            animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   className="space-y-6"
                 >
@@ -617,7 +617,7 @@ export default function SubmissionDetailPage() {
                     <p className="text-sm text-surface-500">
                       A high-level summary of performance metrics, sentiment analysis, and verification checks.
                     </p>
-                  </div>
+                </div>
 
                   {/* Score Card */}
                   <ScoreCard
@@ -677,7 +677,7 @@ export default function SubmissionDetailPage() {
                           Words like &quot;um&quot;, &quot;uh&quot;, &quot;like&quot;, &quot;you know&quot; detected in the transcript.
                           Fewer filler words indicate more confident delivery.
                         </p>
-                      </div>
+                          </div>
 
                       {/* Speaking Rate */}
                       <div className="bg-surface-50 rounded-xl p-4">
@@ -695,19 +695,19 @@ export default function SubmissionDetailPage() {
                               : speechMetrics.speakingRateWpm < 120 
                                 ? 'Slow' 
                                 : 'Fast'}
-                          </span>
-                        </div>
+                                      </span>
+                                  </div>
                         <div className="flex items-baseline gap-2 mb-2">
                           <span className="text-3xl font-bold text-surface-900">
                             {speechMetrics.speakingRateWpm}
                           </span>
                           <span className="text-sm text-surface-500">words/min</span>
-                        </div>
+                              </div>
                         <p className="text-xs text-surface-500 leading-relaxed">
                           Average speaking speed. Ideal range is 120-180 WPM for presentations.
                           Based on {speechMetrics.wordCount.toLocaleString()} words spoken.
                         </p>
-                      </div>
+                  </div>
 
                       {/* Pause Frequency */}
                       <div className="bg-surface-50 rounded-xl p-4">
@@ -719,20 +719,20 @@ export default function SubmissionDetailPage() {
                               : 'bg-amber-100 text-amber-700'
                           }`}>
                             {speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8 ? 'Good Pacing' : 'Review Pacing'}
-                          </span>
-                        </div>
+                                      </span>
+                                  </div>
                         <div className="flex items-baseline gap-2 mb-2">
                           <span className="text-3xl font-bold text-surface-900">
                             {speechMetrics.pauseFrequency.toFixed(1)}
                           </span>
                           <span className="text-sm text-surface-500">per min</span>
-                        </div>
+                              </div>
                         <p className="text-xs text-surface-500 leading-relaxed">
                           Number of natural speech segments per minute.
                           Indicates pauses for emphasis or transitions.
                         </p>
-                      </div>
-                    </div>
+                  </div>
+              </div>
                   </CollapsibleSection>
 
                   {/* Course Material Alignment */}
@@ -746,7 +746,7 @@ export default function SubmissionDetailPage() {
                         <span className="text-lg font-bold text-primary-600">
                           {submission.analysis?.courseAlignment?.overall ?? Math.round((submission.analysis?.overallStrength || 0) * 20)}%
                         </span>
-                      </div>
+                </div>
                     }
                   >
                     <div className="space-y-4">
@@ -790,12 +790,12 @@ export default function SubmissionDetailPage() {
                               <div
                                 className={`h-full ${item.value >= 85 ? 'bg-emerald-500' : item.value >= 70 ? 'bg-amber-500' : 'bg-red-500'} rounded-full transition-all`}
                                 style={{ width: `${item.value}%` }}
-                              />
-                            </div>
-                          </div>
+                    />
+                  </div>
+                </div>
                         ));
                       })()}
-                    </div>
+                  </div>
                   </CollapsibleSection>
 
                   {/* Two Column Grid */}
@@ -822,7 +822,7 @@ export default function SubmissionDetailPage() {
                             <p className="text-sm text-surface-700">{insight.text}</p>
                           </div>
                         ))}
-                      </div>
+                  </div>
                     </CollapsibleSection>
 
                     {/* Verification Findings */}
@@ -847,7 +847,7 @@ export default function SubmissionDetailPage() {
                         ].map((metric) => (
                           <div key={metric.label}>
                             <div className="flex items-center justify-between mb-1.5">
-                              <div>
+                  <div>
                                 <span className="text-sm font-medium text-surface-900">{metric.label}</span>
                                 <span className="text-xs text-surface-500 ml-2">{metric.sublabel}</span>
                               </div>
@@ -863,9 +863,9 @@ export default function SubmissionDetailPage() {
                             </div>
                           </div>
                         ))}
-                      </div>
-                    </CollapsibleSection>
                   </div>
+                    </CollapsibleSection>
+              </div>
 
                   {/* Footer */}
                   <p className="text-xs text-surface-400 text-center pt-4">
@@ -890,7 +890,7 @@ export default function SubmissionDetailPage() {
                       <p className="text-sm text-surface-500 mt-1">
                         Based on the transcript analysis, these questions test depth of understanding across different cognitive levels.
                       </p>
-                    </div>
+                </div>
                     <div className="flex items-center gap-3">
                       {/* Question Count Selector */}
                       <div className="flex items-center gap-2">
@@ -920,21 +920,21 @@ export default function SubmissionDetailPage() {
                         <RefreshCw className={`w-4 h-4 ${isRegenerating ? 'animate-spin' : ''}`} />
                         {isRegenerating ? 'Generating...' : 'Regenerate'}
                       </button>
-                    </div>
-                  </div>
+                        </div>
+                      </div>
                   
                   {/* Regenerating Indicator */}
                   {isRegenerating && (
                     <div className="bg-primary-50 border border-primary-200 rounded-xl p-4 flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
                         <RefreshCw className="w-4 h-4 text-primary-600 animate-spin" />
-                      </div>
+                    </div>
                       <div>
                         <p className="text-sm font-medium text-primary-900">Babblet is generating {questionCount} new questions...</p>
                         <p className="text-xs text-primary-600">Analyzing transcript and creating targeted questions</p>
-                      </div>
-                    </div>
-                  )}
+                </div>
+              </div>
+            )}
 
                   {/* Question Cards */}
                   <div className="space-y-4">
@@ -1005,9 +1005,9 @@ export default function SubmissionDetailPage() {
                           onTimestampClick={() => handleSegmentClick(130000)}
                         />
                       </>
-                    )}
-                  </div>
-                  
+                  )}
+                </div>
+                
                   {/* Show more indicator */}
                   {submission.questions && submission.questions.length > questionCount && (
                     <p className="text-sm text-surface-500 text-center">
@@ -1063,35 +1063,35 @@ export default function SubmissionDetailPage() {
                               {normalizedScore >= 90 ? 'Excellent Proficiency' : 
                                normalizedScore >= 80 ? 'Strong Proficiency' :
                                normalizedScore >= 70 ? 'Good Proficiency' : 'Developing Proficiency'}
-                            </span>
+                          </span>
                             <span className="px-2 py-0.5 bg-primary-100 text-primary-700 text-xs font-medium rounded-full">
                               Top {Math.max(5, Math.round(100 - normalizedScore))}%
-                            </span>
-                          </div>
+                                </span>
+                            </div>
                           <p className="text-sm text-surface-500">
                             {rubric?.letterGrade || 'B+'} • {rubric?.criteriaBreakdown?.length || 0} criteria evaluated
                           </p>
+                          </div>
                         </div>
-                      </div>
                       <div className="text-right">
                         <p className="text-xs text-surface-500 uppercase tracking-wide mb-1">Grading Status</p>
                         <div className="flex items-center gap-2 text-emerald-600">
                           <CheckCircle className="w-4 h-4" />
                           <span className="font-medium">AI Graded</span>
-                        </div>
+                      </div>
                         <p className="text-xs text-surface-400 mt-1">
                           {submission.completedAt ? `Completed ${formatDate(submission.completedAt)}` : 'Ready for review'}
                         </p>
-                      </div>
+              </div>
                     </div>
                   </div>
 
                   {/* Class-Specific Insights */}
                   <div>
-                    <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-2 mb-4">
                       <BookOpen className="w-5 h-5 text-primary-600" />
                       <h2 className="text-lg font-semibold text-surface-900">Class-Specific Insights</h2>
-                    </div>
+            </div>
                     <div className="space-y-4">
                       {rubric?.criteriaBreakdown && rubric.criteriaBreakdown.length > 0 ? (
                         rubric.criteriaBreakdown.map((c, i) => {
@@ -1191,30 +1191,30 @@ export default function SubmissionDetailPage() {
                     <div className="flex items-center gap-2 mb-5">
                       <Shield className="w-5 h-5 text-emerald-600" />
                       <h2 className="text-lg font-semibold text-surface-900">Verification & Integrity Analysis</h2>
-                    </div>
-                    
+            </div>
+
                     <div className="grid md:grid-cols-2 gap-6">
                       {/* Transcript Accuracy */}
-                      <div className="space-y-3">
+              <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium text-surface-700">Transcript Accuracy</span>
                           <span className="text-lg font-bold text-emerald-600">
                             {submission.analysis?.transcriptAccuracy ?? 98}% High Confidence
-                          </span>
-                        </div>
+                      </span>
+                      </div>
                         <div className="h-2 bg-surface-100 rounded-full overflow-hidden">
                           <div 
                             className="h-full bg-emerald-500 rounded-full"
                             style={{ width: `${submission.analysis?.transcriptAccuracy ?? 98}%` }}
                           />
-                        </div>
+                    </div>
                         <div className="p-3 bg-surface-50 rounded-lg">
                           <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-1">Methodology</p>
                           <p className="text-sm text-surface-600">
                             Audio analyzed using multi-pass spectral analysis. Speech patterns verified against expected terminology from course materials.
                           </p>
-                        </div>
-                      </div>
+                  </div>
+              </div>
 
                       {/* Content Originality */}
                       <div className="space-y-3">
@@ -1223,21 +1223,21 @@ export default function SubmissionDetailPage() {
                           <span className="text-lg font-bold text-emerald-600">
                             {submission.analysis?.contentOriginality ?? 100}% Unique
                           </span>
-                        </div>
+        </div>
                         <div className="h-2 bg-surface-100 rounded-full overflow-hidden">
                           <div 
                             className="h-full bg-emerald-500 rounded-full"
                             style={{ width: `${submission.analysis?.contentOriginality ?? 100}%` }}
                           />
-                        </div>
+            </div>
                         <div className="p-3 bg-surface-50 rounded-lg">
                           <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-1">Methodology</p>
                           <p className="text-sm text-surface-600">
                             Cross-referenced against academic databases and internet sources. No matching content found.
-                          </p>
-                        </div>
-                      </div>
+                      </p>
                     </div>
+              </div>
+              </div>
                   </div>
 
                   {/* Additional Notes */}
@@ -1247,13 +1247,13 @@ export default function SubmissionDetailPage() {
                       placeholder="Any final comments for this student?"
                       className="w-full h-24 px-4 py-3 border border-surface-200 rounded-xl text-sm resize-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     />
-                  </div>
+            </div>
 
                   {/* Footer */}
                   <p className="text-xs text-surface-400 text-center">
                     Report generated by Babblet AI v2.4 • Last updated {submission.completedAt ? formatDate(submission.completedAt) : 'recently'}
                   </p>
-                </motion.div>
+          </motion.div>
               )}
             </AnimatePresence>
           </div>
@@ -1284,8 +1284,8 @@ export default function SubmissionDetailPage() {
               onDurationChange={setVideoDuration}
               currentTimeMs={currentVideoTime}
               presentationTitle={submission.studentName}
-            />
-          </div>
+      />
+    </div>
         </div>
       </div>
     </DashboardLayout>

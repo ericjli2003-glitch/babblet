@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   Plus, Settings, Download, ChevronRight, Users, TrendingUp,
-  AlertCircle, Play, Eye, Loader2, BookOpen, Trash2, MoreVertical, Library
+  AlertCircle, Play, Eye, Loader2, BookOpen, Trash2, MoreVertical, Library, X
 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import BatchWizard from '@/components/BatchWizard';
@@ -358,6 +358,169 @@ const assignmentGradients = [
   'from-rose-500 to-rose-600',
 ];
 
+// ============================================
+// Create Course Modal
+// ============================================
+
+interface CreateCourseModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function CreateCourseModal({ isOpen, onClose, onSuccess }: CreateCourseModalProps) {
+  const [formData, setFormData] = useState({
+    name: '',
+    courseCode: '',
+    term: '',
+    description: '',
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (!formData.name.trim() || !formData.courseCode.trim() || !formData.term.trim()) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await fetch('/api/context/courses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setFormData({ name: '', courseCode: '', term: '', description: '' });
+        onSuccess();
+        onClose();
+      } else {
+        setError(data.error || 'Failed to create course');
+      }
+    } catch (err) {
+      setError('Failed to create course. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-surface-200">
+          <div>
+            <h2 className="text-lg font-semibold text-surface-900">Create New Course</h2>
+            <p className="text-sm text-surface-500">Add a new course to your dashboard</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 text-surface-400 hover:text-surface-600 hover:bg-surface-100 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1.5">
+              Course Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="e.g., Introduction to Philosophy"
+              className="w-full px-4 py-2.5 border border-surface-200 rounded-lg text-sm text-surface-900 bg-white placeholder:text-surface-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1.5">
+                Course Code <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.courseCode}
+                onChange={(e) => setFormData({ ...formData, courseCode: e.target.value })}
+                placeholder="e.g., PHIL101"
+                className="w-full px-4 py-2.5 border border-surface-200 rounded-lg text-sm text-surface-900 bg-white placeholder:text-surface-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1.5">
+                Term <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.term}
+                onChange={(e) => setFormData({ ...formData, term: e.target.value })}
+                placeholder="e.g., Fall 2024"
+                className="w-full px-4 py-2.5 border border-surface-200 rounded-lg text-sm text-surface-900 bg-white placeholder:text-surface-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1.5">
+              Description <span className="text-surface-400 font-normal">(optional)</span>
+            </label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Brief description of the course..."
+              rows={3}
+              className="w-full px-4 py-2.5 border border-surface-200 rounded-lg text-sm text-surface-900 bg-white placeholder:text-surface-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-surface-600 bg-white border border-surface-200 rounded-lg hover:bg-surface-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="px-4 py-2 text-sm font-medium text-white bg-primary-500 rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {isSubmitting ? 'Creating...' : 'Create Course'}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
 function CoursesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -368,6 +531,7 @@ function CoursesContent() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'assignments' | 'students' | 'analytics'>('assignments');
   const [showBatchWizard, setShowBatchWizard] = useState(false);
+  const [showCreateCourse, setShowCreateCourse] = useState(false);
 
   const loadCoursesAndBatches = async () => {
     try {
@@ -479,7 +643,10 @@ function CoursesContent() {
               <h1 className="text-2xl font-bold text-surface-900">Your Courses</h1>
               <p className="text-surface-500 mt-1">Select a course to view assignments and grades</p>
             </div>
-            <button className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium">
+            <button 
+              onClick={() => setShowCreateCourse(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium"
+            >
               <Plus className="w-4 h-4" />
               Create Course
             </button>
@@ -507,7 +674,11 @@ function CoursesContent() {
             ))}
 
             {/* Add Course Card */}
-            <button className="bg-surface-50 rounded-2xl border-2 border-dashed border-surface-200 p-6 flex flex-col items-center justify-center hover:border-primary-300 hover:bg-primary-50/30 transition-all min-h-[200px]">
+            {/* Add Course Card */}
+            <button 
+              onClick={() => setShowCreateCourse(true)}
+              className="bg-surface-50 rounded-2xl border-2 border-dashed border-surface-200 p-6 flex flex-col items-center justify-center hover:border-primary-300 hover:bg-primary-50/30 transition-all min-h-[200px]"
+            >
               <div className="w-12 h-12 rounded-xl bg-surface-100 flex items-center justify-center mb-3">
                 <Plus className="w-6 h-6 text-surface-400" />
               </div>
@@ -516,6 +687,13 @@ function CoursesContent() {
             </button>
           </div>
         </div>
+
+        {/* Create Course Modal */}
+        <CreateCourseModal
+          isOpen={showCreateCourse}
+          onClose={() => setShowCreateCourse(false)}
+          onSuccess={loadCoursesAndBatches}
+        />
       </DashboardLayout>
     );
   }

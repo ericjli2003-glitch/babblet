@@ -118,7 +118,7 @@ export default function AssignmentDashboardPage() {
     const loadData = async () => {
       try {
         setLoading(true);
-        
+
         // Fetch batch status and course info
         const [batchRes, courseRes] = await Promise.all([
           fetch(`/api/bulk/status?batchId=${batchId}`),
@@ -150,19 +150,19 @@ export default function AssignmentDashboardPage() {
 
         // Map submissions
         const subs: Submission[] = (batchData.submissions || []).map((sub: any) => ({
-          id: sub.id,
+            id: sub.id,
           studentName: sub.studentName || 'Unknown Student',
           originalFilename: sub.originalFilename || 'Unknown',
           status: sub.status,
           createdAt: sub.createdAt || Date.now(),
-          completedAt: sub.completedAt,
-          overallScore: sub.rubricEvaluation?.overallScore,
+            completedAt: sub.completedAt,
+            overallScore: sub.rubricEvaluation?.overallScore,
           videoLength: sub.duration ? formatDuration(sub.duration) : undefined,
           aiSentiment: sub.analysis?.sentiment || (sub.status === 'ready' ? 'Confident' : undefined),
           flagged: sub.flagged,
           flagReason: sub.flagReason,
-        }));
-        
+          }));
+
         setSubmissions(subs);
       } catch (err) {
         console.error('[AssignmentDashboard] Error:', err);
@@ -178,23 +178,23 @@ export default function AssignmentDashboardPage() {
   // Poll for updates
   useEffect(() => {
     if (!batchId || submissions.length === 0) return;
-    
+
     const hasActiveWork = submissions.some(s => 
       ['queued', 'uploading', 'transcribing', 'analyzing'].includes(s.status)
     );
-    
+
     if (!hasActiveWork) return;
 
     const interval = setInterval(async () => {
       try {
         const res = await fetch(`/api/bulk/status?batchId=${batchId}`);
         const data = await res.json();
-        
+
         if (data.submissions) {
           setSubmissions(prev => prev.map(sub => {
             const updated = data.submissions.find((s: any) => s.id === sub.id);
             if (!updated) return sub;
-            
+
             return {
               ...sub,
               status: updated.status,
@@ -283,7 +283,7 @@ export default function AssignmentDashboardPage() {
       <DashboardLayout>
         <div className="flex items-center justify-center h-full">
           <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-        </div>
+      </div>
       </DashboardLayout>
     );
   }
@@ -322,19 +322,19 @@ export default function AssignmentDashboardPage() {
             <ChevronRight className="w-4 h-4" />
             <span className="text-surface-900 font-medium">{batch.name}</span>
           </nav>
-        </div>
+              </div>
 
         {/* Header */}
         <div className="flex items-start justify-between mb-8">
-          <div>
+              <div>
             <h1 className="text-2xl font-bold text-surface-900">{batch.name}</h1>
             <p className="text-surface-500 mt-1">
               {batch.term && `${batch.term} • `}
               {batch.courseCode && `${batch.courseCode} • `}
               Section B
             </p>
-          </div>
-          <div className="flex items-center gap-3">
+            </div>
+            <div className="flex items-center gap-3">
             <button
               onClick={handleExport}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-surface-200 rounded-lg hover:bg-surface-50 text-sm font-medium text-surface-700"
@@ -342,7 +342,7 @@ export default function AssignmentDashboardPage() {
               <Download className="w-4 h-4" />
               Export CSV
             </button>
-            <button
+              <button
               onClick={handleRegrade}
               disabled={isRegrading}
               className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium disabled:opacity-50"
@@ -353,9 +353,9 @@ export default function AssignmentDashboardPage() {
                 <RefreshCw className="w-4 h-4" />
               )}
               Re-grade All
-            </button>
-          </div>
+              </button>
         </div>
+      </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-4 gap-4 mb-8">
@@ -383,15 +383,15 @@ export default function AssignmentDashboardPage() {
               </span>
               {stats.avgScore !== undefined && (
                 <span className="text-xs text-emerald-600">+3.2 pts</span>
-              )}
-            </div>
+                )}
+              </div>
             <div className="mt-3 h-1.5 bg-emerald-100 rounded-full overflow-hidden">
-              <div 
+                  <div
                 className="h-full bg-emerald-500 rounded-full" 
                 style={{ width: `${stats.avgScore || 0}%` }} 
-              />
-            </div>
-          </div>
+                  />
+                </div>
+                </div>
 
           {/* Pending Review */}
           <div className="bg-white rounded-xl border border-surface-200 p-5">
@@ -399,7 +399,7 @@ export default function AssignmentDashboardPage() {
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-bold text-surface-900">{stats.pending}</span>
               <span className="text-xs text-surface-500">Needs manual check</span>
-            </div>
+              </div>
             <div className="mt-3 flex items-center gap-1.5 text-amber-600">
               <Clock className="w-4 h-4" />
               <span className="text-xs">Processing</span>
@@ -416,7 +416,7 @@ export default function AssignmentDashboardPage() {
             <div className="mt-3 flex items-center gap-1.5 text-red-500">
               <Flag className="w-4 h-4" />
               <span className="text-xs">Review required</span>
-            </div>
+          </div>
           </div>
         </div>
 
@@ -427,8 +427,8 @@ export default function AssignmentDashboardPage() {
             <button className="flex items-center gap-2 px-3 py-1.5 text-surface-500 hover:text-surface-700 text-sm">
               <Filter className="w-4 h-4" />
               Filter
-            </button>
-          </div>
+                    </button>
+            </div>
 
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -470,7 +470,7 @@ export default function AssignmentDashboardPage() {
                     </td>
                     <td className="px-6 py-4">
                       {submission.status === 'ready' && submission.overallScore !== undefined ? (
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2">
                           <span className="font-semibold text-surface-900">
                             {Math.round(submission.overallScore)}/100
                           </span>
@@ -482,7 +482,7 @@ export default function AssignmentDashboardPage() {
                             {submission.overallScore >= 90 ? 'PASS' : 
                              submission.overallScore >= 70 ? 'PENDING' : 'FLAGGED'}
                           </span>
-                        </div>
+                      </div>
                       ) : submission.status === 'failed' ? (
                         <span className="text-red-500 text-sm">Failed</span>
                       ) : (
@@ -564,23 +564,23 @@ export default function AssignmentDashboardPage() {
                   <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
-            </div>
+                </div>
           )}
 
           {/* Empty State */}
           {submissions.length === 0 && (
             <div className="text-center py-12">
               <p className="text-surface-500">No submissions yet</p>
-              <Link 
+                <Link
                 href={`/bulk?batchId=${batchId}`}
                 className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium"
-              >
+                >
                 Upload Submissions
-              </Link>
-            </div>
-          )}
+                </Link>
+              </div>
+        )}
         </div>
-      </div>
+    </div>
     </DashboardLayout>
   );
 }
