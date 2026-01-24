@@ -125,6 +125,25 @@ export interface Submission {
     status: string;
     explanation: string;
   }>;
+  // Instructor annotations
+  annotations?: {
+    flaggedSegments: Array<{
+      id: string;
+      segmentIndex: number;
+      timestamp: string;
+      reason?: string;
+      createdAt: number;
+    }>;
+    comments: Array<{
+      id: string;
+      segmentIndex: number;
+      timestamp: string;
+      text: string;
+      createdAt: number;
+    }>;
+    isGraded?: boolean;
+    gradedAt?: number;
+  };
   // Timing
   createdAt: number;
   startedAt?: number;

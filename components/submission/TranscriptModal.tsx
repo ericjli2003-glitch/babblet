@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { X, Download, Search, Flag, MessageSquare, CheckCircle, Play, Pause, AlertCircle } from 'lucide-react';
+import { X, Download, Search, Flag, MessageSquare, CheckCircle, Play, Pause, AlertCircle, Trash2, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface TranscriptEntry {
@@ -13,15 +13,19 @@ interface TranscriptEntry {
 }
 
 interface FlaggedSegment {
-  index: number;
+  id: string;
+  segmentIndex: number;
   timestamp: string;
   reason?: string;
+  createdAt: number;
 }
 
 interface Comment {
-  index: number;
+  id: string;
+  segmentIndex: number;
   timestamp: string;
   text: string;
+  createdAt: number;
 }
 
 interface TranscriptModalProps {
@@ -90,8 +94,28 @@ export default function TranscriptModal({
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [showFlagConfirm, setShowFlagConfirm] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingAnnotations, setIsLoadingAnnotations] = useState(false);
 
   const safeEntries = transcriptEntries || [];
+
+  // Load annotations from API when modal opens
+  useEffect(() => {
+    if (isOpen && submissionId) {
+      setIsLoadingAnnotations(true);
+      fetch(`/api/bulk/annotations?submissionId=${submissionId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.annotations) {
+            setFlaggedSegments(data.annotations.flaggedSegments || []);
+            setComments(data.annotations.comments || []);
+            setIsGraded(data.annotations.isGraded || false);
+          }
+        })
+        .catch(err => console.error('Failed to load annotations:', err))
+        .finally(() => setIsLoadingAnnotations(false));
+    }
+  }, [isOpen, submissionId]);
 
   // Find current segment based on modal video time
   const currentSegmentIndex = useMemo(() => {
@@ -147,46 +171,145 @@ export default function TranscriptModal({
     onSeek?.(timestampMs);
   }, [onSeek]);
 
-  // Instructor control handlers
-  const handleFlagSegment = useCallback(() => {
+  // Instructor control handlers - with API persistence
+  const handleFlagSegment = useCallback(async () => {
+    if (!submissionId) return;
     const currentEntry = safeEntries[currentSegmentIndex];
-    if (currentEntry) {
-      const existingIndex = flaggedSegments.findIndex(f => f.index === currentSegmentIndex);
-      if (existingIndex >= 0) {
-        // Unflag
-        setFlaggedSegments(prev => prev.filter((_, i) => i !== existingIndex));
+    if (!currentEntry) return;
+
+    const existingFlag = flaggedSegments.find(f => f.segmentIndex === currentSegmentIndex);
+    
+    setIsSaving(true);
+    try {
+      if (existingFlag) {
+        // Unflag - delete from API
+        const res = await fetch(`/api/bulk/annotations?submissionId=${submissionId}&type=flag&id=${existingFlag.id}`, {
+          method: 'DELETE',
+        });
+        const data = await res.json();
+        if (data.success) {
+          setFlaggedSegments(data.annotations.flaggedSegments || []);
+        }
       } else {
-        // Flag
-        setFlaggedSegments(prev => [...prev, {
-          index: currentSegmentIndex,
-          timestamp: currentEntry.timestamp,
-        }]);
-        setShowFlagConfirm(true);
-        setTimeout(() => setShowFlagConfirm(false), 2000);
+        // Flag - add to API
+        const res = await fetch('/api/bulk/annotations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            submissionId,
+            type: 'flag',
+            segmentIndex: currentSegmentIndex,
+            timestamp: currentEntry.timestamp,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setFlaggedSegments(data.annotations.flaggedSegments || []);
+          setShowFlagConfirm(true);
+          setTimeout(() => setShowFlagConfirm(false), 2000);
+        }
       }
+    } catch (err) {
+      console.error('Failed to update flag:', err);
+    } finally {
+      setIsSaving(false);
     }
-  }, [currentSegmentIndex, safeEntries, flaggedSegments]);
+  }, [submissionId, currentSegmentIndex, safeEntries, flaggedSegments]);
 
-  const handleAddComment = useCallback(() => {
-    if (!commentText.trim()) return;
+  const handleAddComment = useCallback(async () => {
+    if (!commentText.trim() || !submissionId) return;
     const currentEntry = safeEntries[currentSegmentIndex];
-    if (currentEntry) {
-      setComments(prev => [...prev, {
-        index: currentSegmentIndex,
-        timestamp: currentEntry.timestamp,
-        text: commentText,
-      }]);
-      setCommentText('');
-      setShowCommentInput(false);
+    if (!currentEntry) return;
+
+    setIsSaving(true);
+    try {
+      const res = await fetch('/api/bulk/annotations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          submissionId,
+          type: 'comment',
+          segmentIndex: currentSegmentIndex,
+          timestamp: currentEntry.timestamp,
+          text: commentText,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setComments(data.annotations.comments || []);
+        setCommentText('');
+        setShowCommentInput(false);
+      }
+    } catch (err) {
+      console.error('Failed to add comment:', err);
+    } finally {
+      setIsSaving(false);
     }
-  }, [commentText, currentSegmentIndex, safeEntries]);
+  }, [commentText, submissionId, currentSegmentIndex, safeEntries]);
 
-  const handleMarkGraded = useCallback(() => {
-    setIsGraded(true);
-    onMarkGraded?.();
-  }, [onMarkGraded]);
+  const handleDeleteComment = useCallback(async (commentId: string) => {
+    if (!submissionId) return;
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/bulk/annotations?submissionId=${submissionId}&type=comment&id=${commentId}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        setComments(data.annotations.comments || []);
+      }
+    } catch (err) {
+      console.error('Failed to delete comment:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [submissionId]);
 
-  const isCurrentSegmentFlagged = flaggedSegments.some(f => f.index === currentSegmentIndex);
+  const handleDeleteFlag = useCallback(async (flagId: string) => {
+    if (!submissionId) return;
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/bulk/annotations?submissionId=${submissionId}&type=flag&id=${flagId}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        setFlaggedSegments(data.annotations.flaggedSegments || []);
+      }
+    } catch (err) {
+      console.error('Failed to delete flag:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [submissionId]);
+
+  const handleMarkGraded = useCallback(async () => {
+    if (!submissionId) {
+      setIsGraded(true);
+      onMarkGraded?.();
+      return;
+    }
+    
+    setIsSaving(true);
+    try {
+      const res = await fetch('/api/bulk/annotations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submissionId, type: 'mark_graded' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsGraded(true);
+        onMarkGraded?.();
+      }
+    } catch (err) {
+      console.error('Failed to mark as graded:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [submissionId, onMarkGraded]);
+
+  const isCurrentSegmentFlagged = flaggedSegments.some(f => f.segmentIndex === currentSegmentIndex);
 
   // Early return if not open
   if (!isOpen) return null;
@@ -299,13 +422,22 @@ export default function TranscriptModal({
 
               {/* Instructor Controls */}
               <div className="mt-6">
-                <h4 className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-3">
-                  Instructor Controls
-                </h4>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-semibold text-surface-500 uppercase tracking-wide">
+                    Instructor Controls
+                  </h4>
+                  {isSaving && (
+                    <span className="flex items-center gap-1.5 text-xs text-primary-600">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Saving...
+                    </span>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-2">
                   <button 
                     onClick={handleFlagSegment}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    disabled={isSaving || !submissionId}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
                       isCurrentSegmentFlagged
                         ? 'bg-amber-100 text-amber-700 border border-amber-200'
                         : 'bg-surface-100 hover:bg-surface-200 text-surface-700'
@@ -316,7 +448,8 @@ export default function TranscriptModal({
                   </button>
                   <button 
                     onClick={() => setShowCommentInput(!showCommentInput)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    disabled={!submissionId}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
                       showCommentInput
                         ? 'bg-blue-100 text-blue-700 border border-blue-200'
                         : 'bg-surface-100 hover:bg-surface-200 text-surface-700'
@@ -327,8 +460,8 @@ export default function TranscriptModal({
                   </button>
                   <button 
                     onClick={handleMarkGraded}
-                    disabled={isGraded}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    disabled={isGraded || isSaving || !submissionId}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
                       isGraded
                         ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 cursor-not-allowed'
                         : 'bg-surface-100 hover:bg-surface-200 text-surface-700'
@@ -355,12 +488,15 @@ export default function TranscriptModal({
                           onChange={(e) => setCommentText(e.target.value)}
                           placeholder="Add a comment for this segment..."
                           className="flex-1 px-3 py-2 border border-surface-200 rounded-lg text-sm text-surface-900 bg-white placeholder:text-surface-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                          onKeyDown={(e) => e.key === 'Enter' && handleAddComment()}
+                          onKeyDown={(e) => e.key === 'Enter' && !isSaving && handleAddComment()}
+                          disabled={isSaving}
                         />
                         <button
                           onClick={handleAddComment}
-                          className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 transition-colors"
+                          disabled={isSaving || !commentText.trim()}
+                          className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         >
+                          {isSaving && <Loader2 className="w-3 h-3 animate-spin" />}
                           Add
                         </button>
                       </div>
@@ -461,8 +597,10 @@ export default function TranscriptModal({
                         </div>
                         {group.entries.map((entry, entryIndex) => {
                           const isCurrent = entry.originalIndex === currentSegmentIndex;
-                          const isFlagged = flaggedSegments.some(f => f.index === entry.originalIndex);
-                          const hasComment = comments.some(c => c.index === entry.originalIndex);
+                          const segmentFlag = flaggedSegments.find(f => f.segmentIndex === entry.originalIndex);
+                          const segmentComments = comments.filter(c => c.segmentIndex === entry.originalIndex);
+                          const isFlagged = !!segmentFlag;
+                          const hasComment = segmentComments.length > 0;
                           
                           return (
                             <div
@@ -475,20 +613,58 @@ export default function TranscriptModal({
                                   : 'bg-surface-50 hover:bg-surface-100'
                               }`}
                             >
-                              {/* Indicators */}
+                              {/* Indicators with delete option */}
                               {(isFlagged || hasComment) && (
                                 <div className="absolute top-2 right-2 flex gap-1">
-                                  {isFlagged && <Flag className="w-3 h-3 text-amber-500 fill-amber-500" />}
-                                  {hasComment && <MessageSquare className="w-3 h-3 text-blue-500 fill-blue-500" />}
+                                  {isFlagged && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteFlag(segmentFlag.id);
+                                      }}
+                                      className="group flex items-center gap-0.5 hover:bg-amber-100 rounded px-1 transition-colors"
+                                      title="Click to remove flag"
+                                    >
+                                      <Flag className="w-3 h-3 text-amber-500 fill-amber-500" />
+                                      <Trash2 className="w-2.5 h-2.5 text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </button>
+                                  )}
+                                  {hasComment && (
+                                    <span className="flex items-center gap-0.5">
+                                      <MessageSquare className="w-3 h-3 text-blue-500 fill-blue-500" />
+                                      <span className="text-xs text-blue-600">{segmentComments.length}</span>
+                                    </span>
+                                  )}
                                 </div>
                               )}
-                              <p className="text-sm text-surface-700 leading-relaxed pr-8">
+                              <p className="text-sm text-surface-700 leading-relaxed pr-12">
                                 {highlightText(entry.text, searchQuery)}
                               </p>
                               {entryIndex > 0 && (
                                 <span className="text-xs text-surface-400 mt-1 block">
                                   {entry.timestamp}
                                 </span>
+                              )}
+                              {/* Show comments for this segment */}
+                              {segmentComments.length > 0 && (
+                                <div className="mt-2 space-y-1">
+                                  {segmentComments.map(comment => (
+                                    <div key={comment.id} className="flex items-start gap-2 p-2 bg-blue-50 rounded-lg group">
+                                      <MessageSquare className="w-3 h-3 text-blue-500 mt-0.5 flex-shrink-0" />
+                                      <p className="text-xs text-blue-700 flex-1">{comment.text}</p>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteComment(comment.id);
+                                        }}
+                                        className="p-1 text-blue-400 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all"
+                                        title="Delete comment"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
                               )}
                             </div>
                           );
