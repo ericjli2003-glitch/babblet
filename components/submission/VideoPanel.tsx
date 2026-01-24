@@ -30,6 +30,7 @@ interface VideoPanelProps {
   onDurationChange?: (durationMs: number) => void;
   currentTimeMs?: number;
   presentationTitle?: string;
+  submissionId?: string;
 }
 
 export interface VideoPanelRef {
@@ -49,6 +50,7 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
   onDurationChange,
   currentTimeMs = 0,
   presentationTitle = 'Presentation',
+  submissionId,
 }, ref) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
@@ -263,6 +265,7 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
         transcriptEntries={transcriptEntries || []}
         onSeek={seekTo}
         currentTimeMs={currentTimeMs}
+        submissionId={submissionId}
       />
     </div>
   );

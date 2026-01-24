@@ -150,6 +150,14 @@ export default function TranscriptModal({
     }
   }, [currentSegmentIndex, autoScroll, searchQuery]);
 
+  // Sync modal video with parent video time when modal opens
+  useEffect(() => {
+    if (isOpen && videoRef.current && currentTimeMs > 0) {
+      videoRef.current.currentTime = currentTimeMs / 1000;
+      setModalVideoTime(currentTimeMs);
+    }
+  }, [isOpen, currentTimeMs]);
+
   // Video time update handler
   const handleVideoTimeUpdate = useCallback(() => {
     if (videoRef.current) {

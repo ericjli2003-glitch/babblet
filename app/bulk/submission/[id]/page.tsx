@@ -1284,7 +1284,8 @@ export default function SubmissionDetailPage() {
               onDurationChange={setVideoDuration}
               currentTimeMs={currentVideoTime}
               presentationTitle={submission.studentName}
-      />
+              submissionId={submissionId}
+            />
     </div>
         </div>
       </div>
