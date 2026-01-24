@@ -6,6 +6,7 @@ import { createDocument, checkDocumentDuplicate } from '@/lib/context-store';
 import { storeDocumentChunks, isEmbeddingsConfigured } from '@/lib/embeddings';
 import { extractText, isSupportedFile, SUPPORTED_EXTENSIONS } from '@/lib/text-extraction';
 import { uploadFile, getPresignedUploadUrl, isR2Configured } from '@/lib/r2';
+import { classifyDocumentType, isClaudeConfigured } from '@/lib/claude';
 import { v4 as uuidv4 } from 'uuid';
 
 // POST /api/context/upload-document - Upload and extract text from a file
@@ -68,6 +69,20 @@ export async function POST(request: NextRequest) {
 
     console.log(`[UploadDocument] Extracted ${extraction.wordCount} words from ${file.name}`);
 
+    // AI-powered document type classification
+    let finalDocumentType = documentType;
+    let classification = null;
+    
+    if (documentType === 'auto' || documentType === 'other') {
+      try {
+        classification = await classifyDocumentType(file.name, extraction.text);
+        finalDocumentType = classification.type;
+        console.log(`[UploadDocument] AI classified as: ${classification.type} (${classification.confidence}) - ${classification.reasoning}`);
+      } catch (classifyError) {
+        console.error('[UploadDocument] AI classification failed, using provided type:', classifyError);
+      }
+    }
+
     // Optionally store original file in R2
     let fileKey: string | undefined;
     if (isR2Configured()) {
@@ -85,12 +100,12 @@ export async function POST(request: NextRequest) {
       courseId,
       assignmentId: assignmentId || undefined,
       name: file.name,
-      type: documentType as 'lecture_notes' | 'reading' | 'slides' | 'policy' | 'example' | 'other',
+      type: finalDocumentType as 'lecture_notes' | 'reading' | 'slides' | 'policy' | 'example' | 'recording' | 'other',
       rawText: extraction.text,
       fileKey,
     });
 
-    console.log(`[UploadDocument] Created document ${document.id}`);
+    console.log(`[UploadDocument] Created document ${document.id} with type: ${finalDocumentType}`);
 
     // Generate embeddings
     let chunkCount = 0;
@@ -123,6 +138,13 @@ export async function POST(request: NextRequest) {
       },
       chunkCount,
       embeddingsEnabled: isEmbeddingsConfigured(),
+      aiClassification: classification ? {
+        detected: true,
+        type: classification.type,
+        confidence: classification.confidence,
+        reasoning: classification.reasoning,
+        keyTopics: classification.keyTopics,
+      } : null,
     });
   } catch (error) {
     console.error('[UploadDocument] Error:', error);

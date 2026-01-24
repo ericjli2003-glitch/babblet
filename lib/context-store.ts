@@ -95,7 +95,7 @@ export interface Document {
   courseId: string;
   assignmentId?: string; // null = course-level
   name: string;
-  type: 'lecture_notes' | 'reading' | 'slides' | 'policy' | 'example' | 'other';
+  type: 'lecture_notes' | 'reading' | 'slides' | 'policy' | 'example' | 'recording' | 'other';
   fileKey?: string; // R2 key if uploaded
   rawText: string;
   createdAt: number;

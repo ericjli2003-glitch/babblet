@@ -984,3 +984,128 @@ Respond ONLY with valid JSON.`;
   }
 }
 
+// ============================================
+// Document Type Classification
+// ============================================
+
+export type DocumentType = 'slides' | 'lecture_notes' | 'reading' | 'policy' | 'example' | 'recording' | 'other';
+
+interface DocumentClassification {
+  type: DocumentType;
+  confidence: 'high' | 'medium' | 'low';
+  reasoning: string;
+  suggestedName?: string;
+  keyTopics?: string[];
+}
+
+export async function classifyDocumentType(
+  filename: string,
+  textContent: string,
+  existingTypes?: DocumentType[]
+): Promise<DocumentClassification> {
+  if (!isClaudeConfigured()) {
+    console.log('[Babblet AI] Claude not configured, using fallback classification');
+    return fallbackClassification(filename);
+  }
+
+  const client = getAnthropicClient();
+  
+  // Truncate content to avoid token limits
+  const truncatedContent = textContent.slice(0, 4000);
+
+  const prompt = `Analyze this document and classify it into one of these educational material categories:
+
+CATEGORIES:
+- slides: Presentation slides (PowerPoint, lecture slides, visual presentations)
+- lecture_notes: Lecture notes, class notes, lesson summaries, study guides
+- reading: Academic readings, articles, papers, textbook chapters, research papers
+- policy: Syllabi, course policies, grading policies, requirements, guidelines
+- example: Example work, sample assignments, templates, model answers
+- recording: Transcripts of recordings, video/audio transcripts
+- other: Doesn't fit above categories
+
+FILENAME: ${filename}
+
+CONTENT SAMPLE:
+${truncatedContent}
+
+Analyze the content structure, language, and format to determine the document type.
+
+Respond in JSON format:
+{
+  "type": "one of the categories above",
+  "confidence": "high" | "medium" | "low",
+  "reasoning": "Brief explanation of why this classification",
+  "keyTopics": ["main topics covered"],
+  "suggestedName": "A cleaner name for this document if the filename is unclear"
+}`;
+
+  try {
+    const response = await client.messages.create({
+      model: config.models.claude,
+      max_tokens: 500,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    
+    // Parse JSON response
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        type: validateDocumentType(parsed.type),
+        confidence: parsed.confidence || 'medium',
+        reasoning: parsed.reasoning || 'AI classification',
+        keyTopics: parsed.keyTopics || [],
+        suggestedName: parsed.suggestedName,
+      };
+    }
+
+    return fallbackClassification(filename);
+  } catch (error) {
+    console.error('[Babblet AI] Document classification error:', error);
+    return fallbackClassification(filename);
+  }
+}
+
+function validateDocumentType(type: string): DocumentType {
+  const validTypes: DocumentType[] = ['slides', 'lecture_notes', 'reading', 'policy', 'example', 'recording', 'other'];
+  return validTypes.includes(type as DocumentType) ? (type as DocumentType) : 'other';
+}
+
+function fallbackClassification(filename: string): DocumentClassification {
+  const lowerName = filename.toLowerCase();
+  const ext = lowerName.split('.').pop() || '';
+
+  // Check file extension first
+  const recordingExtensions = ['mp4', 'mov', 'avi', 'webm', 'mkv', 'mp3', 'wav', 'm4a'];
+  const slideExtensions = ['pptx', 'ppt', 'key', 'odp'];
+  
+  if (recordingExtensions.includes(ext)) {
+    return { type: 'recording', confidence: 'high', reasoning: 'File extension indicates recording' };
+  }
+  
+  if (slideExtensions.includes(ext)) {
+    return { type: 'slides', confidence: 'high', reasoning: 'File extension indicates slides' };
+  }
+
+  // Check filename patterns
+  const patterns: { type: DocumentType; keywords: string[]; reasoning: string }[] = [
+    { type: 'slides', keywords: ['slide', 'presentation', 'deck', 'powerpoint', 'ppt'], reasoning: 'Filename suggests slides' },
+    { type: 'lecture_notes', keywords: ['lecture', 'notes', 'class notes', 'lesson', 'session', 'week'], reasoning: 'Filename suggests lecture notes' },
+    { type: 'reading', keywords: ['reading', 'article', 'paper', 'chapter', 'textbook', 'book', 'journal'], reasoning: 'Filename suggests reading material' },
+    { type: 'policy', keywords: ['syllabus', 'policy', 'policies', 'guidelines', 'requirements', 'grading', 'rubric'], reasoning: 'Filename suggests policy document' },
+    { type: 'example', keywords: ['example', 'sample', 'template', 'model', 'demo', 'exemplar'], reasoning: 'Filename suggests example material' },
+    { type: 'recording', keywords: ['recording', 'video', 'audio', 'lecture video', 'class recording', 'zoom'], reasoning: 'Filename suggests recording' },
+  ];
+
+  for (const pattern of patterns) {
+    if (pattern.keywords.some(keyword => lowerName.includes(keyword))) {
+      return { type: pattern.type, confidence: 'medium', reasoning: pattern.reasoning };
+    }
+  }
+
+  return { type: 'other', confidence: 'low', reasoning: 'Could not determine type from filename' };
+}
+

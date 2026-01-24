@@ -249,7 +249,7 @@ export default function ContextLibraryPage() {
   // Upload state
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
-  const [uploadType, setUploadType] = useState<Document['type']>('lecture_notes');
+  const [uploadType, setUploadType] = useState<Document['type'] | 'auto'>('auto');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
 
@@ -375,9 +375,8 @@ export default function ContextLibraryPage() {
 
       if (newFiles.length > 0) {
         setUploadFiles(newFiles);
-        // Auto-detect the document type based on filenames
-        const detectedType = detectPrimaryType(newFiles);
-        setUploadType(detectedType);
+        // Use AI auto-detection by default
+        setUploadType('auto');
         setShowUploadModal(true);
       }
     }
@@ -690,15 +689,19 @@ export default function ContextLibraryPage() {
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-sm font-medium text-surface-700">Material Type</label>
-                    <span className="text-xs text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
-                      Auto-detected
-                    </span>
+                    {uploadType === 'auto' && (
+                      <span className="text-xs text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" />
+                        AI Auto-detect
+                      </span>
+                    )}
                   </div>
                   <select
                     value={uploadType}
-                    onChange={(e) => setUploadType(e.target.value as Document['type'])}
+                    onChange={(e) => setUploadType(e.target.value as Document['type'] | 'auto')}
                     className="w-full px-4 py-2.5 rounded-xl border border-surface-300 text-surface-900 bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   >
+                    <option value="auto">🤖 AI Auto-detect (Recommended)</option>
                     <option value="slides">Slides</option>
                     <option value="reading">Readings</option>
                     <option value="lecture_notes">Lecture Notes</option>
@@ -708,7 +711,9 @@ export default function ContextLibraryPage() {
                     <option value="other">Other</option>
                   </select>
                   <p className="text-xs text-surface-500 mt-1">
-                    Type was detected based on file names. You can change it if needed.
+                    {uploadType === 'auto' 
+                      ? 'AI will analyze content and classify each file automatically.'
+                      : 'You can also let AI auto-detect the type.'}
                   </p>
                 </div>
 
