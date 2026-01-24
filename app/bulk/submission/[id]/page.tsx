@@ -18,6 +18,13 @@ import RubricCriterion from '@/components/submission/RubricCriterion';
 import ClassInsightCard from '@/components/submission/ClassInsightCard';
 import CollapsibleSection from '@/components/submission/CollapsibleSection';
 import VideoPanel, { VideoPanelRef } from '@/components/submission/VideoPanel';
+import { 
+  HighlightContextProvider, 
+  FloatingActionPill, 
+  ContextualChatPanel,
+  HighlightableContent,
+  useHighlightContext,
+} from '@/components/ai-chat';
 
 // ============================================
 // Types
@@ -511,7 +518,12 @@ export default function SubmissionDetailPage() {
   }
 
   return (
+    <HighlightContextProvider>
     <DashboardLayout>
+      {/* AI Chat Components */}
+      <FloatingActionPill />
+      <ContextualChatPanel />
+      
       <div className="h-full flex flex-col">
       {/* Header */}
         <div className="bg-white border-b border-surface-200 px-6 py-4">
@@ -963,26 +975,32 @@ export default function SubmissionDetailPage() {
                         const segmentPreview = segment?.text?.slice(0, 60) || q.category.replace('-', ' ');
                         
                         return (
-                          <QuestionCard
+                          <HighlightableContent
                             key={q.id}
-                            category={getQuestionCategory(q.category)}
-                            question={q.question}
-                            context={{
-                              text: `Referenced during the ${segmentPreview.toLowerCase()}${segment?.text && segment.text.length > 60 ? '...' : ''} segment at`,
-                              timestamps: [formatTimestamp(timestampMs)],
-                            }}
-                            onTimestampClick={(ts) => {
-                              // Parse timestamp string like "01:30" to milliseconds
-                              const parts = ts.split(':').map(Number);
-                              let ms = 0;
-                              if (parts.length === 2) {
-                                ms = (parts[0] * 60 + parts[1]) * 1000;
-                              } else if (parts.length === 3) {
-                                ms = (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
-                              }
-                              handleSegmentClick(ms);
-                            }}
-                          />
+                            sourceType="question"
+                            sourceId={q.id}
+                            timestamp={formatTimestamp(timestampMs)}
+                          >
+                            <QuestionCard
+                              category={getQuestionCategory(q.category)}
+                              question={q.question}
+                              context={{
+                                text: `Referenced during the ${segmentPreview.toLowerCase()}${segment?.text && segment.text.length > 60 ? '...' : ''} segment at`,
+                                timestamps: [formatTimestamp(timestampMs)],
+                              }}
+                              onTimestampClick={(ts) => {
+                                // Parse timestamp string like "01:30" to milliseconds
+                                const parts = ts.split(':').map(Number);
+                                let ms = 0;
+                                if (parts.length === 2) {
+                                  ms = (parts[0] * 60 + parts[1]) * 1000;
+                                } else if (parts.length === 3) {
+                                  ms = (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
+                                }
+                                handleSegmentClick(ms);
+                              }}
+                            />
+                          </HighlightableContent>
                         );
                       })
                     ) : (
@@ -1111,33 +1129,40 @@ export default function SubmissionDetailPage() {
                                         percentage >= 50 ? 'needs_improvement' : 'missing';
                           
                           return (
-                            <ClassInsightCard
+                            <HighlightableContent
                               key={i}
-                              title={c.criterion}
-                              score={c.score}
-                              maxScore={c.maxScore || 10}
-                              status={status}
-                              moduleReference={`Criterion ${i + 1}`}
-                              feedback={c.feedback || c.rationale || 'No detailed feedback available.'}
-                              courseAlignment={submission.analysis?.courseAlignment?.overall}
-                              defaultExpanded={i === 0}
-                              suggestedAction={
-                                status === 'needs_improvement' || status === 'missing'
-                                  ? {
-                                      text: `Focus on improving ${c.criterion.toLowerCase()}. Review course materials for guidance.`,
-                                      linkText: 'View Course Resources',
-                                      linkUrl: '/resources',
-                                    }
-                                  : undefined
-                              }
-                              evidence={
-                                submission.transcriptSegments?.slice(i * 2, i * 2 + 2).map(seg => ({
-                                  timestamp: formatTimestamp(seg.timestamp),
-                                  text: seg.text.slice(0, 100) + (seg.text.length > 100 ? '...' : ''),
-                                }))
-                              }
-                              onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
-                            />
+                              sourceType="rubric"
+                              sourceId={`criterion-${i}`}
+                              criterionId={`criterion-${i}`}
+                              rubricCriterion={c.criterion}
+                            >
+                              <ClassInsightCard
+                                title={c.criterion}
+                                score={c.score}
+                                maxScore={c.maxScore || 10}
+                                status={status}
+                                moduleReference={`Criterion ${i + 1}`}
+                                feedback={c.feedback || c.rationale || 'No detailed feedback available.'}
+                                courseAlignment={submission.analysis?.courseAlignment?.overall}
+                                defaultExpanded={i === 0}
+                                suggestedAction={
+                                  status === 'needs_improvement' || status === 'missing'
+                                    ? {
+                                        text: `Focus on improving ${c.criterion.toLowerCase()}. Review course materials for guidance.`,
+                                        linkText: 'View Course Resources',
+                                        linkUrl: '/resources',
+                                      }
+                                    : undefined
+                                }
+                                evidence={
+                                  submission.transcriptSegments?.slice(i * 2, i * 2 + 2).map(seg => ({
+                                    timestamp: formatTimestamp(seg.timestamp),
+                                    text: seg.text.slice(0, 100) + (seg.text.length > 100 ? '...' : ''),
+                                  }))
+                                }
+                                onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
+                              />
+                            </HighlightableContent>
                           );
                         })
                       ) : (
@@ -1300,5 +1325,6 @@ export default function SubmissionDetailPage() {
         </div>
       </div>
     </DashboardLayout>
+    </HighlightContextProvider>
   );
 }
