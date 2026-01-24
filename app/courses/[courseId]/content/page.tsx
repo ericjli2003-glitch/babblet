@@ -81,6 +81,84 @@ function formatTimeAgo(timestamp: number): string {
   });
 }
 
+// Auto-detect document type based on filename and extension
+function detectDocumentType(filename: string): Document['type'] {
+  const lowerName = filename.toLowerCase();
+  const ext = lowerName.split('.').pop() || '';
+
+  // Check file extension first for obvious types
+  const recordingExtensions = ['mp4', 'mov', 'avi', 'webm', 'mkv', 'mp3', 'wav', 'm4a'];
+  const slideExtensions = ['pptx', 'ppt', 'key', 'odp'];
+  
+  if (recordingExtensions.includes(ext)) {
+    return 'recording';
+  }
+  
+  if (slideExtensions.includes(ext)) {
+    return 'slides';
+  }
+
+  // Check filename patterns
+  const patterns: { type: Document['type']; keywords: string[] }[] = [
+    { 
+      type: 'slides', 
+      keywords: ['slide', 'presentation', 'deck', 'powerpoint', 'ppt'] 
+    },
+    { 
+      type: 'lecture_notes', 
+      keywords: ['lecture', 'notes', 'class notes', 'lesson', 'session', 'week'] 
+    },
+    { 
+      type: 'reading', 
+      keywords: ['reading', 'article', 'paper', 'chapter', 'textbook', 'book', 'journal'] 
+    },
+    { 
+      type: 'policy', 
+      keywords: ['syllabus', 'policy', 'policies', 'guidelines', 'requirements', 'grading', 'rubric', 'expectations'] 
+    },
+    { 
+      type: 'example', 
+      keywords: ['example', 'sample', 'template', 'model', 'demo', 'exemplar'] 
+    },
+    { 
+      type: 'recording', 
+      keywords: ['recording', 'video', 'audio', 'lecture video', 'class recording', 'zoom', 'meet'] 
+    },
+  ];
+
+  for (const pattern of patterns) {
+    if (pattern.keywords.some(keyword => lowerName.includes(keyword))) {
+      return pattern.type;
+    }
+  }
+
+  // Default to 'other' if no match
+  return 'other';
+}
+
+// Detect the most common type among multiple files
+function detectPrimaryType(files: File[]): Document['type'] {
+  const typeCounts: Record<string, number> = {};
+  
+  for (const file of files) {
+    const detectedType = detectDocumentType(file.name);
+    typeCounts[detectedType] = (typeCounts[detectedType] || 0) + 1;
+  }
+
+  // Find the most common type (excluding 'other' if there are other options)
+  let primaryType: Document['type'] = 'other';
+  let maxCount = 0;
+
+  for (const [type, count] of Object.entries(typeCounts)) {
+    if (count > maxCount || (count === maxCount && type !== 'other')) {
+      maxCount = count;
+      primaryType = type as Document['type'];
+    }
+  }
+
+  return primaryType;
+}
+
 // ============================================
 // Document Row Component
 // ============================================
@@ -297,6 +375,9 @@ export default function ContextLibraryPage() {
 
       if (newFiles.length > 0) {
         setUploadFiles(newFiles);
+        // Auto-detect the document type based on filenames
+        const detectedType = detectPrimaryType(newFiles);
+        setUploadType(detectedType);
         setShowUploadModal(true);
       }
     }
@@ -607,11 +688,16 @@ export default function ContextLibraryPage() {
               <div className="space-y-4">
                 {/* Material Type */}
                 <div>
-                  <label className="block text-sm font-medium text-surface-700 mb-1">Material Type</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-surface-700">Material Type</label>
+                    <span className="text-xs text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
+                      Auto-detected
+                    </span>
+                  </div>
                   <select
                     value={uploadType}
                     onChange={(e) => setUploadType(e.target.value as Document['type'])}
-                    className="w-full px-4 py-2.5 rounded-xl border border-surface-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full px-4 py-2.5 rounded-xl border border-surface-300 text-surface-900 bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   >
                     <option value="slides">Slides</option>
                     <option value="reading">Readings</option>
@@ -621,6 +707,9 @@ export default function ContextLibraryPage() {
                     <option value="recording">Class Recordings</option>
                     <option value="other">Other</option>
                   </select>
+                  <p className="text-xs text-surface-500 mt-1">
+                    Type was detected based on file names. You can change it if needed.
+                  </p>
                 </div>
 
                 {/* Selected Files */}
@@ -629,26 +718,33 @@ export default function ContextLibraryPage() {
                     Selected Files ({uploadFiles.length})
                   </label>
                   <div className="max-h-48 overflow-y-auto space-y-2 bg-surface-50 rounded-xl p-3">
-                    {uploadFiles.map((file, idx) => (
-                      <div
-                        key={`${file.name}-${idx}`}
-                        className="flex items-center justify-between p-2 bg-white rounded-lg border border-surface-200"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <File className="w-4 h-4 text-primary-500 flex-shrink-0" />
-                          <span className="text-sm text-surface-700 truncate">{file.name}</span>
-                          <span className="text-xs text-surface-400 flex-shrink-0">
-                            ({formatFileSize(file.size)})
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => setUploadFiles((prev) => prev.filter((_, i) => i !== idx))}
-                          className="p-1 text-surface-400 hover:text-red-500 rounded"
+                    {uploadFiles.map((file, idx) => {
+                      const detectedType = detectDocumentType(file.name);
+                      const typeLabel = MATERIAL_TYPES[detectedType]?.label || 'Other';
+                      
+                      return (
+                        <div
+                          key={`${file.name}-${idx}`}
+                          className="flex items-center justify-between p-2 bg-white rounded-lg border border-surface-200"
                         >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <File className="w-4 h-4 text-primary-500 flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <span className="text-sm text-surface-700 truncate block">{file.name}</span>
+                              <span className="text-xs text-surface-400">
+                                {formatFileSize(file.size)} • {typeLabel}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => setUploadFiles((prev) => prev.filter((_, i) => i !== idx))}
+                            className="p-1 text-surface-400 hover:text-red-500 rounded flex-shrink-0"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
