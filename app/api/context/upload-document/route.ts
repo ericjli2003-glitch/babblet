@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes - max for Vercel Pro (OCR can be slow)
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createDocument } from '@/lib/context-store';
+import { createDocument, checkDocumentDuplicate } from '@/lib/context-store';
 import { storeDocumentChunks, isEmbeddingsConfigured } from '@/lib/embeddings';
 import { extractText, isSupportedFile, SUPPORTED_EXTENSIONS } from '@/lib/text-extraction';
 import { uploadFile, getPresignedUploadUrl, isR2Configured } from '@/lib/r2';
@@ -29,6 +29,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         error: `Unsupported file type. Supported: ${SUPPORTED_EXTENSIONS.join(', ')}`,
       }, { status: 400 });
+    }
+
+    // Check for duplicate document
+    const duplicateCheck = await checkDocumentDuplicate(courseId, file.name, assignmentId || undefined);
+    if (duplicateCheck.exists) {
+      console.log(`[UploadDocument] Duplicate detected: ${file.name} (existing: ${duplicateCheck.existingDoc?.id})`);
+      return NextResponse.json({
+        duplicate: true,
+        error: 'A document with this name already exists in this course',
+        existingDocument: {
+          id: duplicateCheck.existingDoc?.id,
+          name: duplicateCheck.existingDoc?.name,
+        },
+      }, { status: 409 });
     }
 
     console.log(`[UploadDocument] Processing ${file.name} (${file.size} bytes)`);

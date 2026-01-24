@@ -264,12 +264,41 @@ export default function ContextLibraryPage() {
     }
   };
 
+  // Check for duplicate files
+  const checkDuplicates = (files: File[]): { newFiles: File[]; duplicates: string[] } => {
+    const existingNames = new Set(documents.map(d => d.name.toLowerCase()));
+    const newFiles: File[] = [];
+    const duplicates: string[] = [];
+
+    for (const file of files) {
+      if (existingNames.has(file.name.toLowerCase())) {
+        duplicates.push(file.name);
+      } else {
+        newFiles.push(file);
+      }
+    }
+
+    return { newFiles, duplicates };
+  };
+
   // Handle file selection
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      setUploadFiles(Array.from(files));
-      setShowUploadModal(true);
+      const fileArray = Array.from(files);
+      const { newFiles, duplicates } = checkDuplicates(fileArray);
+
+      if (duplicates.length > 0) {
+        const message = duplicates.length === 1
+          ? `"${duplicates[0]}" already exists in this course. It will be skipped.`
+          : `${duplicates.length} files already exist and will be skipped:\n${duplicates.slice(0, 5).join('\n')}${duplicates.length > 5 ? `\n...and ${duplicates.length - 5} more` : ''}`;
+        alert(message);
+      }
+
+      if (newFiles.length > 0) {
+        setUploadFiles(newFiles);
+        setShowUploadModal(true);
+      }
     }
     if (e.target) e.target.value = '';
   };
@@ -281,7 +310,7 @@ export default function ContextLibraryPage() {
     setUploading(true);
     setUploadProgress({ current: 0, total: uploadFiles.length });
 
-    const results: { success: boolean; name: string }[] = [];
+    const results: { success: boolean; name: string; error?: string }[] = [];
 
     for (let i = 0; i < uploadFiles.length; i++) {
       const file = uploadFiles[i];
@@ -299,10 +328,14 @@ export default function ContextLibraryPage() {
         });
 
         const data = await res.json();
-        results.push({ success: data.success, name: file.name });
-
-        if (data.success && data.document) {
-          setDocuments((prev) => [data.document, ...prev]);
+        
+        if (data.duplicate) {
+          results.push({ success: false, name: file.name, error: 'duplicate' });
+        } else {
+          results.push({ success: data.success, name: file.name });
+          if (data.success && data.document) {
+            setDocuments((prev) => [data.document, ...prev]);
+          }
         }
       } catch {
         results.push({ success: false, name: file.name });
@@ -315,8 +348,12 @@ export default function ContextLibraryPage() {
     setUploadFiles([]);
 
     const successCount = results.filter((r) => r.success).length;
+    const duplicateCount = results.filter((r) => r.error === 'duplicate').length;
+    
     if (successCount === results.length) {
       // All succeeded - no alert needed
+    } else if (duplicateCount > 0) {
+      alert(`Uploaded ${successCount} of ${results.length} files. ${duplicateCount} duplicate(s) were skipped.`);
     } else {
       alert(`Uploaded ${successCount} of ${results.length} files.`);
     }

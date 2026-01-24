@@ -437,6 +437,25 @@ export async function deleteDocument(docId: string): Promise<void> {
   await kv.del(`${DOCUMENT_PREFIX}${docId}`);
 }
 
+// Check if a document with the same name already exists in the course
+export async function checkDocumentDuplicate(
+  courseId: string, 
+  filename: string,
+  assignmentId?: string
+): Promise<{ exists: boolean; existingDoc?: Document }> {
+  const docs = assignmentId 
+    ? await getAssignmentDocuments(assignmentId)
+    : await getCourseDocuments(courseId);
+  
+  const normalizedFilename = filename.toLowerCase().trim();
+  const existingDoc = docs.find(doc => doc.name.toLowerCase().trim() === normalizedFilename);
+  
+  return { 
+    exists: !!existingDoc, 
+    existingDoc 
+  };
+}
+
 // ============================================
 // Bundle Operations
 // ============================================
