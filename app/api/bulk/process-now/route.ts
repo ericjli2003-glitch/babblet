@@ -258,7 +258,7 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
 
       const [rubricResult, questionsResult, verifyResult] = await Promise.allSettled([
         evaluateWithClaude(transcript, fullRubricContext, undefined, analysis, segments, professorContext, gradingScaleConfig),
-        generateQuestionsWithClaude(transcript, analysis, undefined, { maxQuestions: config.limits.defaultMaxQuestions }),
+        generateQuestionsWithClaude(transcript, analysis, undefined, { maxQuestions: 5 }), // Generate 5 diverse question types
         claims.length > 0 ? verifyWithClaude(transcript, claims) : Promise.resolve([]),
       ]);
 
