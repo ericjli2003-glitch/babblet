@@ -398,10 +398,19 @@ COURSE MATERIALS (Ground your questions in these materials and provide reference
 ${courseMaterials.map((m, i) => `[${i + 1}] ${m.name} (${m.type}):
 ${m.rawText.substring(0, 800)}...`).join('\n\n')}
 
-MATERIAL REFERENCE REQUIREMENT:
-- For each question, if it relates to course material, include a "materialReferences" array
+MATERIAL REFERENCE REQUIREMENT (MANDATORY):
+- EVERY question MUST include a "materialReferences" array with at least one reference
 - Each reference should have: { "refIndex": number, "excerpt": "short relevant quote from material" }
-- This helps instructors see how questions align with course content
+- Connect each question to relevant course content to show alignment
+- If a question uses facts from outside the course materials, add an "externalSources" array with citations
+`;
+  } else {
+    // Even without course materials, add external source guidance
+    courseMaterialsSection = `
+EXTERNAL SOURCE REQUIREMENT:
+- If your question references facts, studies, or claims from the outside world, include an "externalSources" array
+- Each source should have: { "name": "Source name or title", "type": "study|article|book|website" }
+- This helps instructors verify the accuracy of question premises
 `;
   }
 
@@ -513,12 +522,15 @@ JSON format:
       "tags": ["evidence" | "assumption" | "counterargument" | "definition" | "mechanism" | "limitations" | "methods" | "clarity"],
       "score": 0-100,
       "relevantSnippet": "5-15 word EXACT quote from transcript - be precise!",
-      "materialReferences": [{ "refIndex": 1, "excerpt": "short relevant quote from course material" }]
+      "materialReferences": [{ "refIndex": 1, "excerpt": "short relevant quote from course material" }],
+      "externalSources": [{ "name": "Source name", "type": "study|article|book|website" }]
     }
   ]
 }
 
-Note: "materialReferences" is optional - only include if the question directly relates to provided course materials.
+IMPORTANT:
+- Include "materialReferences" when referencing course materials (use refIndex from the materials list above)
+- Include "externalSources" when using facts, statistics, or claims from outside sources
 
 Respond ONLY with valid JSON.`;
 

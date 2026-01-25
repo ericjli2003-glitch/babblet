@@ -16,6 +16,11 @@ interface MaterialReference {
   documentId?: string;
 }
 
+interface ExternalSource {
+  name: string;
+  type: 'study' | 'article' | 'book' | 'website' | string;
+}
+
 interface QuestionCardProps {
   category: string; // Accepts any category string - will use fallback styling for unknown categories
   question: string;
@@ -31,6 +36,8 @@ interface QuestionCardProps {
   // Course material references
   materialReferences?: MaterialReference[];
   onMaterialClick?: (ref: MaterialReference) => void;
+  // External sources
+  externalSources?: ExternalSource[];
   // Branch functionality
   onBranch?: (count: number, customization?: string) => void;
   isBranching?: boolean;
@@ -151,6 +158,7 @@ export default function QuestionCard({
   relevantSnippet,
   materialReferences,
   onMaterialClick,
+  externalSources,
   onBranch,
   isBranching = false,
 }: QuestionCardProps) {
@@ -396,6 +404,28 @@ export default function QuestionCard({
                   )}
                 </div>
               </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* External Sources Section */}
+      {externalSources && externalSources.length > 0 && (
+        <div className="mb-3 p-3 bg-amber-50 border border-amber-100 rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            <ExternalLink className="w-4 h-4 text-amber-600" />
+            <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">External Sources</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {externalSources.map((source, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100 text-amber-800 text-xs font-medium rounded-md"
+              >
+                <span className="font-bold">[{i + 1}]</span>
+                <span className="truncate max-w-[150px]">{source.name}</span>
+                <span className="text-amber-600 capitalize text-[10px]">({source.type})</span>
+              </span>
             ))}
           </div>
         </div>

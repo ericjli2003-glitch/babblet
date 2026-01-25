@@ -497,24 +497,44 @@ export default function SubmissionDetailPage() {
       
       const data = await res.json();
       if (data.success && data.questions?.length > 0) {
-        // Insert new questions right after the source question
+        // Insert new questions right after the source question, marked as branched
+        const newQuestions = data.questions.map((q: any) => ({
+          id: q.id,
+          question: q.question,
+          category: q.category,
+          rationale: q.rationale,
+          rubricCriterion: q.rubricCriterion,
+          rubricJustification: q.rubricJustification,
+          relevantSnippet: q.relevantSnippet,
+          materialReferences: q.materialReferences,
+          externalSources: q.externalSources,
+          parentId: questionId, // Track which question this was branched from
+          isBranched: true,
+        }));
+        
         setSubmission(prev => {
           if (!prev) return null;
           const questions = [...(prev.questions || [])];
           const sourceIndex = questions.findIndex(q => q.id === questionId);
-          const newQuestions = data.questions.map((q: any) => ({
-            id: q.id,
-            question: q.question,
-            category: q.category,
-            rationale: q.rationale,
-            rubricCriterion: q.rubricCriterion,
-            rubricJustification: q.rubricJustification,
-            relevantSnippet: q.relevantSnippet,
-            materialReferences: q.materialReferences,
-          }));
           questions.splice(sourceIndex + 1, 0, ...newQuestions);
           return { ...prev, questions };
         });
+        
+        // Save to database
+        try {
+          await fetch('/api/bulk/submissions', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: submissionId,
+              updates: {
+                questions: [...(submission?.questions || []), ...newQuestions],
+              },
+            }),
+          });
+        } catch (saveErr) {
+          console.error('Failed to save branched questions:', saveErr);
+        }
       }
     } catch (err) {
       console.error('Error branching question:', err);
@@ -557,6 +577,7 @@ export default function SubmissionDetailPage() {
           settings: {
             maxQuestions: questionCount,
           },
+          courseId: batchInfo?.courseId, // Include for material references
         }),
       });
       
@@ -565,18 +586,33 @@ export default function SubmissionDetailPage() {
       
       if (data.success && data.questions && data.questions.length > 0) {
         // Map questions with all fields
-        const mapQuestion = (q: { id: string; question: string; category: string; materialReferences?: Array<{ id: string; name: string; type: string; excerpt?: string }> }) => ({
+        const newQuestions = data.questions.map((q: any) => ({
           id: q.id,
           question: q.question,
           category: q.category,
           materialReferences: q.materialReferences,
-        });
+          externalSources: q.externalSources,
+        }));
         
         // Replace all questions
         setSubmission(prev => prev ? {
           ...prev,
-          questions: data.questions.map(mapQuestion),
+          questions: newQuestions,
         } : null);
+        
+        // Save to database
+        try {
+          await fetch('/api/bulk/submissions', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: submissionId,
+              updates: { questions: newQuestions },
+            }),
+          });
+        } catch (saveErr) {
+          console.error('Failed to save questions:', saveErr);
+        }
       } else {
         console.error('Failed to regenerate questions:', data.error);
         alert('Failed to regenerate questions: ' + (data.error || 'No questions generated'));
@@ -1054,37 +1090,52 @@ export default function SubmissionDetailPage() {
                         // Get a brief context description from the segment
                         const segmentPreview = segment?.text?.slice(0, 60) || q.category.replace('-', ' ');
                         
+                        // Check if this is a branched question
+                        const isBranchedQuestion = (q as any).isBranched || (q as any).parentId;
+                        
                         return (
-                          <HighlightableContent
+                          <div 
                             key={q.id}
-                            sourceType="question"
-                            sourceId={q.id}
-                            timestamp={formatTimestamp(timestampMs)}
+                            className={isBranchedQuestion ? 'ml-8 relative' : ''}
                           >
-                            <QuestionCard
-                              category={getQuestionCategory(q.category)}
-                              question={q.question}
-                              context={{
-                                text: `Referenced during the ${segmentPreview.toLowerCase()}${segment?.text && segment.text.length > 60 ? '...' : ''} segment at`,
-                                timestamps: [formatTimestamp(timestampMs)],
-                              }}
+                            {/* Connector line for branched questions */}
+                            {isBranchedQuestion && (
+                              <div className="absolute -left-4 top-6 w-4 h-px bg-blue-200" />
+                            )}
+                            <div className={isBranchedQuestion ? 'bg-blue-50/50 rounded-xl border border-blue-100 p-1' : ''}>
+                              <HighlightableContent
+                                sourceType="question"
+                                sourceId={q.id}
+                                timestamp={formatTimestamp(timestampMs)}
+                              >
+                                <QuestionCard
+                                  category={getQuestionCategory(q.category)}
+                                  question={q.question}
+                                  context={{
+                                    text: isBranchedQuestion 
+                                      ? 'Branched from parent question'
+                                      : `Referenced during the ${segmentPreview.toLowerCase()}${segment?.text && segment.text.length > 60 ? '...' : ''} segment at`,
+                                    timestamps: isBranchedQuestion ? [] : [formatTimestamp(timestampMs)],
+                                  }}
                               materialReferences={q.materialReferences}
+                              externalSources={(q as any).externalSources}
                               onMaterialClick={handleMaterialClick}
-                              onBranch={(count, customization) => handleBranchQuestion(q.id, count, customization)}
-                              isBranching={branchingQuestionId === q.id}
-                              onTimestampClick={(ts) => {
-                                // Parse timestamp string like "01:30" to milliseconds
-                                const parts = ts.split(':').map(Number);
-                                let ms = 0;
-                                if (parts.length === 2) {
-                                  ms = (parts[0] * 60 + parts[1]) * 1000;
-                                } else if (parts.length === 3) {
-                                  ms = (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
-                                }
-                                handleSegmentClick(ms);
-                              }}
-                            />
-                          </HighlightableContent>
+                              onBranch={isBranchedQuestion ? undefined : (count, customization) => handleBranchQuestion(q.id, count, customization)}
+                                  isBranching={branchingQuestionId === q.id}
+                                  onTimestampClick={(ts) => {
+                                    const parts = ts.split(':').map(Number);
+                                    let ms = 0;
+                                    if (parts.length === 2) {
+                                      ms = (parts[0] * 60 + parts[1]) * 1000;
+                                    } else if (parts.length === 3) {
+                                      ms = (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
+                                    }
+                                    handleSegmentClick(ms);
+                                  }}
+                                />
+                              </HighlightableContent>
+                            </div>
+                          </div>
                         );
                       })
                     ) : (
