@@ -247,11 +247,14 @@ ${settings.existingQuestions.slice(-config.ui.existingQuestionsContext).map((q, 
 
   const wantsEvidence = !!settings?.rubricCriteria?.match(/evidence|source|citation|cite|references|data|study|studies|research/i);
   const remaining = Math.max(0, settings?.remainingQuestions ?? settings?.maxQuestions ?? 10);
-  const returnCount = Math.max(0, Math.min(3, remaining));
+  // Allow up to 20 questions to be returned (was incorrectly capped at 3)
+  const returnCount = Math.max(1, Math.min(20, remaining));
   const candidateCount = Math.max(
-    6,
-    Math.min(config.limits.maxQuestionCandidates, Math.max(returnCount * 3, 12))
+    returnCount + 3,
+    Math.min(config.limits.maxQuestionCandidates, Math.max(returnCount * 2, 12))
   );
+  
+  console.log('[Babblet AI] Requested:', remaining, 'questions, will return:', returnCount);
 
   const difficultyGuidance =
     settings?.targetDifficulty && settings.targetDifficulty !== 'mixed'
@@ -263,13 +266,14 @@ ${settings.existingQuestions.slice(-config.ui.existingQuestionsContext).map((q, 
       ? `Prefer Bloom level: ${settings.bloomFocus}.`
       : 'Use a mix of Bloom levels (remember/understand/apply/analyze/evaluate/create).';
 
-  const userPrompt = `Based on this presentation, generate a larger candidate set internally, then return ONLY the top ${returnCount} questions.
-Quality over quantity.
+  const userPrompt = `Based on this presentation, generate exactly ${returnCount} high-quality questions.
 
-Step 1: Generate ${candidateCount} candidate questions.
+Step 1: Generate ${candidateCount} candidate questions internally.
 Step 2: Rank them by rubric alignment + assignment relevance + novelty (not repeating existing questions).
 Step 3: Deduplicate near-duplicates and ensure diversity across question types.
-Step 4: Return ONLY the best ${returnCount} in the final "questions" list.
+Step 4: Return exactly ${returnCount} questions in the final "questions" list.
+
+IMPORTANT: You MUST return exactly ${returnCount} questions. Not fewer, not more.
 
 TRANSCRIPT:
 ${transcript}
