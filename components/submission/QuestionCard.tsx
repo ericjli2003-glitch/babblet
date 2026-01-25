@@ -209,13 +209,21 @@ export default function QuestionCard({
       {/* Category Badge, Branch Button & AI Rationale Available */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span 
-            className={`px-2.5 py-1 text-xs font-semibold uppercase tracking-wide rounded-md border cursor-help ${config.color}`}
-            title={config.description}
-          >
-            {config.icon && <span className="mr-1">{config.icon}</span>}
-            {config.label}
-          </span>
+          <div className="relative group">
+            <span 
+              className={`px-2.5 py-1 text-xs font-semibold uppercase tracking-wide rounded-md border cursor-help ${config.color}`}
+            >
+              {config.icon && <span className="mr-1">{config.icon}</span>}
+              {config.label}
+            </span>
+            {/* Tooltip */}
+            <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover:block">
+              <div className="bg-surface-900 text-white text-xs px-3 py-2 rounded-lg shadow-lg max-w-[200px] whitespace-normal">
+                {config.description}
+                <div className="absolute -top-1 left-4 w-2 h-2 bg-surface-900 rotate-45"></div>
+              </div>
+            </div>
+          </div>
           
           {/* Branch Button */}
           {onBranch && (

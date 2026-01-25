@@ -528,6 +528,71 @@ export default function SubmissionDetailPage() {
     setShowMaterialModal(ref);
   }, []);
 
+  // Check if questions need diversity and auto-regenerate
+  const needsDiverseQuestions = useMemo(() => {
+    if (!submission?.questions || submission.questions.length === 0) return false;
+    
+    // Normalize categories for comparison
+    const normalizeCategory = (cat: string) => {
+      const lower = cat.toLowerCase().trim();
+      const mappings: Record<string, string> = {
+        'critical-thinking': 'assumption',
+        'criticalthinking': 'assumption',
+        'clarifying': 'clarification',
+        'expansion': 'synthesis',
+        'basic': 'evidence',
+        'intermediate': 'application',
+        'advanced': 'synthesis',
+      };
+      return mappings[lower] || lower;
+    };
+    
+    const categories = submission.questions.map(q => normalizeCategory(q.category));
+    const uniqueCategories = new Set(categories);
+    
+    // If all questions have the same category, we need diversity
+    return uniqueCategories.size === 1 && submission.questions.length >= 3;
+  }, [submission?.questions]);
+
+  // Auto-regenerate if questions lack diversity
+  const [hasAutoRegenerated, setHasAutoRegenerated] = useState(false);
+  
+  useEffect(() => {
+    if (needsDiverseQuestions && !hasAutoRegenerated && !isRegenerating && sortedSegments.length > 0) {
+      console.log('[Auto-Regenerate] Questions lack diversity, regenerating with 5 diverse categories...');
+      setHasAutoRegenerated(true);
+      
+      const fullTranscript = sortedSegments.map(s => s.text).join(' ');
+      if (fullTranscript.length >= 50) {
+        setIsRegenerating(true);
+        fetch('/api/generate-questions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: submissionId,
+            context: { transcript: fullTranscript },
+            settings: { maxQuestions: 5 },
+          }),
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success && data.questions?.length > 0) {
+              setSubmission(prev => prev ? {
+                ...prev,
+                questions: data.questions.map((q: { id: string; question: string; category: string }) => ({
+                  id: q.id,
+                  question: q.question,
+                  category: q.category,
+                })),
+              } : null);
+            }
+          })
+          .catch(err => console.error('[Auto-Regenerate] Error:', err))
+          .finally(() => setIsRegenerating(false));
+      }
+    }
+  }, [needsDiverseQuestions, hasAutoRegenerated, isRegenerating, sortedSegments, submissionId]);
+
   // Regenerate questions with the selected count
   const handleRegenerateQuestions = useCallback(async () => {
     if (!submission || isRegenerating) return;
