@@ -76,36 +76,51 @@ export const mockSubmissionData = {
     },
   ],
   
-  // Questions for QuestionCard
+  // Questions for QuestionCard - one of each type
   questions: [
     {
-      category: 'basic' as const,
+      category: 'evidence' as const,
       question: `You mentioned that customer acquisition costs have been volatile since 
-        early 2022. Can you specify which specific platforms showed the highest 
-        volatility index according to your research?`,
+        early 2022. What specific data or sources support this claim?`,
       context: {
         text: 'Referenced during the slide on customer acquisition costs at',
         timestamps: ['00:45'],
       },
     },
     {
-      category: 'intermediate' as const,
-      question: `How does the lack of a personalized onboarding flow in Company X's 
-        product directly create an opportunity for your proposed solution, and what 
-        risks are involved in focusing solely on this differentiator?`,
+      category: 'assumption' as const,
+      question: `You seem to assume that personalized onboarding is what customers want most. 
+        What if enterprise clients prioritize integration capabilities instead?`,
       context: {
         text: 'Based on the Competitor Analysis segment at',
         timestamps: ['02:45'],
       },
     },
     {
-      category: 'advanced' as const,
-      question: `Given the market volatility and steady LTV you discovered, how would 
-        you justify the budget allocation for Phase 2 if acquisition costs were to 
-        unexpectedly rise by another 15% next quarter?`,
+      category: 'counterargument' as const,
+      question: `How would you respond to someone who argues that the market volatility 
+        you identified is actually a temporary trend rather than a structural shift?`,
       context: {
-        text: 'Synthesized from Q3 results',
-        timestamps: ['02:10', '03:30'],
+        text: 'Synthesized from Q3 results at',
+        timestamps: ['02:10'],
+      },
+    },
+    {
+      category: 'limitation' as const,
+      question: `What are the key limitations of your competitive analysis? Are there 
+        market segments or competitors you didn't consider?`,
+      context: {
+        text: 'Based on competitive landscape discussion at',
+        timestamps: ['03:30'],
+      },
+    },
+    {
+      category: 'methodology' as const,
+      question: `Why did you choose to focus on acquisition cost trends rather than 
+        retention metrics as your primary success indicator?`,
+      context: {
+        text: 'Referenced during methodology explanation at',
+        timestamps: ['01:15'],
       },
     },
   ],
