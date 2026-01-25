@@ -36,86 +36,105 @@ interface QuestionCardProps {
   isBranching?: boolean;
 }
 
-const categoryConfig: Record<string, { label: string; color: string; icon?: string }> = {
+const categoryConfig: Record<string, { label: string; color: string; icon?: string; description: string }> = {
   // New comprehensive categories
   clarification: {
     label: 'Clarification',
     color: 'bg-blue-100 text-blue-700 border-blue-200',
     icon: '❓',
+    description: 'Seeks clearer explanation of concepts or terminology',
   },
   evidence: {
     label: 'Evidence Request',
     color: 'bg-purple-100 text-purple-700 border-purple-200',
     icon: '📊',
+    description: 'Requests proof, data, citations, or sources to support claims',
   },
   assumption: {
     label: 'Assumption Challenge',
     color: 'bg-orange-100 text-orange-700 border-orange-200',
     icon: '🔍',
+    description: 'Challenges underlying premises or unstated beliefs',
   },
   counterargument: {
     label: 'Counterargument',
     color: 'bg-red-100 text-red-700 border-red-200',
     icon: '⚔️',
+    description: 'Tests ability to defend against opposing viewpoints',
   },
   application: {
     label: 'Application',
     color: 'bg-green-100 text-green-700 border-green-200',
     icon: '🌍',
+    description: 'Tests practical transfer to real-world scenarios',
   },
   synthesis: {
     label: 'Synthesis',
     color: 'bg-teal-100 text-teal-700 border-teal-200',
     icon: '🔗',
+    description: 'Tests integration and connection of multiple concepts',
   },
   evaluation: {
     label: 'Evaluation',
     color: 'bg-indigo-100 text-indigo-700 border-indigo-200',
     icon: '⚖️',
+    description: 'Tests judgment, critique, and assessment abilities',
   },
   methodology: {
     label: 'Methodology',
     color: 'bg-cyan-100 text-cyan-700 border-cyan-200',
     icon: '🔬',
+    description: 'Questions process decisions and research approaches',
   },
   limitation: {
     label: 'Limitation',
     color: 'bg-amber-100 text-amber-700 border-amber-200',
     icon: '⚠️',
+    description: 'Explores boundaries, edge cases, and constraints',
   },
   implication: {
     label: 'Implication',
     color: 'bg-pink-100 text-pink-700 border-pink-200',
     icon: '🚀',
+    description: 'Explores future consequences and next steps',
   },
-  // Legacy categories
+  // Legacy categories (kept for backwards compatibility, mapped to new ones)
   clarifying: {
-    label: 'Clarifying',
+    label: 'Clarification',
     color: 'bg-blue-100 text-blue-700 border-blue-200',
     icon: '❓',
+    description: 'Seeks clearer explanation of concepts or terminology',
   },
   'critical-thinking': {
-    label: 'Critical Thinking',
+    label: 'Assumption Challenge',
     color: 'bg-orange-100 text-orange-700 border-orange-200',
-    icon: '🧠',
+    icon: '🔍',
+    description: 'Challenges underlying premises or unstated beliefs',
   },
   expansion: {
-    label: 'Expansion',
-    color: 'bg-green-100 text-green-700 border-green-200',
-    icon: '🌱',
+    label: 'Synthesis',
+    color: 'bg-teal-100 text-teal-700 border-teal-200',
+    icon: '🔗',
+    description: 'Tests integration and connection of multiple concepts',
   },
   // Difficulty-based (backwards compatibility)
   basic: {
-    label: 'Basic Recall',
-    color: 'bg-blue-100 text-blue-700 border-blue-200',
+    label: 'Evidence Request',
+    color: 'bg-purple-100 text-purple-700 border-purple-200',
+    icon: '📊',
+    description: 'Requests proof, data, citations, or sources to support claims',
   },
   intermediate: {
-    label: 'Intermediate Analysis',
-    color: 'bg-amber-100 text-amber-700 border-amber-200',
+    label: 'Application',
+    color: 'bg-green-100 text-green-700 border-green-200',
+    icon: '🌍',
+    description: 'Tests practical transfer to real-world scenarios',
   },
   advanced: {
-    label: 'Advanced Synthesis',
-    color: 'bg-violet-100 text-violet-700 border-violet-200',
+    label: 'Synthesis',
+    color: 'bg-teal-100 text-teal-700 border-teal-200',
+    icon: '🔗',
+    description: 'Tests integration and connection of multiple concepts',
   },
 };
 
@@ -190,7 +209,10 @@ export default function QuestionCard({
       {/* Category Badge, Branch Button & AI Rationale Available */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className={`px-2.5 py-1 text-xs font-semibold uppercase tracking-wide rounded-md border ${config.color}`}>
+          <span 
+            className={`px-2.5 py-1 text-xs font-semibold uppercase tracking-wide rounded-md border cursor-help ${config.color}`}
+            title={config.description}
+          >
             {config.icon && <span className="mr-1">{config.icon}</span>}
             {config.label}
           </span>
