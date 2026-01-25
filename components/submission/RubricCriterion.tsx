@@ -1,8 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { ChevronDown, Sparkles } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { ChevronDown, Sparkles, FileText, Loader2, ChevronRight, Lightbulb } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+interface EvidenceItem {
+  timestamp?: string;
+  quote: string;
+  analysis: string;
+}
 
 interface RubricCriterionProps {
   index: number;
@@ -11,8 +17,10 @@ interface RubricCriterionProps {
   maxScore: number;
   scaleLabels?: [string, string, string];
   rationale?: string;
+  evidence?: EvidenceItem[];
   onScoreChange?: (score: number) => void;
   onRationaleChange?: (rationale: string) => void;
+  onRequestInsights?: (criterionName: string) => Promise<string>;
 }
 
 export default function RubricCriterion({
@@ -22,11 +30,32 @@ export default function RubricCriterion({
   maxScore,
   scaleLabels = ['Poor', 'Average', 'Excellent'],
   rationale = '',
+  evidence = [],
   onScoreChange,
   onRationaleChange,
+  onRequestInsights,
 }: RubricCriterionProps) {
   const [isExpanded, setIsExpanded] = useState(index === 0);
+  const [isLoadingInsights, setIsLoadingInsights] = useState(false);
+  const [additionalInsights, setAdditionalInsights] = useState<string | null>(null);
+  const [showInsights, setShowInsights] = useState(false);
   const percentage = (score / maxScore) * 100;
+  
+  const handleRequestInsights = useCallback(async () => {
+    if (!onRequestInsights || isLoadingInsights) return;
+    
+    setIsLoadingInsights(true);
+    setShowInsights(true);
+    try {
+      const insights = await onRequestInsights(name);
+      setAdditionalInsights(insights);
+    } catch (err) {
+      console.error('Failed to get insights:', err);
+      setAdditionalInsights('Failed to load additional insights. Please try again.');
+    } finally {
+      setIsLoadingInsights(false);
+    }
+  }, [name, onRequestInsights, isLoadingInsights]);
 
   return (
     <div className="border border-surface-200 rounded-xl overflow-hidden">
@@ -102,6 +131,73 @@ export default function RubricCriterion({
                   </button>
                 </div>
               </div>
+
+              {/* Evidence in Presentation */}
+              {evidence && evidence.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold text-surface-500 uppercase tracking-wide flex items-center gap-1.5 mb-2">
+                    <FileText className="w-3.5 h-3.5" />
+                    Evidence in Presentation
+                  </label>
+                  <div className="space-y-2">
+                    {evidence.map((item, i) => (
+                      <div key={i} className="bg-surface-50 rounded-lg p-3 border border-surface-100">
+                        <div className="flex items-start gap-2">
+                          {item.timestamp && (
+                            <span className="text-xs font-mono text-primary-600 bg-primary-50 px-1.5 py-0.5 rounded">
+                              {item.timestamp}
+                            </span>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-surface-700 italic mb-1">&ldquo;{item.quote}&rdquo;</p>
+                            <p className="text-xs text-surface-500">{item.analysis}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Expand for Additional Insights */}
+              {onRequestInsights && (
+                <div className="pt-2 border-t border-surface-100">
+                  <button
+                    onClick={handleRequestInsights}
+                    disabled={isLoadingInsights}
+                    className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
+                  >
+                    {isLoadingInsights ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Lightbulb className="w-4 h-4" />
+                    )}
+                    {isLoadingInsights ? 'Loading insights...' : showInsights ? 'Refresh Insights' : 'Get Additional Insights'}
+                    {!isLoadingInsights && !showInsights && <ChevronRight className="w-3 h-3" />}
+                  </button>
+                  
+                  {/* Additional Insights Panel */}
+                  <AnimatePresence>
+                    {showInsights && additionalInsights && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="mt-3 p-3 bg-amber-50 border border-amber-100 rounded-lg">
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Lightbulb className="w-4 h-4 text-amber-600" />
+                            <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">AI Insights</span>
+                          </div>
+                          <p className="text-sm text-amber-900 whitespace-pre-wrap">{additionalInsights}</p>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
             </div>
           </motion.div>
         )}

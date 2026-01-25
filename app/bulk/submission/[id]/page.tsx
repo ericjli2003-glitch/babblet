@@ -548,6 +548,33 @@ export default function SubmissionDetailPage() {
     setShowMaterialModal(ref);
   }, []);
 
+  // Request additional insights for a rubric criterion
+  const handleRequestCriterionInsights = useCallback(async (criterionTitle: string): Promise<string> => {
+    const fullTranscript = sortedSegments.length > 0 
+      ? sortedSegments.map(s => s.text).join(' ')
+      : submission?.transcript || '';
+    
+    const response = await fetch('/api/contextual-chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: `Provide detailed insights about how this student performed on the "${criterionTitle}" criterion. What did they do well? What could be improved? Give specific, actionable feedback.`,
+        context: {
+          highlightedText: criterionTitle,
+          sourceType: 'rubric',
+          rubricCriterion: criterionTitle,
+        },
+        conversationHistory: [],
+      }),
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+      return data.response;
+    }
+    throw new Error(data.error || 'Failed to get insights');
+  }, [submission, sortedSegments]);
+
   // Regenerate questions with the selected count
   const handleRegenerateQuestions = useCallback(async () => {
     if (!submission || isRegenerating) return;
@@ -1332,12 +1359,16 @@ export default function SubmissionDetailPage() {
                                     : undefined
                                 }
                                 evidence={
-                                  submission.transcriptSegments?.slice(i * 2, i * 2 + 2).map(seg => ({
+                                  submission.transcriptSegments?.slice(i * 2, i * 2 + 2).map((seg, segIdx) => ({
                                     timestamp: formatTimestamp(seg.timestamp),
                                     text: seg.text.slice(0, 100) + (seg.text.length > 100 ? '...' : ''),
+                                    analysis: segIdx === 0 
+                                      ? `This segment demonstrates the student's approach to ${c.criterion.toLowerCase()}.`
+                                      : `Additional context showing ${percentage >= 75 ? 'proficiency' : 'areas for growth'} in this criterion.`,
                                   }))
                                 }
                                 onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
+                                onRequestMoreInsights={handleRequestCriterionInsights}
                               />
                             </HighlightableContent>
                           );
@@ -1355,10 +1386,11 @@ export default function SubmissionDetailPage() {
                             courseAlignment={92}
                             defaultExpanded={true}
                             evidence={[
-                              { timestamp: '0:45', text: 'Correctly defined the core terminology and provided accurate examples...' },
-                              { timestamp: '2:15', text: 'Referenced the textbook framework effectively...' },
+                              { timestamp: '0:45', text: 'Correctly defined the core terminology and provided accurate examples...', analysis: 'Shows mastery of foundational concepts with clear, accurate explanations.' },
+                              { timestamp: '2:15', text: 'Referenced the textbook framework effectively...', analysis: 'Demonstrates ability to connect course materials to practical application.' },
                             ]}
                             onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
+                            onRequestMoreInsights={handleRequestCriterionInsights}
                           />
                           <ClassInsightCard
                             title="Presentation Structure"
@@ -1374,9 +1406,10 @@ export default function SubmissionDetailPage() {
                               linkUrl: '/resources',
                             }}
                             evidence={[
-                              { timestamp: '0:15', text: 'Strong opening that captured attention...' },
+                              { timestamp: '0:15', text: 'Strong opening that captured attention...', analysis: 'Effective hook that engages the audience immediately.' },
                             ]}
                             onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
+                            onRequestMoreInsights={handleRequestCriterionInsights}
                           />
                           <ClassInsightCard
                             title="Visual Aid Usage"
@@ -1391,6 +1424,7 @@ export default function SubmissionDetailPage() {
                               linkText: 'Visual Presentation Tips',
                               linkUrl: '/resources',
                             }}
+                            onRequestMoreInsights={handleRequestCriterionInsights}
                             onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
                           />
                         </>

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { ChevronDown, BookOpen, Lightbulb, ExternalLink, PlayCircle, CheckCircle, AlertTriangle, Target } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { ChevronDown, BookOpen, Lightbulb, ExternalLink, PlayCircle, CheckCircle, AlertTriangle, Target, Loader2, Sparkles, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface ClassInsightCardProps {
@@ -19,10 +19,12 @@ interface ClassInsightCardProps {
   evidence?: Array<{
     timestamp: string;
     text: string;
+    analysis?: string; // Explanation of how this evidence relates to the criterion
   }>;
   courseAlignment?: number;
   defaultExpanded?: boolean;
   onSeekToTime?: (timeMs: number) => void;
+  onRequestMoreInsights?: (criterionTitle: string) => Promise<string>;
 }
 
 function parseTimestamp(ts: string): number {
@@ -78,10 +80,28 @@ export default function ClassInsightCard({
   courseAlignment,
   defaultExpanded = false,
   onSeekToTime,
+  onRequestMoreInsights,
 }: ClassInsightCardProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [isLoadingInsights, setIsLoadingInsights] = useState(false);
+  const [additionalInsights, setAdditionalInsights] = useState<string | null>(null);
   const config = statusConfig[status];
   const StatusIcon = config.icon;
+  
+  const handleRequestInsights = useCallback(async () => {
+    if (!onRequestMoreInsights || isLoadingInsights) return;
+    
+    setIsLoadingInsights(true);
+    try {
+      const insights = await onRequestMoreInsights(title);
+      setAdditionalInsights(insights);
+    } catch (err) {
+      console.error('Failed to get insights:', err);
+      setAdditionalInsights('Unable to load additional insights. Please try again.');
+    } finally {
+      setIsLoadingInsights(false);
+    }
+  }, [title, onRequestMoreInsights, isLoadingInsights]);
 
   return (
     <div className={`bg-white rounded-2xl border ${config.borderColor} overflow-hidden`}>
@@ -159,25 +179,74 @@ export default function ClassInsightCard({
                     <PlayCircle className="w-3.5 h-3.5" />
                     Evidence in Presentation
                   </p>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {evidence.map((e, idx) => (
                       <div
                         key={idx}
-                        className="flex items-start gap-3 p-3 bg-surface-50 rounded-lg group"
+                        className="p-3 bg-surface-50 rounded-lg border border-surface-100"
                       >
-                        <button
-                          onClick={(ev) => {
-                            ev.stopPropagation();
-                            onSeekToTime?.(parseTimestamp(e.timestamp));
-                          }}
-                          className="px-2 py-1 bg-primary-100 text-primary-700 text-xs font-mono font-medium rounded hover:bg-primary-200 transition-colors"
-                        >
-                          {e.timestamp}
-                        </button>
-                        <p className="text-sm text-surface-600 flex-1">{e.text}</p>
+                        <div className="flex items-start gap-3">
+                          <button
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              onSeekToTime?.(parseTimestamp(e.timestamp));
+                            }}
+                            className="px-2 py-1 bg-primary-100 text-primary-700 text-xs font-mono font-medium rounded hover:bg-primary-200 transition-colors flex-shrink-0"
+                          >
+                            {e.timestamp}
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-surface-700 italic mb-1">&ldquo;{e.text}&rdquo;</p>
+                            {e.analysis && (
+                              <p className="text-xs text-surface-500 mt-2 pl-3 border-l-2 border-primary-200">
+                                <span className="font-medium text-primary-600">Analysis:</span> {e.analysis}
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Get More Insights Button */}
+              {onRequestMoreInsights && (
+                <div className="pt-3 border-t border-surface-100">
+                  <button
+                    onClick={handleRequestInsights}
+                    disabled={isLoadingInsights}
+                    className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
+                  >
+                    {isLoadingInsights ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4" />
+                    )}
+                    {isLoadingInsights ? 'Generating insights...' : additionalInsights ? 'Refresh Insights' : 'Get More Insights'}
+                    {!isLoadingInsights && !additionalInsights && <ChevronRight className="w-3 h-3" />}
+                  </button>
+                  
+                  {/* Additional Insights Panel */}
+                  <AnimatePresence>
+                    {additionalInsights && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="mt-3 p-4 bg-gradient-to-r from-primary-50 to-blue-50 border border-primary-100 rounded-xl">
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Sparkles className="w-4 h-4 text-primary-600" />
+                            <span className="text-xs font-semibold text-primary-700 uppercase tracking-wide">AI-Generated Insights</span>
+                          </div>
+                          <p className="text-sm text-surface-800 whitespace-pre-wrap leading-relaxed">{additionalInsights}</p>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               )}
 
