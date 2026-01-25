@@ -75,15 +75,13 @@ function normalizeDifficulty(value: unknown): GeneratedQuestion['difficulty'] {
   return 'medium';
 }
 
-// All valid question categories (new + legacy)
+// All valid question categories (only the new comprehensive categories)
 const VALID_CATEGORIES: GeneratedQuestion['category'][] = [
-  // New comprehensive categories
-  'clarification', 'evidence', 'assumption', 'counterargument', 
-  'application', 'synthesis', 'evaluation', 'methodology', 
-  'limitation', 'implication',
-  // Legacy categories
-  'clarifying', 'critical-thinking', 'expansion'
+  'evidence', 'assumption', 'counterargument', 'limitation', 'methodology',
+  'application', 'evaluation', 'synthesis', 'implication', 'clarification'
 ];
+// Note: Legacy categories like 'critical-thinking', 'clarifying', 'expansion' 
+// are mapped to new categories in normalizeCategory()
 
 function normalizeCategory(value: unknown): GeneratedQuestion['category'] {
   const strVal = String(value).toLowerCase().trim();
@@ -93,11 +91,19 @@ function normalizeCategory(value: unknown): GeneratedQuestion['category'] {
     return strVal as GeneratedQuestion['category'];
   }
   
-  // Handle variations and mappings
+  // Handle variations and mappings (including legacy categories)
   const mappings: Record<string, GeneratedQuestion['category']> = {
+    // Legacy category mappings
+    'critical-thinking': 'assumption',
     'criticalthinking': 'assumption',
     'critical_thinking': 'assumption',
     'critical thinking': 'assumption',
+    'clarifying': 'clarification',
+    'expansion': 'synthesis',
+    'basic': 'evidence',
+    'intermediate': 'application',
+    'advanced': 'synthesis',
+    // Variations
     'challenge': 'assumption',
     'counter': 'counterargument',
     'counter-argument': 'counterargument',
