@@ -1090,19 +1090,36 @@ export default function SubmissionDetailPage() {
                         // Get a brief context description from the segment
                         const segmentPreview = segment?.text?.slice(0, 60) || q.category.replace('-', ' ');
                         
-                        // Check if this is a branched question
+                        // Check if this is a branched question and calculate depth
                         const isBranchedQuestion = (q as any).isBranched || (q as any).parentId;
+                        
+                        // Calculate branch depth by following parent chain
+                        const getBranchDepth = (questionId: string, questions: typeof submission.questions, depth = 0): number => {
+                          const question = questions?.find(q => q.id === questionId);
+                          const parentId = (question as any)?.parentId;
+                          if (!parentId || depth > 5) return depth; // Max depth of 5
+                          return getBranchDepth(parentId, questions, depth + 1);
+                        };
+                        const branchDepth = isBranchedQuestion ? getBranchDepth(q.id, submission.questions) : 0;
+                        
+                        // Progressive indentation based on depth (max 3 levels visually)
+                        const indentClass = branchDepth > 0 ? `ml-${Math.min(branchDepth, 3) * 6}` : '';
+                        
+                        // Lighter blue for deeper branches
+                        const bgColors = ['', 'bg-blue-50/60', 'bg-blue-50/40', 'bg-blue-50/25'];
+                        const bgClass = branchDepth > 0 ? bgColors[Math.min(branchDepth, 3)] : '';
                         
                         return (
                           <div 
                             key={q.id}
-                            className={isBranchedQuestion ? 'ml-8 relative' : ''}
+                            className={`${indentClass} relative`}
+                            style={{ marginLeft: branchDepth > 0 ? `${Math.min(branchDepth, 3) * 24}px` : '0' }}
                           >
                             {/* Connector line for branched questions */}
                             {isBranchedQuestion && (
-                              <div className="absolute -left-4 top-6 w-4 h-px bg-blue-200" />
+                              <div className="absolute -left-3 top-6 w-3 h-px bg-blue-200" />
                             )}
-                            <div className={isBranchedQuestion ? 'bg-blue-50/50 rounded-xl border border-blue-100 p-1' : ''}>
+                            <div className={isBranchedQuestion ? `${bgClass} rounded-xl border border-blue-100/80 p-1` : ''}>
                               <HighlightableContent
                                 sourceType="question"
                                 sourceId={q.id}
@@ -1120,7 +1137,7 @@ export default function SubmissionDetailPage() {
                               materialReferences={q.materialReferences}
                               externalSources={(q as any).externalSources}
                               onMaterialClick={handleMaterialClick}
-                              onBranch={isBranchedQuestion ? undefined : (count, customization) => handleBranchQuestion(q.id, count, customization)}
+                              onBranch={(count, customization) => handleBranchQuestion(q.id, count, customization)}
                                   isBranching={branchingQuestionId === q.id}
                                   onTimestampClick={(ts) => {
                                     const parts = ts.split(':').map(Number);
