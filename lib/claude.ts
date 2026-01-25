@@ -28,6 +28,14 @@ interface SlideContent {
   topics?: string[];
 }
 
+// Course material reference type
+interface CourseMaterial {
+  id: string;
+  name: string;
+  type: string;
+  rawText: string;
+}
+
 // Question generation settings from user
 interface QuestionGenSettings {
   maxQuestions?: number;
@@ -56,6 +64,10 @@ interface QuestionGenSettings {
   };
   focusAreas?: string[];
   existingQuestions?: string[];
+  // Targeted generation: ONLY generate questions from these categories
+  targetCategories?: string[];
+  // Course materials for grounding questions
+  courseMaterials?: CourseMaterial[];
 }
 
 function normalizeDifficulty(value: unknown): GeneratedQuestion['difficulty'] {
@@ -317,6 +329,14 @@ export async function generateQuestionsWithClaude(
   };
   const priorityGuidance = buildPriorityGuidance();
 
+  // Build targeted categories constraint
+  const targetedCategoriesGuidance = settings?.targetCategories?.length 
+    ? `\n\n**IMPORTANT - TARGETED GENERATION MODE**:
+You MUST generate questions ONLY from these specific categories: ${settings.targetCategories.join(', ')}.
+Do NOT use any other categories. Every question must belong to one of: ${settings.targetCategories.join(', ')}.
+This is a strict requirement - the user has specifically requested these question types.`
+    : '';
+
   const systemPrompt = `You are an expert educational AI assistant helping professors generate diverse, high-signal, rubric-aligned questions during student presentations.
 
 QUESTION CATEGORIES (use these exact category values):
@@ -351,7 +371,7 @@ ${settings.rubricCriteria}` : ''}
 
 ${settings?.focusAreas?.length ? `
 FOCUS AREAS (emphasize these topics):
-${settings.focusAreas.join(', ')}` : ''}`;
+${settings.focusAreas.join(', ')}` : ''}${targetedCategoriesGuidance}`;
 
   // Build slide context section
   let slideContextSection = '';
@@ -361,6 +381,22 @@ PRESENTATION SLIDES CONTENT:
 ${slideContent.text ? `- Slide Text: ${slideContent.text}` : ''}
 ${slideContent.keyPoints?.length ? `- Key Points from Slides: ${slideContent.keyPoints.join('; ')}` : ''}
 ${slideContent.topics?.length ? `- Topics Covered in Slides: ${slideContent.topics.join('; ')}` : ''}
+`;
+  }
+
+  // Build course materials section for grounding questions
+  let courseMaterialsSection = '';
+  const courseMaterials = settings?.courseMaterials;
+  if (courseMaterials && courseMaterials.length > 0) {
+    courseMaterialsSection = `
+COURSE MATERIALS (Ground your questions in these materials and provide references):
+${courseMaterials.map((m, i) => `[${i + 1}] ${m.name} (${m.type}):
+${m.rawText.substring(0, 800)}...`).join('\n\n')}
+
+MATERIAL REFERENCE REQUIREMENT:
+- For each question, if it relates to course material, include a "materialReferences" array
+- Each reference should have: { "refIndex": number, "excerpt": "short relevant quote from material" }
+- This helps instructors see how questions align with course content
 `;
   }
 
@@ -413,6 +449,7 @@ ANALYSIS CONTEXT:
 - Missing Evidence: ${analysis.missingEvidence.map(e => e.description).join('; ')}
 ` : ''}
 ${slideContextSection}
+${courseMaterialsSection}
 ${existingQuestionsSection}
 
 Return ONLY questions that are genuinely valuable. If nothing new warrants a question, return an empty array.
@@ -442,9 +479,13 @@ GOOD examples (precise):
 - "social cognition nobody's mastered"
 
 CATEGORY DIVERSITY REQUIREMENT:
-- For ${returnCount} questions, use at least ${Math.min(Math.ceil(returnCount / 2), 5)} different categories
+${settings?.targetCategories?.length 
+  ? `- **TARGETED MODE**: Generate ALL ${returnCount} questions from ONLY these categories: ${settings.targetCategories.join(', ')}
+- Distribute questions evenly across the selected categories if multiple are specified
+- Every single question MUST have its category set to one of: ${settings.targetCategories.join(', ')}`
+  : `- For ${returnCount} questions, use at least ${Math.min(Math.ceil(returnCount / 2), 5)} different categories
 - Avoid having more than 2 questions of the same category unless specifically requested
-- Prefer challenging categories (evidence, assumption, counterargument, limitation, methodology) over clarification
+- Prefer challenging categories (evidence, assumption, counterargument, limitation, methodology) over clarification`}
 
 JSON format:
 {
@@ -460,10 +501,13 @@ JSON format:
       "expectedEvidenceType": "If applicable: specific evidence type to request (short)",
       "tags": ["evidence" | "assumption" | "counterargument" | "definition" | "mechanism" | "limitations" | "methods" | "clarity"],
       "score": 0-100,
-      "relevantSnippet": "5-15 word EXACT quote from transcript - be precise!"
+      "relevantSnippet": "5-15 word EXACT quote from transcript - be precise!",
+      "materialReferences": [{ "refIndex": 1, "excerpt": "short relevant quote from course material" }]
     }
   ]
 }
+
+Note: "materialReferences" is optional - only include if the question directly relates to provided course materials.
 
 Respond ONLY with valid JSON.`;
 
@@ -498,21 +542,38 @@ Respond ONLY with valid JSON.`;
 
     const parsed = JSON.parse(jsonMatch[0]);
 
-    const rawQuestions: GeneratedQuestion[] = (parsed.questions || []).map((q: any) => ({
-      id: uuidv4(),
-      question: String(q.question || '').trim(),
-      category: normalizeCategory(q.category),
-      difficulty: normalizeDifficulty(q.difficulty),
-      rationale: typeof q.rationale === 'string' ? q.rationale : '',
-      rubricCriterion: typeof q.rubricCriterion === 'string' ? q.rubricCriterion : undefined,
-      rubricJustification: typeof q.rubricJustification === 'string' ? q.rubricJustification : undefined,
-      bloomLevel: typeof q.bloomLevel === 'string' ? q.bloomLevel : undefined,
-      expectedEvidenceType: typeof q.expectedEvidenceType === 'string' ? q.expectedEvidenceType : undefined,
-      score: typeof q.score === 'number' ? q.score : undefined,
-      tags: Array.isArray(q.tags) ? q.tags.map((t: any) => String(t)) : undefined,
-      relevantSnippet: typeof q.relevantSnippet === 'string' ? q.relevantSnippet : '',
-      timestamp: Date.now(),
-    })).filter((q: GeneratedQuestion) => q.question.length > 0);
+    const rawQuestions: GeneratedQuestion[] = (parsed.questions || []).map((q: any) => {
+      // Parse material references if present
+      let materialRefs = undefined;
+      if (Array.isArray(q.materialReferences) && courseMaterials && courseMaterials.length > 0) {
+        materialRefs = q.materialReferences
+          .filter((ref: any) => ref.refIndex && ref.refIndex <= courseMaterials.length)
+          .map((ref: any) => ({
+            id: uuidv4(),
+            name: courseMaterials[ref.refIndex - 1]?.name || 'Course Material',
+            type: courseMaterials[ref.refIndex - 1]?.type || 'other',
+            excerpt: typeof ref.excerpt === 'string' ? ref.excerpt : '',
+            documentId: courseMaterials[ref.refIndex - 1]?.id,
+          }));
+      }
+      
+      return {
+        id: uuidv4(),
+        question: String(q.question || '').trim(),
+        category: normalizeCategory(q.category),
+        difficulty: normalizeDifficulty(q.difficulty),
+        rationale: typeof q.rationale === 'string' ? q.rationale : '',
+        rubricCriterion: typeof q.rubricCriterion === 'string' ? q.rubricCriterion : undefined,
+        rubricJustification: typeof q.rubricJustification === 'string' ? q.rubricJustification : undefined,
+        bloomLevel: typeof q.bloomLevel === 'string' ? q.bloomLevel : undefined,
+        expectedEvidenceType: typeof q.expectedEvidenceType === 'string' ? q.expectedEvidenceType : undefined,
+        score: typeof q.score === 'number' ? q.score : undefined,
+        tags: Array.isArray(q.tags) ? q.tags.map((t: any) => String(t)) : undefined,
+        relevantSnippet: typeof q.relevantSnippet === 'string' ? q.relevantSnippet : '',
+        materialReferences: materialRefs && materialRefs.length > 0 ? materialRefs : undefined,
+        timestamp: Date.now(),
+      };
+    }).filter((q: GeneratedQuestion) => q.question.length > 0);
 
     // Enforce novelty + dedupe + diversity on our side too (belt-and-suspenders)
     const existing = settings?.existingQuestions || [];
@@ -524,6 +585,123 @@ Respond ONLY with valid JSON.`;
   } catch (error) {
     console.error('[Babblet AI] Question generation error:', error);
     throw error;
+  }
+}
+
+// Generate branch questions (similar to an existing question)
+export async function generateBranchQuestions(
+  originalQuestion: string,
+  originalCategory: string,
+  transcript: string,
+  count: number = 2,
+  courseMaterials?: CourseMaterial[],
+  customization?: string
+): Promise<GeneratedQuestion[]> {
+  const client = getAnthropicClient();
+
+  // Build course materials context
+  let materialsContext = '';
+  if (courseMaterials && courseMaterials.length > 0) {
+    materialsContext = `\n\nCOURSE MATERIALS (use these to ground your questions and provide references):
+${courseMaterials.map((m, i) => `[${i + 1}] ${m.name} (${m.type}): ${m.rawText.substring(0, 500)}...`).join('\n\n')}
+
+IMPORTANT: When a question relates to course material, include a "materialReferences" array with objects like:
+{ "refIndex": 1, "excerpt": "relevant quote from material" }
+`;
+  }
+
+  // Build customization instruction
+  const customizationInstruction = customization 
+    ? `\n\nUSER CUSTOMIZATION REQUEST:\nThe instructor has requested the following modification to the questions: "${customization}"\nMake sure your generated questions incorporate this feedback while staying related to the original question's topic.`
+    : '';
+
+  const systemPrompt = `You are an expert educational AI. Your task is to generate additional questions similar to a given question, but exploring different angles, depths, or aspects of the same topic.
+
+The questions should:
+1. Explore the SAME topic or concept as the original question
+2. Use the same category (${originalCategory}) or closely related categories
+3. Probe different aspects, go deeper, or approach from a different angle
+4. Be grounded in the transcript content
+5. If course materials are provided, reference them where relevant
+${customization ? `6. Incorporate the instructor's customization request: "${customization}"` : ''}
+
+${materialsContext}`;
+
+  const userPrompt = `ORIGINAL QUESTION:
+"${originalQuestion}"
+
+CATEGORY: ${originalCategory}
+${customizationInstruction}
+
+TRANSCRIPT:
+${transcript.substring(0, 3000)}
+
+Generate exactly ${count} additional questions that are similar to the original but explore different angles.${customization ? ` Remember to incorporate the customization: "${customization}"` : ''}
+
+Return JSON:
+{
+  "questions": [
+    {
+      "question": "The question text",
+      "category": "${originalCategory}",
+      "difficulty": "easy" | "medium" | "hard",
+      "rationale": "Why this is a good follow-up to the original",
+      "relevantSnippet": "5-15 word quote from transcript",
+      "materialReferences": [{ "refIndex": 1, "excerpt": "relevant quote" }]
+    }
+  ]
+}
+
+Respond ONLY with valid JSON.`;
+
+  try {
+    const response = await client.messages.create({
+      model: config.models.claude,
+      max_tokens: 2048,
+      messages: [{ role: 'user', content: userPrompt }],
+      system: systemPrompt,
+    });
+
+    const textContent = response.content.find(c => c.type === 'text');
+    if (!textContent || textContent.type !== 'text') {
+      return [];
+    }
+
+    // Parse JSON
+    const cleanText = textContent.text
+      .replace(/```json\s*/g, '')
+      .replace(/```\s*/g, '')
+      .trim();
+
+    const parsed = JSON.parse(cleanText);
+    const questions = parsed.questions || [];
+
+    return questions.map((q: { 
+      question: string; 
+      category?: string; 
+      difficulty?: string; 
+      rationale?: string;
+      relevantSnippet?: string;
+      materialReferences?: Array<{ refIndex: number; excerpt: string }>;
+    }) => ({
+      id: uuidv4(),
+      question: q.question,
+      category: normalizeCategory(q.category || originalCategory),
+      difficulty: normalizeDifficulty(q.difficulty),
+      rationale: q.rationale,
+      relevantSnippet: q.relevantSnippet,
+      materialReferences: q.materialReferences?.map(ref => ({
+        id: uuidv4(),
+        name: courseMaterials?.[ref.refIndex - 1]?.name || 'Course Material',
+        type: courseMaterials?.[ref.refIndex - 1]?.type || 'other',
+        excerpt: ref.excerpt,
+        documentId: courseMaterials?.[ref.refIndex - 1]?.id,
+      })),
+      timestamp: Date.now(),
+    }));
+  } catch (error) {
+    console.error('[Babblet AI] Branch question generation error:', error);
+    return [];
   }
 }
 

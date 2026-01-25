@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '@/lib/config';
+import { getCourseDocuments } from '@/lib/context-store';
+import { getSubmission, getBatch } from '@/lib/batch-store';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -29,6 +31,7 @@ interface ChatContext {
   assignmentId?: string;
   submissionId?: string;
   learningObjective?: string;
+  courseId?: string;
 }
 
 interface ConversationMessage {
@@ -37,16 +40,22 @@ interface ConversationMessage {
 }
 
 // Build the system prompt with context
-function buildSystemPrompt(context: ChatContext): string {
+function buildSystemPrompt(context: ChatContext, courseMaterials?: Array<{ name: string; type: string; excerpt: string }>): string {
   const parts: string[] = [
     `You are Babblet, an AI teaching assistant helping instructors analyze and improve student presentations.`,
     ``,
     `RESPONSE GUIDELINES:`,
     `- Keep responses concise: 2-5 sentences for explanations`,
     `- Be instructional, supportive, and neutral in tone`,
-    `- Always ground your explanations in the highlighted text provided`,
+    `- Always ground your explanations in the highlighted text AND course materials when available`,
     `- Never re-grade or modify scores unless explicitly asked`,
     `- Answer ANY question the user asks - there are no restrictions on topics`,
+    `- When referencing course materials, cite them using [1], [2] format`,
+    ``,
+    `COURSE MATERIAL GROUNDING:`,
+    `- Prioritize responses that connect to the uploaded course content`,
+    `- Reference specific concepts, terminology, or frameworks from the course materials`,
+    `- When making recommendations, tie them back to course learning objectives`,
     ``,
     `RECOMMENDATIONS:`,
     `When appropriate (but not always), you MAY include a "RECOMMENDATIONS:" section with 1-3 bullet points.`,
@@ -60,6 +69,17 @@ function buildSystemPrompt(context: ChatContext): string {
     `Only include recommendations if they're relevant. Don't force them.`,
     `Format recommendations as: "RECOMMENDATIONS:\\n• Point 1\\n• Point 2"`,
   ];
+  
+  // Add course materials context
+  if (courseMaterials && courseMaterials.length > 0) {
+    parts.push(``);
+    parts.push(`COURSE MATERIALS (use these to ground your responses):`);
+    courseMaterials.forEach((m, i) => {
+      parts.push(`[${i + 1}] ${m.name} (${m.type}): ${m.excerpt}`);
+    });
+    parts.push(``);
+    parts.push(`IMPORTANT: Reference these materials in your response using [1], [2], etc. when relevant.`);
+  }
   
   // Add context about what was highlighted
   if (context.highlightedText) {
@@ -85,8 +105,23 @@ function buildSystemPrompt(context: ChatContext): string {
   return parts.join('\n');
 }
 
-// Parse response to extract recommendations
-function parseResponse(text: string): { content: string; recommendations: string[] } {
+// Parse response to extract recommendations and material references
+function parseResponse(text: string): { content: string; recommendations: string[]; materialRefs: Array<{ index: number; context: string }> } {
+  // Extract material references like [1], [2] from the text
+  const materialRefs: Array<{ index: number; context: string }> = [];
+  const refRegex = /\[(\d+)\]/g;
+  let match;
+  while ((match = refRegex.exec(text)) !== null) {
+    const index = parseInt(match[1]);
+    // Get surrounding context (50 chars before and after)
+    const start = Math.max(0, match.index - 50);
+    const end = Math.min(text.length, match.index + match[0].length + 50);
+    const context = text.substring(start, end);
+    if (!materialRefs.find(r => r.index === index)) {
+      materialRefs.push({ index, context });
+    }
+  }
+  
   const recommendationsMatch = text.match(/RECOMMENDATIONS:\s*([\s\S]*?)(?:$|\n\n(?=[A-Z]))/i);
   
   if (recommendationsMatch) {
@@ -101,10 +136,10 @@ function parseResponse(text: string): { content: string; recommendations: string
       .replace(/RECOMMENDATIONS:\s*[\s\S]*?(?:$|\n\n(?=[A-Z]))/i, '')
       .trim();
     
-    return { content, recommendations };
+    return { content, recommendations, materialRefs };
   }
   
-  return { content: text, recommendations: [] };
+  return { content: text, recommendations: [], materialRefs };
 }
 
 export async function POST(request: NextRequest) {
@@ -121,6 +156,38 @@ export async function POST(request: NextRequest) {
     }
     
     const client = getAnthropicClient();
+    
+    // Fetch course materials if we have a submissionId or courseId
+    let courseMaterials: Array<{ name: string; type: string; excerpt: string }> = [];
+    let courseId = context.courseId;
+    
+    // If we have a submissionId but no courseId, try to get courseId from the batch
+    if (!courseId && context.submissionId) {
+      try {
+        const submission = await getSubmission(context.submissionId);
+        if (submission?.batchId) {
+          const batch = await getBatch(submission.batchId);
+          courseId = batch?.courseId;
+        }
+      } catch (e) {
+        console.log('[ContextualChat] Could not fetch submission/batch:', e);
+      }
+    }
+    
+    // Fetch course documents
+    if (courseId) {
+      try {
+        const docs = await getCourseDocuments(courseId);
+        courseMaterials = docs.slice(0, 5).map((d: { name: string; type: string; rawText: string }) => ({
+          name: d.name,
+          type: d.type,
+          excerpt: d.rawText.substring(0, 500) + (d.rawText.length > 500 ? '...' : ''),
+        }));
+        console.log('[ContextualChat] Loaded', courseMaterials.length, 'course materials for context');
+      } catch (e) {
+        console.log('[ContextualChat] Could not fetch course materials:', e);
+      }
+    }
     
     // Build messages array
     const messages: { role: 'user' | 'assistant'; content: string }[] = [];
@@ -144,7 +211,7 @@ export async function POST(request: NextRequest) {
     const response = await client.messages.create({
       model: config.models.claude,
       max_tokens: 1024,
-      system: buildSystemPrompt(context),
+      system: buildSystemPrompt(context, courseMaterials),
       messages,
     });
     
@@ -153,12 +220,20 @@ export async function POST(request: NextRequest) {
       : '';
     
     // Parse response to separate content and recommendations
-    const { content, recommendations } = parseResponse(responseText);
+    const { content, recommendations, materialRefs } = parseResponse(responseText);
+    
+    // Map material refs to actual material names
+    const materialReferences = materialRefs.map(ref => ({
+      index: ref.index,
+      name: courseMaterials[ref.index - 1]?.name || `Reference ${ref.index}`,
+      type: courseMaterials[ref.index - 1]?.type || 'material',
+    }));
     
     return NextResponse.json({
       success: true,
       response: content,
       recommendations: recommendations.length > 0 ? recommendations : undefined,
+      materialReferences: materialReferences.length > 0 ? materialReferences : undefined,
     });
   } catch (error) {
     console.error('[ContextualChat] Error:', error);

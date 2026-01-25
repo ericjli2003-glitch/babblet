@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getSession, getFullTranscript, addQuestion, broadcastToSession } from '@/lib/session-store';
 import { generateQuestionsFromTranscript, isOpenAIConfigured } from '@/lib/openai-questions';
-import { generateQuestionsWithClaude, isClaudeConfigured } from '@/lib/claude';
+import { generateQuestionsWithClaude, generateBranchQuestions, isClaudeConfigured } from '@/lib/claude';
 import { broadcastQuestions } from '@/lib/pusher';
+import { getCourseDocuments } from '@/lib/context-store';
 import type { GeneratedQuestion, QuestionCategory, QuestionDifficulty, AnalysisSummary } from '@/lib/types';
 
 // Force dynamic rendering (required for POST handlers on Vercel)
@@ -25,11 +26,20 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { sessionId, context, settings } = body;
+    const { sessionId, context, settings, branchFrom, courseId } = body;
 
     console.log('[generate-questions] Session:', sessionId, 'Has context:', !!context, 'Has settings:', !!settings);
     if (settings?.maxQuestions) {
       console.log('[generate-questions] Requested question count:', settings.maxQuestions);
+    }
+    if (settings?.targetCategories?.length) {
+      console.log('[generate-questions] Targeted categories:', settings.targetCategories);
+    }
+    if (settings?.priorities) {
+      console.log('[generate-questions] Category priorities:', settings.priorities);
+    }
+    if (branchFrom) {
+      console.log('[generate-questions] Branching from question:', branchFrom.question?.substring(0, 50));
     }
 
     if (!sessionId) {
@@ -72,6 +82,23 @@ export async function POST(request: NextRequest) {
 
     console.log('[generate-questions] Transcript length:', transcript.length, 'chars');
 
+    // Fetch course materials if courseId provided
+    let courseMaterials: Array<{ id: string; name: string; type: string; rawText: string }> = [];
+    if (courseId) {
+      try {
+        const docs = await getCourseDocuments(courseId);
+        courseMaterials = docs.map((d: { id: string; name: string; type: string; rawText: string }) => ({
+          id: d.id,
+          name: d.name,
+          type: d.type,
+          rawText: d.rawText.substring(0, 2000), // Limit to first 2000 chars
+        }));
+        console.log('[generate-questions] Loaded', courseMaterials.length, 'course materials');
+      } catch (e) {
+        console.log('[generate-questions] Could not load course materials:', e);
+      }
+    }
+
     // Extract slide content if provided
     const slideContent = context?.slideContent;
     if (slideContent) {
@@ -80,10 +107,31 @@ export async function POST(request: NextRequest) {
 
     let questions: GeneratedQuestion[];
 
+    // Handle branching from an existing question
+    if (branchFrom && isClaudeConfigured()) {
+      console.log('[generate-questions] Branching mode - generating similar questions...');
+      if (branchFrom.customization) {
+        console.log('[generate-questions] With customization:', branchFrom.customization);
+      }
+      questions = await generateBranchQuestions(
+        branchFrom.question,
+        branchFrom.category,
+        transcript,
+        settings?.maxQuestions || 2,
+        courseMaterials,
+        branchFrom.customization // Pass user's customization hint
+      );
+      console.log('[generate-questions] Branch generated', questions.length, 'questions');
+    }
     // Prefer Babblet AI, fall back to alternatives, then mock
-    if (isClaudeConfigured()) {
+    else if (isClaudeConfigured()) {
       console.log('[generate-questions] Calling Babblet AI for question generation...');
-      questions = await generateQuestionsWithClaude(transcript, analysisContext, slideContent, settings);
+      // Add course materials to settings
+      const enhancedSettings = {
+        ...settings,
+        courseMaterials,
+      };
+      questions = await generateQuestionsWithClaude(transcript, analysisContext, slideContent, enhancedSettings);
       console.log('[generate-questions] Babblet AI returned', questions.length, 'questions');
     } else if (isOpenAIConfigured()) {
       console.log('[generate-questions] Calling OpenAI for question generation...');

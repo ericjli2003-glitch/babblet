@@ -191,7 +191,18 @@ export interface GeneratedQuestion {
   tags?: string[];
   relatedClaim?: string;
   relevantSnippet?: string; // Quote from transcript this question relates to
+  /** References to course materials that this question relates to */
+  materialReferences?: MaterialReference[];
   timestamp: number;
+}
+
+/** Reference to course material that supports a question */
+export interface MaterialReference {
+  id: string;
+  name: string;
+  type: string;
+  excerpt?: string;
+  documentId?: string;
 }
 
 // ============================================

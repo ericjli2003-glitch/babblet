@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Check, Info, ChevronDown, Sparkles, BookOpen, FileText, GitBranch, ExternalLink, Loader2 } from 'lucide-react';
+import { Check, Info, ChevronDown, ChevronUp, Sparkles, BookOpen, FileText, GitBranch, ExternalLink, Loader2, X, Wand2 } from 'lucide-react';
 
 interface ContextReference {
   text: string;
@@ -32,7 +32,7 @@ interface QuestionCardProps {
   materialReferences?: MaterialReference[];
   onMaterialClick?: (ref: MaterialReference) => void;
   // Branch functionality
-  onBranch?: (count: number) => void;
+  onBranch?: (count: number, customization?: string) => void;
   isBranching?: boolean;
 }
 
@@ -136,19 +136,30 @@ export default function QuestionCard({
   isBranching = false,
 }: QuestionCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [showBranchMenu, setShowBranchMenu] = useState(false);
-  const branchMenuRef = useRef<HTMLDivElement>(null);
+  const [showBranchPanel, setShowBranchPanel] = useState(false);
+  const [branchCount, setBranchCount] = useState(1);
+  const [branchCustomization, setBranchCustomization] = useState('');
+  const branchPanelRef = useRef<HTMLDivElement>(null);
   
-  // Close branch menu when clicking outside
+  // Reset branch panel when branching completes
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (branchMenuRef.current && !branchMenuRef.current.contains(event.target as Node)) {
-        setShowBranchMenu(false);
-      }
+    if (!isBranching && showBranchPanel) {
+      // Keep panel open to show success, user can close manually
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [isBranching, showBranchPanel]);
+
+  const handleBranchSubmit = () => {
+    if (onBranch) {
+      onBranch(branchCount, branchCustomization.trim() || undefined);
+      // Don't close panel - let it stay open while branching
+    }
+  };
+
+  const closeBranchPanel = () => {
+    setShowBranchPanel(false);
+    setBranchCustomization('');
+    setBranchCount(1);
+  };
   
   // Get config with fallback for unknown categories
   const config = categoryConfig[category] || categoryConfig.clarification;
@@ -168,50 +179,29 @@ export default function QuestionCard({
             {config.label}
           </span>
           
-          {/* Branch Button - always visible next to category badge */}
-          <div className="relative" ref={branchMenuRef}>
+          {/* Branch Button */}
+          {onBranch && (
             <button
-              onClick={() => onBranch && setShowBranchMenu(!showBranchMenu)}
-              disabled={isBranching || !onBranch}
+              onClick={() => setShowBranchPanel(!showBranchPanel)}
+              disabled={isBranching}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-all ${
-                !onBranch
-                  ? 'opacity-50 cursor-not-allowed bg-surface-50 border-surface-200 text-surface-400'
+                showBranchPanel
+                  ? 'bg-primary-100 border-primary-300 text-primary-700'
                   : isBranching 
                     ? 'bg-primary-50 border-primary-200 text-primary-600 cursor-wait'
                     : 'bg-white border-surface-200 text-surface-600 hover:border-primary-300 hover:bg-primary-50 hover:text-primary-600'
               }`}
-              title={onBranch ? "Generate more similar questions" : "Branch not available"}
+              title="Generate similar questions"
             >
               {isBranching ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <GitBranch className="w-3.5 h-3.5" />
               )}
-              <span>{isBranching ? 'Branching...' : 'Branch'}</span>
-              {!isBranching && <ChevronDown className="w-3 h-3" />}
+              <span>{isBranching ? 'Generating...' : 'Branch'}</span>
+              {!isBranching && (showBranchPanel ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
             </button>
-            
-            {/* Branch Dropdown Menu */}
-            {showBranchMenu && !isBranching && onBranch && (
-              <div className="absolute left-0 top-full mt-1 bg-white border border-surface-200 rounded-lg shadow-lg z-20 py-1 min-w-[160px]">
-                <p className="px-3 py-1.5 text-xs text-surface-500 font-medium border-b border-surface-100">
-                  Generate similar questions
-                </p>
-                {[1, 2, 3, 5].map(count => (
-                  <button
-                    key={count}
-                    onClick={() => {
-                      onBranch(count);
-                      setShowBranchMenu(false);
-                    }}
-                    className="w-full text-left px-3 py-2 text-sm text-surface-700 hover:bg-primary-50 hover:text-primary-700 transition-colors"
-                  >
-                    +{count} more {count === 1 ? 'question' : 'questions'}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
           
           {hasRationale && (
             <span className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-primary-600 bg-primary-50 rounded-md">
@@ -235,6 +225,87 @@ export default function QuestionCard({
           )}
         </div>
       </div>
+
+      {/* Branch Panel - Expandable pill below header */}
+      {showBranchPanel && onBranch && (
+        <div 
+          ref={branchPanelRef}
+          className="mb-4 p-4 bg-gradient-to-r from-primary-50 to-blue-50 border border-primary-200 rounded-xl animate-in slide-in-from-top-2 duration-200"
+        >
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Wand2 className="w-4 h-4 text-primary-600" />
+              <span className="text-sm font-semibold text-primary-900">Generate Similar Questions</span>
+            </div>
+            <button
+              onClick={closeBranchPanel}
+              className="p-1 text-surface-400 hover:text-surface-600 hover:bg-white/50 rounded transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          
+          {/* Customization Input */}
+          <div className="mb-3">
+            <label className="block text-xs font-medium text-surface-600 mb-1.5">
+              What would you like to change? <span className="text-surface-400">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={branchCustomization}
+              onChange={(e) => setBranchCustomization(e.target.value)}
+              placeholder="e.g., Make it harder, Focus on methodology, Add real-world context..."
+              className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg bg-white placeholder:text-surface-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              disabled={isBranching}
+            />
+          </div>
+          
+          {/* Count Selector & Generate Button */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-surface-600">How many?</span>
+              <div className="flex items-center bg-white border border-surface-200 rounded-lg overflow-hidden">
+                {[1, 2, 3].map((count) => (
+                  <button
+                    key={count}
+                    onClick={() => setBranchCount(count)}
+                    disabled={isBranching}
+                    className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                      branchCount === count
+                        ? 'bg-primary-500 text-white'
+                        : 'text-surface-600 hover:bg-surface-50'
+                    } ${count !== 3 ? 'border-r border-surface-200' : ''}`}
+                  >
+                    {count}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <button
+              onClick={handleBranchSubmit}
+              disabled={isBranching}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                isBranching
+                  ? 'bg-primary-400 text-white cursor-wait'
+                  : 'bg-primary-500 text-white hover:bg-primary-600 shadow-sm'
+              }`}
+            >
+              {isBranching ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  Generate {branchCount} {branchCount === 1 ? 'Question' : 'Questions'}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Question with inline material references */}
       <p className="text-surface-800 leading-relaxed mb-3">
