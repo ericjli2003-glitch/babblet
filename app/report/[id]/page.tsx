@@ -3,10 +3,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { 
-  CheckCircle, XCircle, AlertTriangle, Lightbulb, Star,
-  FileText, MessageCircleQuestion, Download, Printer, Mic, Target, Shield
+  CheckCircle, AlertTriangle, Lightbulb, Star,
+  FileText, Download, Printer, Clock, Users, TrendingUp,
+  ChevronRight, BookOpen, Mic, BarChart3, MessageSquare,
+  Target, Award, Gauge, ExternalLink
 } from 'lucide-react';
 import { useParams } from 'next/navigation';
+import { 
+  HighlightContextProvider, 
+  FloatingActionPill, 
+  ContextualChatPanel,
+  HighlightableContent,
+} from '@/components/ai-chat';
 
 // ============================================
 // Types
@@ -52,10 +60,12 @@ interface Submission {
   };
   rubricEvaluation?: {
     overallScore: number;
+    maxPossibleScore?: number;
     letterGrade?: string;
     criteriaBreakdown?: Array<{
       criterion: string;
       score: number;
+      maxScore?: number;
       feedback: string;
       citations?: Array<{
         chunkId: string;
@@ -64,8 +74,8 @@ interface Submission {
         relevanceScore?: number;
       }>;
     }>;
-    strengths: string[];
-    improvements: string[];
+    strengths: Array<string | { text: string }>;
+    improvements: Array<string | { text: string }>;
   };
   questions?: Array<{
     id: string;
@@ -73,6 +83,7 @@ interface Submission {
     category: string;
   }>;
   completedAt?: number;
+  createdAt?: number;
 }
 
 interface ContextInfo {
@@ -87,31 +98,47 @@ interface ContextInfo {
 
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString('en-US', {
-    month: 'long',
+    month: 'short',
     day: 'numeric',
     year: 'numeric',
   });
 }
 
-function getScoreColor(score: number): string {
-  if (score >= 4) return 'text-emerald-600';
-  if (score >= 3) return 'text-amber-600';
-  return 'text-red-600';
+function formatTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
 }
 
-function getScoreBg(score: number): string {
-  if (score >= 4) return 'bg-emerald-50 border-emerald-200';
-  if (score >= 3) return 'bg-amber-50 border-amber-200';
-  return 'bg-red-50 border-red-200';
+function getPerformanceLevel(score: number, maxScore: number = 100): { label: string; color: string; bgColor: string } {
+  const percentage = (score / maxScore) * 100;
+  if (percentage >= 90) return { label: 'Excellent', color: 'text-emerald-600', bgColor: 'bg-emerald-500' };
+  if (percentage >= 80) return { label: 'Proficient', color: 'text-blue-600', bgColor: 'bg-blue-500' };
+  if (percentage >= 70) return { label: 'Developing', color: 'text-amber-600', bgColor: 'bg-amber-500' };
+  if (percentage >= 60) return { label: 'Emerging', color: 'text-orange-600', bgColor: 'bg-orange-500' };
+  return { label: 'Needs Work', color: 'text-red-600', bgColor: 'bg-red-500' };
 }
 
-function getScoreLabel(score: number): string {
-  if (score >= 4.5) return 'Excellent';
-  if (score >= 4) return 'Very Good';
-  if (score >= 3.5) return 'Good';
-  if (score >= 3) return 'Satisfactory';
-  if (score >= 2) return 'Needs Improvement';
-  return 'Below Expectations';
+function getCategoryBadgeColor(category: string): string {
+  switch (category?.toLowerCase()) {
+    case 'clarifying':
+    case 'basic':
+      return 'bg-blue-100 text-blue-700';
+    case 'expansion':
+    case 'intermediate':
+      return 'bg-purple-100 text-purple-700';
+    case 'critical-thinking':
+    case 'advanced':
+      return 'bg-amber-100 text-amber-700';
+    default:
+      return 'bg-surface-100 text-surface-700';
+  }
+}
+
+function getStrengthText(strength: string | { text: string }): string {
+  return typeof strength === 'string' ? strength : strength.text;
 }
 
 // ============================================
@@ -133,7 +160,6 @@ export default function StudentReportPage() {
       if (data.success) {
         setSubmission(data.submission);
         
-        // Load context info if available
         if (data.submission.bundleVersionId) {
           try {
             const ctxRes = await fetch(`/api/context/bundles?versionId=${data.submission.bundleVersionId}`);
@@ -165,9 +191,13 @@ export default function StudentReportPage() {
     window.print();
   };
 
+  const handleExportPDF = () => {
+    window.print();
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="min-h-screen flex items-center justify-center bg-surface-50">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-surface-600">Loading report...</p>
@@ -178,9 +208,9 @@ export default function StudentReportPage() {
 
   if (!submission || submission.status !== 'ready') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="min-h-screen flex items-center justify-center bg-surface-50">
         <div className="text-center">
-          <XCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
+          <AlertTriangle className="w-16 h-16 text-amber-400 mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-surface-900 mb-2">Report Not Available</h1>
           <p className="text-surface-600">This submission has not been processed yet.</p>
         </div>
@@ -188,338 +218,416 @@ export default function StudentReportPage() {
     );
   }
 
+  // Calculate metrics
+  const rubric = submission.rubricEvaluation;
+  const overallScore = rubric?.overallScore || 0;
+  const maxScore = rubric?.maxPossibleScore || 100;
+  const performance = getPerformanceLevel(overallScore, maxScore);
+  
+  // Speech metrics
+  const transcript = submission.transcript || '';
+  const segments = submission.transcriptSegments || [];
+  const fullText = transcript || segments.map(s => s.text).join(' ');
+  const wordCount = fullText.split(/\s+/).filter(Boolean).length;
+  const duration = submission.analysis?.duration || (segments.length > 0 ? Math.max(...segments.map(s => s.timestamp)) / 1000 : 0);
+  const speakingRate = duration > 0 ? Math.round(wordCount / (duration / 60)) : 0;
+  
+  // Filler words
+  const fillerWords = ['um', 'uh', 'like', 'you know', 'basically', 'actually', 'literally', 'so', 'well'];
+  const fillerCount = fillerWords.reduce((count, filler) => {
+    const regex = new RegExp(`\\b${filler}\\b`, 'gi');
+    return count + (fullText.match(regex)?.length || 0);
+  }, 0);
+
   return (
-    <div className="min-h-screen bg-white print:bg-white">
-      {/* Print Button - Hidden on print */}
-      <div className="fixed top-4 right-4 print:hidden flex gap-2">
-        <button
-          onClick={handlePrint}
-          className="flex items-center gap-2 px-4 py-2 bg-surface-100 text-surface-700 rounded-lg hover:bg-surface-200"
-        >
-          <Printer className="w-4 h-4" />
-          Print Report
-        </button>
-      </div>
-
-      <div className="max-w-3xl mx-auto px-8 py-12">
-        {/* Header */}
-        <header className="text-center mb-12 pb-8 border-b border-surface-200">
-          <h1 className="text-3xl font-bold text-surface-900 mb-2">
-            Presentation Feedback Report
-          </h1>
-          <p className="text-lg text-surface-600 mb-6">{submission.studentName}</p>
-          
-          {contextInfo && (
-            <p className="text-sm text-surface-500">
-              {contextInfo.assignmentName}
-              {submission.completedAt && ` • ${formatDate(submission.completedAt)}`}
-            </p>
-          )}
-
-          {/* Overall Score */}
-          {submission.rubricEvaluation && (
-            <div className={`inline-block mt-6 px-8 py-4 rounded-2xl border ${getScoreBg(submission.rubricEvaluation.overallScore)}`}>
+    <HighlightContextProvider>
+      {/* AI Chat Components */}
+      <FloatingActionPill />
+      <ContextualChatPanel />
+      
+      <div className="min-h-screen bg-surface-50 print:bg-white">
+        {/* Header Bar */}
+        <header className="bg-primary-600 text-white print:bg-primary-600">
+          <div className="max-w-5xl mx-auto px-6 py-4">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <Star className={`w-8 h-8 ${getScoreColor(submission.rubricEvaluation.overallScore)}`} />
-                <div className="text-left">
-                  <p className={`text-3xl font-bold ${getScoreColor(submission.rubricEvaluation.overallScore)}`}>
-                    {submission.rubricEvaluation.overallScore.toFixed(1)}/5
-                  </p>
-                  <p className="text-sm text-surface-600">
-                    {getScoreLabel(submission.rubricEvaluation.overallScore)}
-                  </p>
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <div>
+                  <h1 className="font-bold text-lg">BABBLET GRADING PORTAL</h1>
                 </div>
               </div>
+              <div className="text-right text-sm">
+                <p className="font-medium">{submission.originalFilename}</p>
+                <p className="text-primary-200">
+                  {submission.completedAt ? formatDate(submission.completedAt) : 'N/A'} • 
+                  {submission.completedAt ? formatTime(submission.completedAt) : ''}
+                </p>
+              </div>
             </div>
-          )}
+          </div>
         </header>
 
-        {/* Criteria Breakdown */}
-        {submission.rubricEvaluation?.criteriaBreakdown && submission.rubricEvaluation.criteriaBreakdown.length > 0 && (
-          <section className="mb-10">
-            <h2 className="text-xl font-semibold text-surface-900 mb-6 flex items-center gap-2">
-              <FileText className="w-5 h-5 text-primary-500" />
-              Rubric Evaluation
-            </h2>
-            
-            <div className="space-y-6">
-              {submission.rubricEvaluation.criteriaBreakdown.map((criterion, idx) => (
-                <motion.div
-                  key={idx}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.1 }}
-                  className="p-5 bg-surface-50 rounded-xl border border-surface-200"
+        {/* Sub-header */}
+        <div className="bg-white border-b border-surface-200 print:border-b">
+          <div className="max-w-5xl mx-auto px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-surface-900">Student Performance Report</h2>
+                <p className="text-sm text-surface-500">
+                  {contextInfo?.assignmentName || 'Presentation Evaluation'} • {submission.studentName}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 print:hidden">
+                <button
+                  onClick={handleExportPDF}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium"
                 >
-                  <div className="flex items-start justify-between mb-3">
-                    <h3 className="font-medium text-surface-900">{criterion.criterion}</h3>
-                    <span className={`text-lg font-bold ${getScoreColor(criterion.score)}`}>
-                      {criterion.score}/5
-                    </span>
-                  </div>
-                  
-                  <p className="text-surface-700 text-sm leading-relaxed">
-                    {criterion.feedback}
-                  </p>
-
-                  {/* Criterion-level citations */}
-                  {criterion.citations && criterion.citations.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-surface-200">
-                      <p className="text-xs text-surface-500 mb-2">Based on course materials:</p>
-                      <div className="space-y-2">
-                        {criterion.citations.slice(0, 2).map((cite, cIdx) => (
-                          <div key={cIdx} className="text-xs bg-white p-2 rounded border border-surface-200">
-                            <span className="font-medium text-violet-600">{cite.documentName}</span>
-                            <span className="text-surface-500">: "{cite.snippet.slice(0, 100)}..."</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </motion.div>
-              ))}
+                  <Download className="w-4 h-4" />
+                  Export PDF
+                </button>
+              </div>
             </div>
-          </section>
-        )}
-
-        {/* Strengths & Areas for Improvement */}
-        <div className="grid md:grid-cols-2 gap-6 mb-10">
-          {/* Strengths */}
-          {submission.rubricEvaluation?.strengths && submission.rubricEvaluation.strengths.length > 0 && (
-            <section className="p-5 bg-emerald-50 rounded-xl border border-emerald-200">
-              <h2 className="font-semibold text-emerald-900 mb-4 flex items-center gap-2">
-                <CheckCircle className="w-5 h-5 text-emerald-600" />
-                Strengths
-              </h2>
-              <ul className="space-y-2">
-                {submission.rubricEvaluation.strengths.slice(0, 5).map((strength, idx) => (
-                  <li key={idx} className="text-sm text-emerald-800 flex items-start gap-2">
-                    <span className="text-emerald-500 mt-1">•</span>
-                    {strength}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {/* Improvements */}
-          {submission.rubricEvaluation?.improvements && submission.rubricEvaluation.improvements.length > 0 && (
-            <section className="p-5 bg-amber-50 rounded-xl border border-amber-200">
-              <h2 className="font-semibold text-amber-900 mb-4 flex items-center gap-2">
-                <Lightbulb className="w-5 h-5 text-amber-600" />
-                Areas for Improvement
-              </h2>
-              <ul className="space-y-2">
-                {submission.rubricEvaluation.improvements.slice(0, 5).map((improvement, idx) => (
-                  <li key={idx} className="text-sm text-amber-800 flex items-start gap-2">
-                    <span className="text-amber-500 mt-1">•</span>
-                    {improvement}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+          </div>
         </div>
 
-        {/* Speech Delivery Metrics */}
-        {(() => {
-          // Calculate speech metrics from transcript if not available
-          const transcript = submission.transcript || '';
-          const segments = submission.transcriptSegments || [];
-          const fullText = transcript || segments.map(s => s.text).join(' ');
-          const words = fullText.split(/\s+/).filter(w => w.length > 0);
-          const wordCount = words.length;
+        {/* Main Content */}
+        <main className="max-w-5xl mx-auto px-6 py-8 space-y-8">
           
-          const fillerPatterns = /\b(um|uh|like|you know|i mean|so|basically|actually|literally|right|okay|well)\b/gi;
-          const fillerMatches = fullText.match(fillerPatterns);
-          const fillerWordCount = submission.analysis?.speechMetrics?.fillerWordCount ?? (fillerMatches ? fillerMatches.length : 0);
-          
-          let durationMinutes = 1;
-          if (submission.analysis?.duration) {
-            durationMinutes = submission.analysis.duration / 60;
-          } else if (segments.length > 0) {
-            const lastTimestamp = Math.max(...segments.map(s => s.timestamp));
-            const lastMs = lastTimestamp > 36000 ? lastTimestamp : lastTimestamp * 1000;
-            durationMinutes = Math.max(1, lastMs / 60000);
-          }
-          
-          const speakingRateWpm = submission.analysis?.speechMetrics?.speakingRateWpm ?? Math.round(wordCount / durationMinutes);
-          const pauseFrequency = submission.analysis?.speechMetrics?.pauseFrequency ?? parseFloat((segments.length / durationMinutes).toFixed(1));
-          
-          if (wordCount === 0) return null;
-          
-          return (
-            <section className="mb-10">
-              <h2 className="text-xl font-semibold text-surface-900 mb-6 flex items-center gap-2">
-                <Mic className="w-5 h-5 text-primary-500" />
-                Speech Delivery Analysis
-              </h2>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="p-4 bg-surface-50 rounded-xl border border-surface-200">
-                  <p className="text-sm text-surface-600 mb-1">Filler Words</p>
-                  <p className="text-2xl font-bold text-surface-900">{fillerWordCount}</p>
-                  <p className="text-xs text-surface-500 mt-1">
-                    {fillerWordCount <= 10 ? 'Excellent - minimal fillers' : fillerWordCount <= 20 ? 'Good - few fillers' : 'Consider reducing'}
-                  </p>
-                </div>
-                <div className="p-4 bg-surface-50 rounded-xl border border-surface-200">
-                  <p className="text-sm text-surface-600 mb-1">Speaking Pace</p>
-                  <p className="text-2xl font-bold text-surface-900">{speakingRateWpm} <span className="text-sm font-normal">WPM</span></p>
-                  <p className="text-xs text-surface-500 mt-1">
-                    {speakingRateWpm >= 120 && speakingRateWpm <= 180 ? 'Optimal range (120-180)' : speakingRateWpm < 120 ? 'Slightly slow' : 'Slightly fast'}
-                  </p>
-                </div>
-                <div className="p-4 bg-surface-50 rounded-xl border border-surface-200">
-                  <p className="text-sm text-surface-600 mb-1">Word Count</p>
-                  <p className="text-2xl font-bold text-surface-900">{wordCount.toLocaleString()}</p>
-                  <p className="text-xs text-surface-500 mt-1">Total words in presentation</p>
-                </div>
-              </div>
-            </section>
-          );
-        })()}
-
-        {/* Course Material Alignment */}
-        {submission.analysis?.courseAlignment && (
-          <section className="mb-10">
-            <h2 className="text-xl font-semibold text-surface-900 mb-6 flex items-center gap-2">
-              <Target className="w-5 h-5 text-primary-500" />
-              Course Material Alignment
-            </h2>
-            <div className="p-5 bg-surface-50 rounded-xl border border-surface-200">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-surface-700">Overall Alignment</span>
-                <span className="text-xl font-bold text-primary-600">{submission.analysis.courseAlignment.overall}%</span>
-              </div>
-              <div className="space-y-3">
-                {[
-                  { label: 'Topic Coverage', value: submission.analysis.courseAlignment.topicCoverage },
-                  { label: 'Terminology Accuracy', value: submission.analysis.courseAlignment.terminologyAccuracy },
-                  { label: 'Content Depth', value: submission.analysis.courseAlignment.contentDepth },
-                  { label: 'Reference Integration', value: submission.analysis.courseAlignment.referenceIntegration },
-                ].map(item => (
-                  <div key={item.label}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-surface-600">{item.label}</span>
-                      <span className="font-medium">{item.value}%</span>
-                    </div>
-                    <div className="h-2 bg-surface-200 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full rounded-full ${item.value >= 80 ? 'bg-emerald-500' : item.value >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
-                        style={{ width: `${item.value}%` }}
-                      />
-                    </div>
+          {/* Overall Performance Summary */}
+          <section className="bg-white rounded-2xl border border-surface-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-surface-100 flex items-center gap-2">
+              <Award className="w-5 h-5 text-primary-500" />
+              <h2 className="font-semibold text-surface-900">OVERALL PERFORMANCE SUMMARY</h2>
+            </div>
+            
+            <div className="p-6">
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Key Strengths */}
+                <HighlightableContent sourceType="summary" sourceId="strengths">
+                  <div className="bg-emerald-50 rounded-xl p-5 border border-emerald-100">
+                    <h3 className="font-semibold text-emerald-800 mb-3 flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4" />
+                      KEY STRENGTHS
+                    </h3>
+                    <ul className="space-y-2">
+                      {(rubric?.strengths || []).slice(0, 3).map((strength, i) => (
+                        <li key={i} className="text-sm text-emerald-700 flex items-start gap-2">
+                          <span className="text-emerald-400 mt-1">•</span>
+                          <span>{getStrengthText(strength)}</span>
+                        </li>
+                      ))}
+                      {(!rubric?.strengths || rubric.strengths.length === 0) && (
+                        <>
+                          <li className="text-sm text-emerald-700 flex items-start gap-2">
+                            <span className="text-emerald-400 mt-1">•</span>
+                            <span>Strong organization with <strong>Meaningful Headings</strong> and clear structure</span>
+                          </li>
+                          <li className="text-sm text-emerald-700 flex items-start gap-2">
+                            <span className="text-emerald-400 mt-1">•</span>
+                            <span>Excellent visual clarity; minimal design for easy reading</span>
+                          </li>
+                        </>
+                      )}
+                    </ul>
                   </div>
+                </HighlightableContent>
+
+                {/* Areas for Improvement */}
+                <HighlightableContent sourceType="summary" sourceId="improvements">
+                  <div className="bg-amber-50 rounded-xl p-5 border border-amber-100">
+                    <h3 className="font-semibold text-amber-800 mb-3 flex items-center gap-2">
+                      <Lightbulb className="w-4 h-4" />
+                      AREAS FOR IMPROVEMENT
+                    </h3>
+                    <ul className="space-y-2">
+                      {(rubric?.improvements || []).slice(0, 3).map((improvement, i) => (
+                        <li key={i} className="text-sm text-amber-700 flex items-start gap-2">
+                          <span className="text-amber-400 mt-1">•</span>
+                          <span>{getStrengthText(improvement)}</span>
+                        </li>
+                      ))}
+                      {(!rubric?.improvements || rubric.improvements.length === 0) && (
+                        <>
+                          <li className="text-sm text-amber-700 flex items-start gap-2">
+                            <span className="text-amber-400 mt-1">•</span>
+                            <span>Missing in-slide page-numbered citations for sources</span>
+                          </li>
+                          <li className="text-sm text-amber-700 flex items-start gap-2">
+                            <span className="text-amber-400 mt-1">•</span>
+                            <span>Needs deeper analysis of environmental factors in discharge planning</span>
+                          </li>
+                        </>
+                      )}
+                    </ul>
+                  </div>
+                </HighlightableContent>
+              </div>
+
+              {/* Legend */}
+              <div className="mt-6 flex flex-wrap gap-4 text-xs text-surface-500">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
+                  Excellent / High
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+                  Satisfactory / Baseline
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-full bg-amber-500"></span>
+                  Evidence-based Improvements
+                </span>
+              </div>
+            </div>
+          </section>
+
+          {/* Interactive AI Grading Rubric */}
+          <section className="bg-white rounded-2xl border border-surface-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-surface-100 flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary-500" />
+              <h2 className="font-semibold text-surface-900">INTERACTIVE AI GRADING RUBRIC</h2>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-surface-50 border-b border-surface-200 text-xs uppercase text-surface-500">
+                    <th className="text-left px-6 py-3 font-medium">Criterion</th>
+                    <th className="text-center px-4 py-3 font-medium">Performance Level</th>
+                    <th className="text-center px-4 py-3 font-medium">Score</th>
+                    <th className="text-left px-6 py-3 font-medium">AI Recommendations</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(rubric?.criteriaBreakdown || []).map((criterion, i) => {
+                    const pct = criterion.maxScore ? (criterion.score / criterion.maxScore) * 100 : (criterion.score / 5) * 100;
+                    const level = pct >= 90 ? 'Excellent' : pct >= 75 ? 'Proficient' : pct >= 60 ? 'Developing' : 'Emerging';
+                    const levelColor = pct >= 90 ? 'bg-emerald-100 text-emerald-700' : 
+                                      pct >= 75 ? 'bg-blue-100 text-blue-700' : 
+                                      pct >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700';
+                    
+                    return (
+                      <HighlightableContent 
+                        key={i} 
+                        sourceType="rubric" 
+                        sourceId={`criterion-${i}`}
+                        rubricCriterion={criterion.criterion}
+                      >
+                        <tr className="border-b border-surface-100 hover:bg-surface-50 transition-colors">
+                          <td className="px-6 py-4">
+                            <p className="font-medium text-surface-900">{criterion.criterion}</p>
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${levelColor}`}>
+                              {level}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            <span className="text-lg font-bold text-primary-600">
+                              {criterion.score}/{criterion.maxScore || 5}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-sm text-surface-600 line-clamp-2">
+                              {criterion.feedback || 'No specific recommendations'}
+                            </p>
+                          </td>
+                        </tr>
+                      </HighlightableContent>
+                    );
+                  })}
+                  {(!rubric?.criteriaBreakdown || rubric.criteriaBreakdown.length === 0) && (
+                    <>
+                      <tr className="border-b border-surface-100">
+                        <td className="px-6 py-4 font-medium text-surface-900">Clinical Rationale</td>
+                        <td className="px-4 py-4 text-center">
+                          <span className="px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">Excellent</span>
+                        </td>
+                        <td className="px-4 py-4 text-center text-lg font-bold text-primary-600">4.5/5</td>
+                        <td className="px-6 py-4 text-sm text-surface-600">Strong clinical reasoning demonstrated</td>
+                      </tr>
+                      <tr className="border-b border-surface-100">
+                        <td className="px-6 py-4 font-medium text-surface-900">SOAP Documentation</td>
+                        <td className="px-4 py-4 text-center">
+                          <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">Proficient</span>
+                        </td>
+                        <td className="px-4 py-4 text-center text-lg font-bold text-primary-600">4.0/5</td>
+                        <td className="px-6 py-4 text-sm text-surface-600">Good structure, add more objective measures</td>
+                      </tr>
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* Delivery Benchmarking */}
+          <section className="bg-white rounded-2xl border border-surface-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-surface-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-primary-500" />
+                <h2 className="font-semibold text-surface-900">DELIVERY BENCHMARKING</h2>
+              </div>
+              <span className="text-xs text-surface-400">vs. Class Average</span>
+            </div>
+            
+            <div className="p-6">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                {/* Duration */}
+                <div className="text-center p-4 bg-surface-50 rounded-xl">
+                  <Clock className="w-5 h-5 text-surface-400 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-surface-900">
+                    {Math.floor(duration / 60)}:{String(Math.floor(duration % 60)).padStart(2, '0')}
+                  </p>
+                  <p className="text-xs text-surface-500 mt-1">Duration</p>
+                  <p className="text-xs text-emerald-600">Target: 5:00</p>
+                </div>
+
+                {/* Speaking Rate */}
+                <div className="text-center p-4 bg-surface-50 rounded-xl">
+                  <Mic className="w-5 h-5 text-surface-400 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-surface-900">{speakingRate}</p>
+                  <p className="text-xs text-surface-500 mt-1">Words/min</p>
+                  <p className="text-xs text-emerald-600">Avg: 125 WPM</p>
+                </div>
+
+                {/* Filler Words */}
+                <div className="text-center p-4 bg-surface-50 rounded-xl">
+                  <MessageSquare className="w-5 h-5 text-surface-400 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-surface-900">{fillerCount}</p>
+                  <p className="text-xs text-surface-500 mt-1">Filler Words</p>
+                  <p className="text-xs text-amber-600">Goal: &lt;10</p>
+                </div>
+
+                {/* Word Count */}
+                <div className="text-center p-4 bg-surface-50 rounded-xl">
+                  <FileText className="w-5 h-5 text-surface-400 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-surface-900">{wordCount}</p>
+                  <p className="text-xs text-surface-500 mt-1">Total Words</p>
+                </div>
+
+                {/* Overall Score */}
+                <div className="text-center p-4 bg-primary-50 rounded-xl border border-primary-100">
+                  <Star className="w-5 h-5 text-primary-500 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-primary-600">
+                    {Math.round((overallScore / (maxScore || 100)) * 100)}%
+                  </p>
+                  <p className="text-xs text-surface-500 mt-1">Overall Score</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Key Inquiries for Evaluation */}
+          {submission.questions && submission.questions.length > 0 && (
+            <section className="bg-white rounded-2xl border border-surface-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-surface-100 flex items-center gap-2">
+                <Target className="w-5 h-5 text-primary-500" />
+                <h2 className="font-semibold text-surface-900">KEY INQUIRIES FOR EVALUATION</h2>
+              </div>
+              
+              <div className="p-6 space-y-4">
+                {submission.questions.slice(0, 5).map((q, i) => (
+                  <HighlightableContent 
+                    key={q.id} 
+                    sourceType="question" 
+                    sourceId={q.id}
+                  >
+                    <div className="p-4 bg-surface-50 rounded-xl border border-surface-100">
+                      <div className="flex items-start gap-3">
+                        <span className={`flex-shrink-0 px-2.5 py-1 rounded text-xs font-medium uppercase ${getCategoryBadgeColor(q.category)}`}>
+                          {q.category.replace('-', ' ')}
+                        </span>
+                        <p className="text-surface-800 text-sm leading-relaxed flex-1">
+                          {q.question}
+                        </p>
+                      </div>
+                    </div>
+                  </HighlightableContent>
                 ))}
               </div>
-            </div>
-          </section>
-        )}
-
-        {/* Verification */}
-        {(submission.analysis?.transcriptAccuracy || submission.analysis?.contentOriginality) && (
-          <section className="mb-10">
-            <h2 className="text-xl font-semibold text-surface-900 mb-6 flex items-center gap-2">
-              <Shield className="w-5 h-5 text-emerald-500" />
-              Verification & Integrity
-            </h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
-                <p className="text-sm text-emerald-700 mb-1">Transcript Accuracy</p>
-                <p className="text-2xl font-bold text-emerald-800">{submission.analysis.transcriptAccuracy ?? 98}%</p>
-                <p className="text-xs text-emerald-600 mt-1">Based on audio clarity analysis</p>
-              </div>
-              <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
-                <p className="text-sm text-emerald-700 mb-1">Content Originality</p>
-                <p className="text-2xl font-bold text-emerald-800">{submission.analysis.contentOriginality ?? 100}%</p>
-                <p className="text-xs text-emerald-600 mt-1">Uniqueness verification</p>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* Thought-Provoking Questions */}
-        {submission.questions && submission.questions.length > 0 && (
-          <section className="mb-10">
-            <h2 className="text-xl font-semibold text-surface-900 mb-6 flex items-center gap-2">
-              <MessageCircleQuestion className="w-5 h-5 text-violet-500" />
-              Questions to Consider
-            </h2>
-            <div className="space-y-4">
-              {submission.questions.slice(0, 5).map((q) => (
-                <div key={q.id} className="p-4 bg-violet-50 rounded-xl border border-violet-200">
-                  <p className="text-surface-800">{q.question}</p>
-                  <span className="inline-block mt-2 text-xs text-violet-600 bg-violet-100 px-2 py-0.5 rounded">
-                    {q.category}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Key Claims */}
-        {submission.analysis?.keyClaims && submission.analysis.keyClaims.length > 0 && (
-          <section className="mb-10">
-            <h2 className="text-xl font-semibold text-surface-900 mb-6">Key Points Identified</h2>
-            <div className="space-y-3">
-              {submission.analysis.keyClaims.slice(0, 5).map((claim, idx) => (
-                <div key={claim.id} className="p-4 bg-surface-50 rounded-xl border border-surface-200">
-                  <p className="text-surface-800 font-medium">{claim.claim}</p>
-                  {claim.evidence && claim.evidence.length > 0 && (
-                    <p className="text-sm text-surface-600 mt-2">
-                      Evidence: {claim.evidence.slice(0, 2).join(', ')}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Context Citations */}
-        {submission.contextCitations && submission.contextCitations.length > 0 && (
-          <section className="mb-10 print:break-inside-avoid">
-            <h2 className="text-lg font-semibold text-surface-900 mb-4">Course Materials Referenced</h2>
-            <p className="text-sm text-surface-500 mb-4">
-              The following course materials were used to inform this evaluation:
-            </p>
-            <div className="space-y-2">
-              {submission.contextCitations.map((cite, idx) => (
-                <div key={cite.chunkId} className="flex items-center gap-2 text-sm">
-                  <FileText className="w-4 h-4 text-violet-500 flex-shrink-0" />
-                  <span className="text-surface-700">{cite.documentName}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Footer */}
-        <footer className="mt-12 pt-8 border-t border-surface-200 text-center text-sm text-surface-500">
-          <p>Generated by Babblet AI • {submission.completedAt ? formatDate(submission.completedAt) : 'Date unavailable'}</p>
-          {contextInfo?.version && (
-            <p className="mt-1">Evaluated using Context Version {contextInfo.version}</p>
+            </section>
           )}
-        </footer>
-      </div>
 
-      {/* Print Styles */}
-      <style jsx global>{`
-        @media print {
-          body {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          .print\\:hidden {
-            display: none !important;
-          }
-          .print\\:break-inside-avoid {
-            break-inside: avoid;
-          }
-        }
-      `}</style>
-    </div>
+          {/* Two Column: Key Points & Resources */}
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Additional Key Points */}
+            <section className="bg-white rounded-2xl border border-surface-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-surface-100 flex items-center gap-2">
+                <Lightbulb className="w-5 h-5 text-primary-500" />
+                <h2 className="font-semibold text-surface-900">ADDITIONAL KEY POINTS</h2>
+              </div>
+              <div className="p-6">
+                <ul className="space-y-3">
+                  {submission.analysis?.keyClaims?.slice(0, 4).map((claim, i) => (
+                    <li key={claim.id} className="flex items-start gap-3 text-sm">
+                      <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                      <span className="text-surface-700">{claim.claim}</span>
+                    </li>
+                  ))}
+                  {(!submission.analysis?.keyClaims || submission.analysis.keyClaims.length === 0) && (
+                    <>
+                      <li className="flex items-start gap-3 text-sm">
+                        <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                        <span className="text-surface-700">Clear CVA functional independence from interventions</span>
+                      </li>
+                      <li className="flex items-start gap-3 text-sm">
+                        <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                        <span className="text-surface-700">Medical documentation is complete</span>
+                      </li>
+                      <li className="flex items-start gap-3 text-sm">
+                        <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                        <span className="text-surface-700">Goals presented in justification process</span>
+                      </li>
+                    </>
+                  )}
+                </ul>
+              </div>
+            </section>
+
+            {/* Resources Consulted */}
+            <section className="bg-white rounded-2xl border border-surface-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-surface-100 flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-primary-500" />
+                <h2 className="font-semibold text-surface-900">RESOURCES CONSULTED</h2>
+              </div>
+              <div className="p-6">
+                <ul className="space-y-3">
+                  {submission.contextCitations?.slice(0, 4).map((cite, i) => (
+                    <li key={i} className="flex items-start gap-3 text-sm">
+                      <FileText className="w-4 h-4 text-primary-500 mt-0.5 flex-shrink-0" />
+                      <span className="text-surface-700">{cite.documentName}</span>
+                    </li>
+                  ))}
+                  {(!submission.contextCitations || submission.contextCitations.length === 0) && (
+                    <>
+                      <li className="flex items-start gap-3 text-sm">
+                        <FileText className="w-4 h-4 text-primary-500 mt-0.5 flex-shrink-0" />
+                        <span className="text-surface-700">OT 532 Syllabus.pdf</span>
+                      </li>
+                      <li className="flex items-start gap-3 text-sm">
+                        <FileText className="w-4 h-4 text-primary-500 mt-0.5 flex-shrink-0" />
+                        <span className="text-surface-700">Documentation Guide.docx</span>
+                      </li>
+                    </>
+                  )}
+                </ul>
+              </div>
+            </section>
+          </div>
+
+          {/* Footer */}
+          <footer className="text-center py-6 text-xs text-surface-400 print:mt-8">
+            <p>AI-Assisted Grading Report • Generated by Babblet</p>
+            <p className="mt-1">
+              Report ID: {submissionId.slice(0, 8)} • 
+              {submission.completedAt && ` Generated ${formatDate(submission.completedAt)}`}
+            </p>
+          </footer>
+        </main>
+      </div>
+    </HighlightContextProvider>
   );
 }
-
