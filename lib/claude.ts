@@ -352,13 +352,12 @@ QUESTION CATEGORIES (use these exact category values):
 10. "clarification" - Clarification: "Can you explain what you mean by...?" Seeks clearer explanation.
 
 Your goals:
-1. CRITICAL: Each question MUST be a DIFFERENT category - never repeat category types
+1. CRITICAL: Follow the CATEGORY ASSIGNMENT exactly - Question 1 is always "evidence", Question 2 is always "assumption", etc.
 2. Avoid generic or low-value clarifications - every question should challenge the student
-3. Use the category priority order: evidence > assumption > counterargument > limitation > methodology > application > evaluation > synthesis > implication > clarification
-4. Questions should help students demonstrate deeper understanding and critical thinking
-5. Never repeat or closely paraphrase existing questions
-6. Do NOT invent facts; anchor questions to the transcript
-7. Match questions to what was actually said - be specific to the content
+3. Questions should help students demonstrate deeper understanding and critical thinking
+4. Never repeat or closely paraphrase existing questions
+5. Do NOT invent facts; anchor questions to the transcript
+6. Match questions to what was actually said - be specific to the content
 ${priorityGuidance}
 
 ${settings?.assignmentContext ? `
@@ -478,21 +477,20 @@ GOOD examples (precise):
 - "toaster model of cognition"
 - "social cognition nobody's mastered"
 
-CATEGORY DIVERSITY REQUIREMENT (CRITICAL):
-- You MUST use DIFFERENT categories for each question - NO DUPLICATES unless you have more questions than categories
-- For ${returnCount} questions, distribute across these categories in order of priority:
-  1. evidence (Evidence Request)
-  2. assumption (Assumption Challenge)  
-  3. counterargument (Counterargument)
-  4. limitation (Limitation)
-  5. methodology (Methodology)
-  6. application (Application)
-  7. evaluation (Evaluation)
-  8. synthesis (Synthesis)
-  9. implication (Implication)
-  10. clarification (Clarification) - use sparingly, only if truly needed
-- NEVER generate multiple questions with the same category - each question MUST be a different type
-- If generating 5 questions, use exactly 5 different categories from the list above
+CATEGORY ASSIGNMENT (MANDATORY - FOLLOW EXACTLY):
+Generate ${returnCount} questions with EXACTLY these categories in this order:
+${returnCount >= 1 ? '- Question 1: "evidence" (Evidence Request)' : ''}
+${returnCount >= 2 ? '- Question 2: "assumption" (Assumption Challenge)' : ''}
+${returnCount >= 3 ? '- Question 3: "counterargument" (Counterargument)' : ''}
+${returnCount >= 4 ? '- Question 4: "limitation" (Limitation)' : ''}
+${returnCount >= 5 ? '- Question 5: "methodology" (Methodology)' : ''}
+${returnCount >= 6 ? '- Question 6: "application" (Application)' : ''}
+${returnCount >= 7 ? '- Question 7: "evaluation" (Evaluation)' : ''}
+${returnCount >= 8 ? '- Question 8: "synthesis" (Synthesis)' : ''}
+${returnCount >= 9 ? '- Question 9: "implication" (Implication)' : ''}
+${returnCount >= 10 ? '- Question 10: "clarification" (Clarification)' : ''}
+
+This is NON-NEGOTIABLE. Each question MUST use its assigned category.
 
 JSON format:
 {
