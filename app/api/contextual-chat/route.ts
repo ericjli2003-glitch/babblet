@@ -23,7 +23,7 @@ function getAnthropicClient(): Anthropic {
 
 interface ChatContext {
   highlightedText?: string;
-  fullContext?: string; // Full question/rubric text when partial selection
+  fullContext?: string; // Full question/rubric text when partial selection, OR full transcript for insights
   sourceType?: 'question' | 'transcript' | 'rubric' | 'summary' | 'other';
   sourceId?: string;
   timestamp?: string;
@@ -33,6 +33,7 @@ interface ChatContext {
   submissionId?: string;
   learningObjective?: string;
   courseId?: string;
+  analysisData?: string; // JSON stringified analysis data
 }
 
 interface ConversationMessage {
@@ -88,21 +89,43 @@ function buildSystemPrompt(context: ChatContext, courseMaterials?: Array<{ name:
     parts.push(`HIGHLIGHTED TEXT:`);
     parts.push(`"${context.highlightedText}"`);
     
-    // Include full context when user only highlighted a portion
-    if (context.fullContext && context.fullContext !== context.highlightedText) {
-      parts.push(``);
-      parts.push(`FULL ${context.sourceType?.toUpperCase() || 'CONTENT'} CONTEXT (for reference):`);
-      parts.push(`"${context.fullContext}"`);
-      parts.push(``);
-      parts.push(`NOTE: The user highlighted only a portion of the above. Answer about the highlighted portion but use the full context for understanding.`);
-    }
-    
     parts.push(``);
     parts.push(`SOURCE TYPE: ${context.sourceType || 'content'}`);
   }
   
   if (context.rubricCriterion) {
-    parts.push(`RUBRIC CRITERION: ${context.rubricCriterion}`);
+    parts.push(``);
+    parts.push(`RUBRIC CRITERION BEING ANALYZED: ${context.rubricCriterion}`);
+  }
+  
+  // Include full transcript context for rubric insights
+  if (context.fullContext && context.sourceType === 'rubric') {
+    parts.push(``);
+    parts.push(`STUDENT'S PRESENTATION TRANSCRIPT:`);
+    parts.push(`"${context.fullContext.slice(0, 8000)}${context.fullContext.length > 8000 ? '...' : ''}"`);
+    parts.push(``);
+    parts.push(`IMPORTANT: Use this transcript to provide specific, evidence-based feedback about the student's performance on the criterion above.`);
+  } else if (context.fullContext && context.fullContext !== context.highlightedText) {
+    // Include full context when user only highlighted a portion
+    parts.push(``);
+    parts.push(`FULL ${context.sourceType?.toUpperCase() || 'CONTENT'} CONTEXT (for reference):`);
+    parts.push(`"${context.fullContext}"`);
+    parts.push(``);
+    parts.push(`NOTE: The user highlighted only a portion of the above. Answer about the highlighted portion but use the full context for understanding.`);
+  }
+  
+  // Include analysis data if provided
+  if (context.analysisData) {
+    try {
+      const analysis = JSON.parse(context.analysisData);
+      parts.push(``);
+      parts.push(`ANALYSIS DATA:`);
+      if (analysis.summary) parts.push(`Summary: ${analysis.summary}`);
+      if (analysis.strengthAreas) parts.push(`Strengths: ${analysis.strengthAreas.join(', ')}`);
+      if (analysis.improvementAreas) parts.push(`Areas for Improvement: ${analysis.improvementAreas.join(', ')}`);
+    } catch {
+      // Ignore parse errors
+    }
   }
   
   if (context.timestamp) {

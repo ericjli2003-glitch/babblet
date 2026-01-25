@@ -554,15 +554,23 @@ export default function SubmissionDetailPage() {
       ? sortedSegments.map(s => s.text).join(' ')
       : submission?.transcript || '';
     
+    // Find the criterion data to include score and feedback
+    const criterionData = submission?.rubric?.criteriaBreakdown?.find(c => c.criterion === criterionTitle);
+    const criterionInfo = criterionData 
+      ? `Score: ${criterionData.score}/${criterionData.maxScore || 10}. Feedback: ${criterionData.feedback || criterionData.rationale || 'N/A'}`
+      : '';
+    
     const response = await fetch('/api/contextual-chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: `Provide detailed insights about how this student performed on the "${criterionTitle}" criterion. What did they do well? What could be improved? Give specific, actionable feedback.`,
+        message: `Provide detailed insights about how this student performed on the "${criterionTitle}" criterion. ${criterionInfo}. What did they do well? What could be improved? Give specific, actionable feedback based on the transcript.`,
         context: {
           highlightedText: criterionTitle,
           sourceType: 'rubric',
           rubricCriterion: criterionTitle,
+          fullContext: fullTranscript,
+          analysisData: submission?.analysis ? JSON.stringify(submission.analysis) : undefined,
         },
         conversationHistory: [],
       }),
