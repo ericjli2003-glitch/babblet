@@ -507,32 +507,21 @@ ${returnCount >= 10 ? '- Question 10: "clarification" (Clarification)' : ''}
 
 This is NON-NEGOTIABLE. Each question MUST use its assigned category.
 
-JSON format:
-{
-  "questions": [
-    {
-      "question": "The question text",
-      "category": "evidence" | "assumption" | "counterargument" | "application" | "synthesis" | "evaluation" | "methodology" | "limitation" | "implication" | "clarification",
-      "difficulty": "easy" | "medium" | "hard",
-      "bloomLevel": "remember" | "understand" | "apply" | "analyze" | "evaluate" | "create",
-      "rationale": "Why this question is valuable and what it tests (1-2 sentences)",
-      "rubricCriterion": "Which rubric criterion this targets (short label)",
-      "rubricJustification": "Why it matches the rubric/assignment (1 sentence)",
-      "expectedEvidenceType": "If applicable: specific evidence type to request (short)",
-      "tags": ["evidence" | "assumption" | "counterargument" | "definition" | "mechanism" | "limitations" | "methods" | "clarity"],
-      "score": 0-100,
-      "relevantSnippet": "5-15 word EXACT quote from transcript - be precise!",
-      "materialReferences": [{ "refIndex": 1, "excerpt": "short relevant quote from course material" }],
-      "externalSources": [{ "name": "Source name", "type": "study|article|book|website" }]
-    }
-  ]
-}
+Return ONLY valid JSON in this exact format (no markdown, no extra text):
+{"questions":[{"question":"Question text here","category":"evidence","difficulty":"medium","rationale":"Brief rationale","relevantSnippet":"exact quote from transcript"}]}
 
-IMPORTANT:
-- Include "materialReferences" when referencing course materials (use refIndex from the materials list above)
-- Include "externalSources" when using facts, statistics, or claims from outside sources
+Required fields per question:
+- question: The question text (string)
+- category: One of: evidence, assumption, counterargument, limitation, methodology, application, evaluation, synthesis, implication, clarification
+- difficulty: easy, medium, or hard
+- rationale: Brief explanation (1 sentence)
+- relevantSnippet: Short quote from transcript
 
-Respond ONLY with valid JSON.`;
+Optional fields (include when relevant):
+- materialReferences: Array of {"refIndex": 1, "excerpt": "quote"} for course material citations
+- externalSources: Array of {"name": "Source", "type": "study"} for external facts
+
+CRITICAL: Output ONLY the JSON object, no other text.`;
 
   try {
     console.log('[Babblet AI] Generating questions...');
