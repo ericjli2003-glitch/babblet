@@ -12,15 +12,36 @@ import {
   Copy,
   Check,
   Sparkles,
+  FileSearch,
+  AlertTriangle,
+  Swords,
+  Globe,
+  Link,
+  Scale,
+  Microscope,
+  AlertCircle,
+  Rocket,
 } from 'lucide-react';
-import type { GeneratedQuestion, QuestionCategory, QuestionDifficulty } from '@/lib/types';
+import type { GeneratedQuestion, QuestionDifficulty } from '@/lib/types';
 import { config as appConfig } from '@/lib/config';
 
 interface QuestionBankProps {
   questions: {
-    clarifying: GeneratedQuestion[];
-    criticalThinking: GeneratedQuestion[];
-    expansion: GeneratedQuestion[];
+    // New comprehensive categories
+    clarification?: GeneratedQuestion[];
+    evidence?: GeneratedQuestion[];
+    assumption?: GeneratedQuestion[];
+    counterargument?: GeneratedQuestion[];
+    application?: GeneratedQuestion[];
+    synthesis?: GeneratedQuestion[];
+    evaluation?: GeneratedQuestion[];
+    methodology?: GeneratedQuestion[];
+    limitation?: GeneratedQuestion[];
+    implication?: GeneratedQuestion[];
+    // Legacy categories (backwards compatibility)
+    clarifying?: GeneratedQuestion[];
+    criticalThinking?: GeneratedQuestion[];
+    expansion?: GeneratedQuestion[];
   };
   /** Used for export sizing (best set is clamped to 8–12 by config) */
   maxQuestions?: number;
@@ -28,10 +49,70 @@ interface QuestionBankProps {
   onSelectMarker?: (markerId: string) => void;
 }
 
-const categoryConfig: Record<
-  QuestionCategory,
-  { icon: typeof HelpCircle; label: string; color: string; bgColor: string }
-> = {
+// Category configuration with icons and colors for all categories
+const categoryConfig: Record<string, { icon: typeof HelpCircle; label: string; color: string; bgColor: string }> = {
+  // New comprehensive categories
+  clarification: {
+    icon: HelpCircle,
+    label: 'Clarification',
+    color: 'text-blue-600',
+    bgColor: 'bg-blue-50',
+  },
+  evidence: {
+    icon: FileSearch,
+    label: 'Evidence Request',
+    color: 'text-purple-600',
+    bgColor: 'bg-purple-50',
+  },
+  assumption: {
+    icon: AlertTriangle,
+    label: 'Assumption Challenge',
+    color: 'text-orange-600',
+    bgColor: 'bg-orange-50',
+  },
+  counterargument: {
+    icon: Swords,
+    label: 'Counterargument',
+    color: 'text-red-600',
+    bgColor: 'bg-red-50',
+  },
+  application: {
+    icon: Globe,
+    label: 'Application',
+    color: 'text-green-600',
+    bgColor: 'bg-green-50',
+  },
+  synthesis: {
+    icon: Link,
+    label: 'Synthesis',
+    color: 'text-teal-600',
+    bgColor: 'bg-teal-50',
+  },
+  evaluation: {
+    icon: Scale,
+    label: 'Evaluation',
+    color: 'text-indigo-600',
+    bgColor: 'bg-indigo-50',
+  },
+  methodology: {
+    icon: Microscope,
+    label: 'Methodology',
+    color: 'text-cyan-600',
+    bgColor: 'bg-cyan-50',
+  },
+  limitation: {
+    icon: AlertCircle,
+    label: 'Limitation',
+    color: 'text-amber-600',
+    bgColor: 'bg-amber-50',
+  },
+  implication: {
+    icon: Rocket,
+    label: 'Implication',
+    color: 'text-pink-600',
+    bgColor: 'bg-pink-50',
+  },
+  // Legacy categories
   clarifying: {
     icon: HelpCircle,
     label: 'Clarifying Questions',
@@ -39,6 +120,12 @@ const categoryConfig: Record<
     bgColor: 'bg-blue-50',
   },
   'critical-thinking': {
+    icon: Brain,
+    label: 'Critical Thinking',
+    color: 'text-purple-600',
+    bgColor: 'bg-purple-50',
+  },
+  criticalThinking: {
     icon: Brain,
     label: 'Critical Thinking',
     color: 'text-purple-600',
@@ -170,12 +257,13 @@ function CategorySection({
   questions,
   onSelectMarker,
 }: {
-  category: QuestionCategory;
+  category: string;
   questions: GeneratedQuestion[];
   onSelectMarker?: (markerId: string) => void;
 }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const config = categoryConfig[category];
+  // Get config with fallback for unknown categories
+  const config = categoryConfig[category] || categoryConfig.clarification;
   const Icon = config.icon;
 
   return (
@@ -231,16 +319,14 @@ function CategorySection({
 
 export default function QuestionBank({ questions, maxQuestions, isLoading, onSelectMarker }: QuestionBankProps) {
   const [isExported, setIsExported] = useState(false);
-  const totalQuestions =
-    questions.clarifying.length +
-    questions.criticalThinking.length +
-    questions.expansion.length;
-
-  const flattened: GeneratedQuestion[] = [
-    ...questions.clarifying,
-    ...questions.criticalThinking,
-    ...questions.expansion,
-  ];
+  
+  // Dynamically collect all questions from all categories
+  const allCategories = Object.keys(questions) as Array<keyof typeof questions>;
+  const flattened: GeneratedQuestion[] = allCategories.flatMap(cat => questions[cat] || []);
+  const totalQuestions = flattened.length;
+  
+  // Get non-empty categories for display
+  const nonEmptyCategories = allCategories.filter(cat => (questions[cat]?.length || 0) > 0);
 
   return (
     <div className="h-full flex flex-col">
@@ -311,9 +397,29 @@ export default function QuestionBank({ questions, maxQuestions, isLoading, onSel
           </div>
         ) : (
           <>
-            <CategorySection category="clarifying" questions={questions.clarifying} onSelectMarker={onSelectMarker} />
-            <CategorySection category="critical-thinking" questions={questions.criticalThinking} onSelectMarker={onSelectMarker} />
-            <CategorySection category="expansion" questions={questions.expansion} onSelectMarker={onSelectMarker} />
+            {/* Render all non-empty categories dynamically */}
+            {nonEmptyCategories.map(category => (
+              <CategorySection 
+                key={category} 
+                category={category} 
+                questions={questions[category] || []} 
+                onSelectMarker={onSelectMarker} 
+              />
+            ))}
+            {/* Show legacy categories if new categories are empty but legacy exist */}
+            {nonEmptyCategories.length === 0 && (
+              <>
+                {(questions.clarifying?.length || 0) > 0 && (
+                  <CategorySection category="clarifying" questions={questions.clarifying || []} onSelectMarker={onSelectMarker} />
+                )}
+                {(questions.criticalThinking?.length || 0) > 0 && (
+                  <CategorySection category="criticalThinking" questions={questions.criticalThinking || []} onSelectMarker={onSelectMarker} />
+                )}
+                {(questions.expansion?.length || 0) > 0 && (
+                  <CategorySection category="expansion" questions={questions.expansion || []} onSelectMarker={onSelectMarker} />
+                )}
+              </>
+            )}
           </>
         )}
       </div>

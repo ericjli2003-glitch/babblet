@@ -135,11 +135,26 @@ function getPerformanceLabel(score: number): { label: string; percentile: string
   return { label: 'Needs Improvement', percentile: '' };
 }
 
-function getQuestionCategory(category: string): 'basic' | 'intermediate' | 'advanced' {
-  const lower = category.toLowerCase();
-  if (lower.includes('basic') || lower.includes('recall')) return 'basic';
-  if (lower.includes('advanced') || lower.includes('synthesis')) return 'advanced';
-  return 'intermediate';
+// Pass through the actual category - QuestionCard now supports all category types
+function getQuestionCategory(category: string): string {
+  // Normalize the category string
+  const lower = category.toLowerCase().trim();
+  
+  // Map legacy categories to new ones for consistency
+  const legacyMappings: Record<string, string> = {
+    'basic': 'clarification',
+    'recall': 'clarification',
+    'advanced': 'synthesis',
+    'criticalthinking': 'assumption',
+    'critical thinking': 'assumption',
+  };
+  
+  if (legacyMappings[lower]) {
+    return legacyMappings[lower];
+  }
+  
+  // Return the category as-is (handles all new categories)
+  return lower;
 }
 
 // ============================================

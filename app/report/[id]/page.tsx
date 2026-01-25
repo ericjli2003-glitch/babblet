@@ -122,19 +122,31 @@ function getPerformanceLevel(score: number, maxScore: number = 100): { label: st
 }
 
 function getCategoryBadgeColor(category: string): string {
-  switch (category?.toLowerCase()) {
-    case 'clarifying':
-    case 'basic':
-      return 'bg-blue-100 text-blue-700';
-    case 'expansion':
-    case 'intermediate':
-      return 'bg-purple-100 text-purple-700';
-    case 'critical-thinking':
-    case 'advanced':
-      return 'bg-amber-100 text-amber-700';
-    default:
-      return 'bg-surface-100 text-surface-700';
-  }
+  const cat = category?.toLowerCase().trim();
+  
+  // New comprehensive categories
+  const categoryColors: Record<string, string> = {
+    // New categories
+    clarification: 'bg-blue-100 text-blue-700',
+    evidence: 'bg-purple-100 text-purple-700',
+    assumption: 'bg-orange-100 text-orange-700',
+    counterargument: 'bg-red-100 text-red-700',
+    application: 'bg-green-100 text-green-700',
+    synthesis: 'bg-teal-100 text-teal-700',
+    evaluation: 'bg-indigo-100 text-indigo-700',
+    methodology: 'bg-cyan-100 text-cyan-700',
+    limitation: 'bg-amber-100 text-amber-700',
+    implication: 'bg-pink-100 text-pink-700',
+    // Legacy categories
+    clarifying: 'bg-blue-100 text-blue-700',
+    basic: 'bg-blue-100 text-blue-700',
+    expansion: 'bg-teal-100 text-teal-700',
+    intermediate: 'bg-purple-100 text-purple-700',
+    'critical-thinking': 'bg-orange-100 text-orange-700',
+    advanced: 'bg-amber-100 text-amber-700',
+  };
+  
+  return categoryColors[cat] || 'bg-surface-100 text-surface-700';
 }
 
 function getStrengthText(strength: string | { text: string }): string {

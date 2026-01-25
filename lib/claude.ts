@@ -38,9 +38,21 @@ interface QuestionGenSettings {
   targetDifficulty?: 'mixed' | 'easy' | 'medium' | 'hard';
   bloomFocus?: 'mixed' | 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
   priorities?: {
-    clarifying: number; // 0=none, 1=some, 2=focus
-    criticalThinking: number;
-    expansion: number;
+    // New comprehensive categories
+    clarification?: number; // 0=avoid, 1=include some, 2=prioritize
+    evidence?: number;
+    assumption?: number;
+    counterargument?: number;
+    application?: number;
+    synthesis?: number;
+    evaluation?: number;
+    methodology?: number;
+    limitation?: number;
+    implication?: number;
+    // Legacy categories (mapped internally)
+    clarifying?: number;
+    criticalThinking?: number;
+    expansion?: number;
   };
   focusAreas?: string[];
   existingQuestions?: string[];
@@ -51,11 +63,63 @@ function normalizeDifficulty(value: unknown): GeneratedQuestion['difficulty'] {
   return 'medium';
 }
 
+// All valid question categories (new + legacy)
+const VALID_CATEGORIES: GeneratedQuestion['category'][] = [
+  // New comprehensive categories
+  'clarification', 'evidence', 'assumption', 'counterargument', 
+  'application', 'synthesis', 'evaluation', 'methodology', 
+  'limitation', 'implication',
+  // Legacy categories
+  'clarifying', 'critical-thinking', 'expansion'
+];
+
 function normalizeCategory(value: unknown): GeneratedQuestion['category'] {
-  if (value === 'clarifying' || value === 'expansion' || value === 'critical-thinking') return value;
-  // Back-compat for older prompts
-  if (value === 'criticalThinking') return 'critical-thinking';
-  return 'clarifying';
+  const strVal = String(value).toLowerCase().trim();
+  
+  // Direct match for any valid category
+  if (VALID_CATEGORIES.includes(strVal as GeneratedQuestion['category'])) {
+    return strVal as GeneratedQuestion['category'];
+  }
+  
+  // Handle variations and mappings
+  const mappings: Record<string, GeneratedQuestion['category']> = {
+    'criticalthinking': 'assumption',
+    'critical_thinking': 'assumption',
+    'critical thinking': 'assumption',
+    'challenge': 'assumption',
+    'counter': 'counterargument',
+    'counter-argument': 'counterargument',
+    'defend': 'counterargument',
+    'apply': 'application',
+    'real-world': 'application',
+    'realworld': 'application',
+    'connect': 'synthesis',
+    'integrate': 'synthesis',
+    'judge': 'evaluation',
+    'assess': 'evaluation',
+    'method': 'methodology',
+    'process': 'methodology',
+    'approach': 'methodology',
+    'limit': 'limitation',
+    'boundary': 'limitation',
+    'edge-case': 'limitation',
+    'future': 'implication',
+    'consequence': 'implication',
+    'next-step': 'implication',
+    'proof': 'evidence',
+    'data': 'evidence',
+    'source': 'evidence',
+    'explain': 'clarification',
+    'define': 'clarification',
+    'expand': 'synthesis',
+  };
+  
+  if (mappings[strVal]) {
+    return mappings[strVal];
+  }
+  
+  // Default fallback
+  return 'clarification';
 }
 
 function normalizeText(s: string): string {
@@ -118,29 +182,60 @@ function selectDiverseTop(
   if (candidates.length <= count) return candidates.slice(0, count);
 
   const sorted = [...candidates].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-  const byCategory: Record<GeneratedQuestion['category'], GeneratedQuestion[]> = {
-    clarifying: [],
-    'critical-thinking': [],
-    expansion: [],
-  };
-  for (const q of sorted) byCategory[q.category].push(q);
+  
+  // Initialize all category buckets
+  const byCategory: Partial<Record<GeneratedQuestion['category'], GeneratedQuestion[]>> = {};
+  for (const cat of VALID_CATEGORIES) {
+    byCategory[cat] = [];
+  }
+  for (const q of sorted) {
+    if (!byCategory[q.category]) byCategory[q.category] = [];
+    byCategory[q.category]!.push(q);
+  }
 
-  const weight = (k: keyof NonNullable<QuestionGenSettings['priorities']>) => {
-    const p = priorities?.[k];
+  const weight = (k: string) => {
+    const p = priorities?.[k as keyof NonNullable<QuestionGenSettings['priorities']>];
     if (p === 0) return 0;
     if (p === 2) return 3;
     return 1;
   };
 
+  // Build category order based on priorities, favoring diverse question types
   const categoryOrder: Array<GeneratedQuestion['category']> = [];
+  
+  // New categories with default weights (higher priority types first)
+  const newCategories: Array<{ cat: GeneratedQuestion['category']; key: string }> = [
+    { cat: 'evidence', key: 'evidence' },
+    { cat: 'assumption', key: 'assumption' },
+    { cat: 'counterargument', key: 'counterargument' },
+    { cat: 'application', key: 'application' },
+    { cat: 'evaluation', key: 'evaluation' },
+    { cat: 'methodology', key: 'methodology' },
+    { cat: 'limitation', key: 'limitation' },
+    { cat: 'synthesis', key: 'synthesis' },
+    { cat: 'implication', key: 'implication' },
+    { cat: 'clarification', key: 'clarification' },
+  ];
+  
+  // Add new categories based on their weights
+  for (const { cat, key } of newCategories) {
+    const w = weight(key);
+    for (let i = 0; i < w; i++) categoryOrder.push(cat);
+  }
+  
+  // Also check legacy priorities and map them
   const wClar = weight('clarifying');
   const wCrit = weight('criticalThinking');
   const wExp = weight('expansion');
-  // Build a small repeating schedule (max 7 slots) to enforce mix
-  for (let i = 0; i < wCrit; i++) categoryOrder.push('critical-thinking');
-  for (let i = 0; i < wExp; i++) categoryOrder.push('expansion');
-  for (let i = 0; i < wClar; i++) categoryOrder.push('clarifying');
-  if (categoryOrder.length === 0) categoryOrder.push('critical-thinking', 'expansion', 'clarifying');
+  for (let i = 0; i < wCrit; i++) categoryOrder.push('assumption');
+  for (let i = 0; i < wExp; i++) categoryOrder.push('application');
+  for (let i = 0; i < wClar; i++) categoryOrder.push('clarification');
+  
+  // Default diverse mix if no priorities set
+  if (categoryOrder.length === 0) {
+    categoryOrder.push('evidence', 'assumption', 'counterargument', 'application', 
+      'evaluation', 'methodology', 'limitation', 'synthesis', 'implication', 'clarification');
+  }
 
   const picked: GeneratedQuestion[] = [];
   const pickOne = (pool: GeneratedQuestion[]) => {
@@ -157,8 +252,10 @@ function selectDiverseTop(
       const q = sorted[evidenceIdx];
       // remove from its category pool
       const pool = byCategory[q.category];
-      const j = pool.findIndex((x) => x.id === q.id);
-      if (j >= 0) pool.splice(j, 1);
+      if (pool) {
+        const j = pool.findIndex((x) => x.id === q.id);
+        if (j >= 0) pool.splice(j, 1);
+      }
       picked.push(q);
     }
   }
@@ -167,15 +264,16 @@ function selectDiverseTop(
   while (picked.length < count) {
     const cat = categoryOrder[i % categoryOrder.length];
     const pool = byCategory[cat];
-    if (pool.length > 0) {
+    if (pool && pool.length > 0) {
       pickOne(pool);
     } else {
       // fallback: first non-empty pool
       const fallbackCat = (Object.keys(byCategory) as Array<GeneratedQuestion['category']>).find(
-        (c) => byCategory[c].length > 0
+        (c) => (byCategory[c]?.length ?? 0) > 0
       );
       if (!fallbackCat) break;
-      pickOne(byCategory[fallbackCat]);
+      const fallbackPool = byCategory[fallbackCat];
+      if (fallbackPool) pickOne(fallbackPool);
     }
     i++;
   }
@@ -192,25 +290,55 @@ export async function generateQuestionsWithClaude(
 ): Promise<GeneratedQuestion[]> {
   const client = getAnthropicClient();
 
-  // Build priority guidance
+  // Build priority guidance for new category system
   const priorityLabels = ['avoid', 'include some', 'prioritize'];
-  const priorityGuidance = settings?.priorities
-    ? `
-Question Type Priorities (follow these closely):
-- Clarifying questions: ${priorityLabels[settings.priorities.clarifying]}
-- Critical thinking questions: ${priorityLabels[settings.priorities.criticalThinking]}  
-- Expansion questions: ${priorityLabels[settings.priorities.expansion]}`
-    : '';
+  const buildPriorityGuidance = () => {
+    if (!settings?.priorities) return '';
+    const lines: string[] = [];
+    const cats = [
+      { key: 'evidence', label: 'Evidence Request' },
+      { key: 'assumption', label: 'Assumption Challenge' },
+      { key: 'counterargument', label: 'Counterargument' },
+      { key: 'application', label: 'Application' },
+      { key: 'synthesis', label: 'Synthesis' },
+      { key: 'evaluation', label: 'Evaluation' },
+      { key: 'methodology', label: 'Methodology' },
+      { key: 'limitation', label: 'Limitation' },
+      { key: 'implication', label: 'Implication' },
+      { key: 'clarification', label: 'Clarification' },
+    ];
+    for (const { key, label } of cats) {
+      const p = settings.priorities[key as keyof typeof settings.priorities];
+      if (p !== undefined) {
+        lines.push(`- ${label}: ${priorityLabels[p]}`);
+      }
+    }
+    return lines.length > 0 ? `\nQuestion Type Priorities:\n${lines.join('\n')}` : '';
+  };
+  const priorityGuidance = buildPriorityGuidance();
 
-  const systemPrompt = `You are an expert educational AI assistant helping professors generate high-signal, rubric-aligned questions during student presentations.
+  const systemPrompt = `You are an expert educational AI assistant helping professors generate diverse, high-signal, rubric-aligned questions during student presentations.
+
+QUESTION CATEGORIES (use these exact category values):
+1. "evidence" - Evidence Request: "What data/sources support your claim that...?" Requests proof, data, citations.
+2. "assumption" - Assumption Challenge: "You seem to assume X, but what if...?" Challenges underlying premises.
+3. "counterargument" - Counterargument: "How would you respond to someone who argues...?" Tests defense skills.
+4. "application" - Application: "How would this apply to [real scenario]...?" Tests practical transfer.
+5. "synthesis" - Synthesis: "How does this connect to [related concept]...?" Tests integration of ideas.
+6. "evaluation" - Evaluation: "How would you assess the validity of...?" Tests judgment and critique.
+7. "methodology" - Methodology: "Why did you choose this approach instead of...?" Questions process decisions.
+8. "limitation" - Limitation: "What are the limitations or edge cases of...?" Explores boundaries.
+9. "implication" - Implication: "What are the consequences or next steps...?" Explores future directions.
+10. "clarification" - Clarification: "Can you explain what you mean by...?" Seeks clearer explanation.
 
 Your goals:
-1. Generate ONLY the most valuable, high-signal questions (top-ranked)
-2. Avoid generic or low-value clarifications
-3. Prioritize questions about evidence, assumptions, counterarguments, and limitations
-4. Questions should help students demonstrate deeper understanding
+1. Generate diverse questions across MULTIPLE categories (aim for at least 3 different categories)
+2. Avoid generic or low-value clarifications - every question should challenge the student
+3. Prioritize evidence, assumptions, counterarguments, limitations, and methodology questions
+4. Questions should help students demonstrate deeper understanding and critical thinking
 5. Never repeat or closely paraphrase existing questions
-6. Do NOT invent facts; anchor questions to the transcript and request specific evidence when appropriate
+6. Do NOT invent facts; anchor questions to the transcript
+7. Match questions to what was actually said - be specific to the content
 ${priorityGuidance}
 
 ${settings?.assignmentContext ? `
@@ -313,26 +441,31 @@ GOOD examples (precise):
 - "toaster model of cognition"
 - "social cognition nobody's mastered"
 
+CATEGORY DIVERSITY REQUIREMENT:
+- For ${returnCount} questions, use at least ${Math.min(Math.ceil(returnCount / 2), 5)} different categories
+- Avoid having more than 2 questions of the same category unless specifically requested
+- Prefer challenging categories (evidence, assumption, counterargument, limitation, methodology) over clarification
+
 JSON format:
 {
   "questions": [
     {
       "question": "The question text",
-      "category": "clarifying" | "critical-thinking" | "expansion",
+      "category": "evidence" | "assumption" | "counterargument" | "application" | "synthesis" | "evaluation" | "methodology" | "limitation" | "implication" | "clarification",
       "difficulty": "easy" | "medium" | "hard",
       "bloomLevel": "remember" | "understand" | "apply" | "analyze" | "evaluate" | "create",
-      "rationale": "Why this question is valuable (1-2 sentences)",
+      "rationale": "Why this question is valuable and what it tests (1-2 sentences)",
       "rubricCriterion": "Which rubric criterion this targets (short label)",
       "rubricJustification": "Why it matches the rubric/assignment (1 sentence)",
       "expectedEvidenceType": "If applicable: specific evidence type to request (short)",
       "tags": ["evidence" | "assumption" | "counterargument" | "definition" | "mechanism" | "limitations" | "methods" | "clarity"],
       "score": 0-100,
-      "relevantSnippet": "5-15 word EXACT quote - be precise!"
+      "relevantSnippet": "5-15 word EXACT quote from transcript - be precise!"
     }
   ]
 }
 
-Respond ONLY with JSON.`;
+Respond ONLY with valid JSON.`;
 
   try {
     console.log('[Babblet AI] Generating questions...');

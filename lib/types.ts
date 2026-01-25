@@ -3,8 +3,108 @@
 // ============================================
 
 export type QuestionDifficulty = 'easy' | 'medium' | 'hard';
-export type QuestionCategory = 'clarifying' | 'critical-thinking' | 'expansion';
+
+// Comprehensive question categories aligned with Bloom's taxonomy and pedagogical best practices
+export type QuestionCategory = 
+  | 'clarification'      // "Can you explain what you mean by...?" - Understanding
+  | 'evidence'           // "What data/sources support...?" - Requesting proof
+  | 'assumption'         // "You seem to assume X, but what if...?" - Challenging premises
+  | 'counterargument'    // "How would you respond to someone who argues...?" - Defense
+  | 'application'        // "How would this apply in...?" - Real-world transfer
+  | 'synthesis'          // "How does this connect to...?" - Integration
+  | 'evaluation'         // "How would you assess the validity of...?" - Judgment
+  | 'methodology'        // "Why did you choose this approach...?" - Process reasoning
+  | 'limitation'         // "What are the limitations or edge cases...?" - Boundaries
+  | 'implication'        // "What are the consequences or next steps...?" - Future thinking
+  // Legacy types for backwards compatibility
+  | 'clarifying'         // Maps to 'clarification'
+  | 'critical-thinking'  // Maps to 'assumption' or 'counterargument'
+  | 'expansion';         // Maps to 'application' or 'synthesis'
+
 export type PresentationStatus = 'idle' | 'recording' | 'processing' | 'analyzing' | 'completed' | 'error';
+
+// Question category metadata for UI display
+export const QUESTION_CATEGORY_INFO: Record<string, { label: string; description: string; color: string; icon: string }> = {
+  clarification: {
+    label: 'Clarification',
+    description: 'Asks for clearer explanation of concepts or terms',
+    color: 'blue',
+    icon: '❓'
+  },
+  evidence: {
+    label: 'Evidence Request',
+    description: 'Requests data, sources, or proof to support claims',
+    color: 'purple',
+    icon: '📊'
+  },
+  assumption: {
+    label: 'Assumption Challenge',
+    description: 'Challenges underlying assumptions or premises',
+    color: 'orange',
+    icon: '🔍'
+  },
+  counterargument: {
+    label: 'Counterargument',
+    description: 'Presents opposing viewpoints to defend against',
+    color: 'red',
+    icon: '⚔️'
+  },
+  application: {
+    label: 'Application',
+    description: 'Asks how concepts apply to real-world scenarios',
+    color: 'green',
+    icon: '🌍'
+  },
+  synthesis: {
+    label: 'Synthesis',
+    description: 'Connects ideas to other concepts or domains',
+    color: 'teal',
+    icon: '🔗'
+  },
+  evaluation: {
+    label: 'Evaluation',
+    description: 'Asks to assess validity, importance, or quality',
+    color: 'indigo',
+    icon: '⚖️'
+  },
+  methodology: {
+    label: 'Methodology',
+    description: 'Questions the approach, methods, or process used',
+    color: 'cyan',
+    icon: '🔬'
+  },
+  limitation: {
+    label: 'Limitation',
+    description: 'Explores boundaries, edge cases, or constraints',
+    color: 'amber',
+    icon: '⚠️'
+  },
+  implication: {
+    label: 'Implication',
+    description: 'Explores consequences, next steps, or future directions',
+    color: 'pink',
+    icon: '🚀'
+  },
+  // Legacy mappings
+  clarifying: {
+    label: 'Clarifying',
+    description: 'General clarification question',
+    color: 'blue',
+    icon: '❓'
+  },
+  'critical-thinking': {
+    label: 'Critical Thinking',
+    description: 'Challenges assumptions or logic',
+    color: 'orange',
+    icon: '🧠'
+  },
+  expansion: {
+    label: 'Expansion',
+    description: 'Broadens the discussion scope',
+    color: 'green',
+    icon: '🌱'
+  }
+};
 
 // ============================================
 // Transcript Types
@@ -113,6 +213,18 @@ export interface VerificationFinding {
 }
 
 export interface QuestionBank {
+  // New comprehensive categories
+  clarification: GeneratedQuestion[];
+  evidence: GeneratedQuestion[];
+  assumption: GeneratedQuestion[];
+  counterargument: GeneratedQuestion[];
+  application: GeneratedQuestion[];
+  synthesis: GeneratedQuestion[];
+  evaluation: GeneratedQuestion[];
+  methodology: GeneratedQuestion[];
+  limitation: GeneratedQuestion[];
+  implication: GeneratedQuestion[];
+  // Legacy categories for backwards compatibility
   clarifying: GeneratedQuestion[];
   criticalThinking: GeneratedQuestion[];
   expansion: GeneratedQuestion[];
