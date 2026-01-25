@@ -1,10 +1,19 @@
 'use client';
 
-import { Check, Info } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Check, Info, ChevronDown, Sparkles, BookOpen, FileText, GitBranch, ExternalLink, Loader2 } from 'lucide-react';
 
 interface ContextReference {
   text: string;
   timestamps: string[];
+}
+
+interface MaterialReference {
+  id: string;
+  name: string;
+  type: string;
+  excerpt?: string;
+  documentId?: string;
 }
 
 interface QuestionCardProps {
@@ -14,6 +23,17 @@ interface QuestionCardProps {
   isSelected?: boolean;
   onToggle?: () => void;
   onTimestampClick?: (timestamp: string) => void;
+  // New props for rationale display
+  rationale?: string;
+  rubricCriterion?: string;
+  rubricJustification?: string;
+  relevantSnippet?: string;
+  // Course material references
+  materialReferences?: MaterialReference[];
+  onMaterialClick?: (ref: MaterialReference) => void;
+  // Branch functionality
+  onBranch?: (count: number) => void;
+  isBranching?: boolean;
 }
 
 const categoryConfig: Record<string, { label: string; color: string; icon?: string }> = {
@@ -106,39 +126,235 @@ export default function QuestionCard({
   isSelected = false,
   onToggle,
   onTimestampClick,
+  rationale,
+  rubricCriterion,
+  rubricJustification,
+  relevantSnippet,
+  materialReferences,
+  onMaterialClick,
+  onBranch,
+  isBranching = false,
 }: QuestionCardProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [showBranchMenu, setShowBranchMenu] = useState(false);
+  const branchMenuRef = useRef<HTMLDivElement>(null);
+  
+  // Close branch menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (branchMenuRef.current && !branchMenuRef.current.contains(event.target as Node)) {
+        setShowBranchMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+  
   // Get config with fallback for unknown categories
   const config = categoryConfig[category] || categoryConfig.clarification;
+  
+  const hasRationale = rationale || rubricCriterion || rubricJustification || relevantSnippet;
+  const hasMaterialRefs = materialReferences && materialReferences.length > 0;
 
   return (
     <div className={`bg-white rounded-xl border p-5 transition-all ${
       isSelected ? 'border-primary-300 shadow-md' : 'border-surface-200'
     }`}>
-      {/* Category Badge */}
+      {/* Category Badge, Branch Button & AI Rationale Available */}
       <div className="flex items-center justify-between mb-3">
-        <span className={`px-2.5 py-1 text-xs font-semibold uppercase tracking-wide rounded-md border ${config.color}`}>
-          {config.icon && <span className="mr-1">{config.icon}</span>}
-          {config.label}
-        </span>
-        {onToggle && (
-          <button
-            onClick={onToggle}
-            className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-              isSelected
-                ? 'bg-primary-500 border-primary-500 text-white'
-                : 'border-surface-300 hover:border-primary-400'
-            }`}
-          >
-            {isSelected && <Check className="w-3 h-3" />}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          <span className={`px-2.5 py-1 text-xs font-semibold uppercase tracking-wide rounded-md border ${config.color}`}>
+            {config.icon && <span className="mr-1">{config.icon}</span>}
+            {config.label}
+          </span>
+          
+          {/* Branch Button - always visible next to category badge */}
+          <div className="relative" ref={branchMenuRef}>
+            <button
+              onClick={() => onBranch && setShowBranchMenu(!showBranchMenu)}
+              disabled={isBranching || !onBranch}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+                !onBranch
+                  ? 'opacity-50 cursor-not-allowed bg-surface-50 border-surface-200 text-surface-400'
+                  : isBranching 
+                    ? 'bg-primary-50 border-primary-200 text-primary-600 cursor-wait'
+                    : 'bg-white border-surface-200 text-surface-600 hover:border-primary-300 hover:bg-primary-50 hover:text-primary-600'
+              }`}
+              title={onBranch ? "Generate more similar questions" : "Branch not available"}
+            >
+              {isBranching ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <GitBranch className="w-3.5 h-3.5" />
+              )}
+              <span>{isBranching ? 'Branching...' : 'Branch'}</span>
+              {!isBranching && <ChevronDown className="w-3 h-3" />}
+            </button>
+            
+            {/* Branch Dropdown Menu */}
+            {showBranchMenu && !isBranching && onBranch && (
+              <div className="absolute left-0 top-full mt-1 bg-white border border-surface-200 rounded-lg shadow-lg z-20 py-1 min-w-[160px]">
+                <p className="px-3 py-1.5 text-xs text-surface-500 font-medium border-b border-surface-100">
+                  Generate similar questions
+                </p>
+                {[1, 2, 3, 5].map(count => (
+                  <button
+                    key={count}
+                    onClick={() => {
+                      onBranch(count);
+                      setShowBranchMenu(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm text-surface-700 hover:bg-primary-50 hover:text-primary-700 transition-colors"
+                  >
+                    +{count} more {count === 1 ? 'question' : 'questions'}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          {hasRationale && (
+            <span className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-primary-600 bg-primary-50 rounded-md">
+              <Sparkles className="w-3 h-3" />
+              AI Rationale Available
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {onToggle && (
+            <button
+              onClick={onToggle}
+              className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                isSelected
+                  ? 'bg-primary-500 border-primary-500 text-white'
+                  : 'border-surface-300 hover:border-primary-400'
+              }`}
+            >
+              {isSelected && <Check className="w-3 h-3" />}
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Question */}
-      <p className="text-surface-800 leading-relaxed mb-3">{question}</p>
+      {/* Question with inline material references */}
+      <p className="text-surface-800 leading-relaxed mb-3">
+        {question}
+        {hasMaterialRefs && (
+          <span className="ml-1">
+            {materialReferences.map((ref, i) => (
+              <button
+                key={ref.id}
+                onClick={() => onMaterialClick?.(ref)}
+                className="inline-flex items-center text-primary-600 hover:text-primary-700 font-medium text-sm hover:underline"
+                title={`View: ${ref.name}`}
+              >
+                [{i + 1}]
+              </button>
+            ))}
+          </span>
+        )}
+      </p>
+      
+      {/* Course Material References Section */}
+      {hasMaterialRefs && (
+        <div className="mb-3 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            <BookOpen className="w-4 h-4 text-blue-600" />
+            <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Course Material References</span>
+          </div>
+          <div className="space-y-1.5">
+            {materialReferences.map((ref, i) => (
+              <button
+                key={ref.id}
+                onClick={() => onMaterialClick?.(ref)}
+                className="flex items-start gap-2 w-full text-left group"
+              >
+                <span className="text-xs font-bold text-blue-600 mt-0.5">[{i + 1}]</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-blue-800 group-hover:underline truncate">
+                      {ref.name}
+                    </span>
+                    <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded capitalize">
+                      {ref.type}
+                    </span>
+                    <ExternalLink className="w-3 h-3 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  {ref.excerpt && (
+                    <p className="text-xs text-blue-600 mt-0.5 line-clamp-1">&quot;{ref.excerpt}&quot;</p>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
-      {/* Simple Context Line */}
-      {context && (
+      {/* Why This Question? - Expandable Section */}
+      {hasRationale && (
+        <div className="mt-4 border border-surface-100 rounded-lg overflow-hidden">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="w-full flex items-center justify-between p-3 bg-surface-50 hover:bg-surface-100 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-primary-600" />
+              <span className="text-sm font-semibold text-surface-700">WHY THIS QUESTION?</span>
+            </div>
+            <ChevronDown className={`w-4 h-4 text-surface-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+          </button>
+          
+          {isExpanded && (
+            <div className="p-4 space-y-4 bg-white">
+              {/* Transcript Analysis */}
+              {(relevantSnippet || (context && context.timestamps.length > 0)) && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <FileText className="w-4 h-4 text-surface-500" />
+                    <span className="text-xs font-semibold text-surface-500 uppercase tracking-wide">Transcript Analysis</span>
+                  </div>
+                  <p className="text-sm text-surface-700">
+                    {relevantSnippet ? (
+                      <>
+                        The student mentioned <span className="font-semibold text-surface-900">&quot;{relevantSnippet}&quot;</span>
+                        {context?.timestamps?.[0] && (
+                          <> at <button 
+                            onClick={() => onTimestampClick?.(context.timestamps[0])}
+                            className="text-primary-600 hover:text-primary-700 hover:underline font-medium"
+                          >
+                            [{context.timestamps[0]}]
+                          </button></>
+                        )}
+                        . {rationale}
+                      </>
+                    ) : (
+                      rationale || 'This question tests understanding of key concepts from the presentation.'
+                    )}
+                  </p>
+                </div>
+              )}
+
+              {/* Rubric Alignment */}
+              {(rubricCriterion || rubricJustification) && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <BookOpen className="w-4 h-4 text-surface-500" />
+                    <span className="text-xs font-semibold text-surface-500 uppercase tracking-wide">Thematic Mastery Goals</span>
+                  </div>
+                  <p className="text-sm text-surface-700">
+                    {rubricJustification || (
+                      <>Directly connects to the <span className="font-semibold text-surface-900">&quot;{rubricCriterion}&quot;</span> criterion. Tests ability to demonstrate mastery of course content.</>
+                    )}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Simple Context Line (shown when no expanded rationale) */}
+      {!hasRationale && context && (
         <div className="flex items-start gap-2 pt-3 border-t border-surface-100">
           <Info className="w-3.5 h-3.5 text-primary-500 mt-0.5 flex-shrink-0" />
           <p className="text-xs text-surface-500">

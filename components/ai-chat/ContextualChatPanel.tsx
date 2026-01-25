@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, Send, Loader2, Lightbulb, MessageSquare, 
-  RotateCcw, Sparkles, FileText, Mic, BookOpen, AlertCircle
+  RotateCcw, Sparkles, FileText, Mic, BookOpen, AlertCircle, ExternalLink
 } from 'lucide-react';
 import { useHighlightContext, HighlightSourceType } from '@/lib/hooks/useHighlightContext';
 
@@ -165,6 +165,29 @@ export default function ContextualChatPanel() {
                 <p className="text-sm leading-relaxed whitespace-pre-wrap">
                   {message.content}
                 </p>
+                
+                {/* Material References Section */}
+                {message.materialReferences && message.materialReferences.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-surface-200/50">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <BookOpen className="w-3.5 h-3.5 text-blue-500" />
+                      <span className="text-xs font-medium text-blue-700">Course Material References</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {message.materialReferences.map((ref, i) => (
+                        <span
+                          key={i}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-md border border-blue-100"
+                          title={`Referenced from: ${ref.name}`}
+                        >
+                          <span className="font-bold">[{ref.index}]</span>
+                          <span className="truncate max-w-[120px]">{ref.name}</span>
+                          <span className="text-blue-400 capitalize text-[10px]">({ref.type})</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 
                 {/* Recommendations Section */}
                 {message.recommendations && message.recommendations.length > 0 && (

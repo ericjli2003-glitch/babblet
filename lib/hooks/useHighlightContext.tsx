@@ -28,6 +28,11 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   recommendations?: string[];
+  materialReferences?: Array<{
+    index: number;
+    name: string;
+    type: string;
+  }>;
   timestamp: number;
 }
 
@@ -199,6 +204,7 @@ export function HighlightContextProvider({ children }: HighlightContextProviderP
           role: 'assistant',
           content: data.response,
           recommendations: data.recommendations,
+          materialReferences: data.materialReferences,
           timestamp: Date.now(),
         };
         setChatMessages(prev => [...prev, assistantMessage]);
