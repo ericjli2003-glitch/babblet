@@ -1127,7 +1127,7 @@ export default function SubmissionDetailPage() {
                           if (!parentId || depth > 5) return depth; // Max depth of 5
                           return getBranchDepth(parentId, questions, depth + 1);
                         };
-                        const branchDepth = isBranchedQuestion ? getBranchDepth(q.id, submission.questions) : 0;
+                        const branchDepth = isBranchedQuestion ? getBranchDepth(q.id, submission.questions || []) : 0;
                         
                         // Progressive indentation based on depth (max 3 levels visually)
                         const indentClass = branchDepth > 0 ? `ml-${Math.min(branchDepth, 3) * 6}` : '';
