@@ -563,7 +563,37 @@ Respond ONLY with valid JSON.`;
       throw new Error('No JSON found in response');
     }
 
-    const parsed = JSON.parse(jsonMatch[0]);
+    // Clean up common JSON issues from LLM output
+    let jsonString = jsonMatch[0];
+    
+    // Remove trailing commas before ] or }
+    jsonString = jsonString.replace(/,(\s*[\]}])/g, '$1');
+    
+    // Fix unescaped newlines in strings (replace with \n)
+    jsonString = jsonString.replace(/:\s*"([^"]*)\n([^"]*)"/g, (match, p1, p2) => {
+      return `: "${p1}\\n${p2}"`;
+    });
+    
+    // Try to parse, with fallback for common issues
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonString);
+    } catch (parseError) {
+      console.error('[Babblet AI] JSON parse error, attempting recovery...');
+      console.error('[Babblet AI] Raw response (first 500 chars):', jsonString.substring(0, 500));
+      
+      // Try more aggressive cleanup - remove problematic characters
+      jsonString = jsonString
+        .replace(/[\x00-\x1F\x7F]/g, ' ') // Remove control characters
+        .replace(/,(\s*[\]}])/g, '$1'); // Remove trailing commas again
+      
+      try {
+        parsed = JSON.parse(jsonString);
+      } catch (secondError) {
+        console.error('[Babblet AI] Recovery failed, returning empty questions');
+        return [];
+      }
+    }
 
     const rawQuestions: GeneratedQuestion[] = (parsed.questions || []).map((q: any) => {
       // Parse material references if present
