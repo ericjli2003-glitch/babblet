@@ -23,6 +23,7 @@ function getAnthropicClient(): Anthropic {
 
 interface ChatContext {
   highlightedText?: string;
+  fullContext?: string; // Full question/rubric text when partial selection
   sourceType?: 'question' | 'transcript' | 'rubric' | 'summary' | 'other';
   sourceId?: string;
   timestamp?: string;
@@ -86,6 +87,16 @@ function buildSystemPrompt(context: ChatContext, courseMaterials?: Array<{ name:
     parts.push(``);
     parts.push(`HIGHLIGHTED TEXT:`);
     parts.push(`"${context.highlightedText}"`);
+    
+    // Include full context when user only highlighted a portion
+    if (context.fullContext && context.fullContext !== context.highlightedText) {
+      parts.push(``);
+      parts.push(`FULL ${context.sourceType?.toUpperCase() || 'CONTENT'} CONTEXT (for reference):`);
+      parts.push(`"${context.fullContext}"`);
+      parts.push(``);
+      parts.push(`NOTE: The user highlighted only a portion of the above. Answer about the highlighted portion but use the full context for understanding.`);
+    }
+    
     parts.push(``);
     parts.push(`SOURCE TYPE: ${context.sourceType || 'content'}`);
   }

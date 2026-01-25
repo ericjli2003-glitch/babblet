@@ -17,6 +17,36 @@ const SOURCE_CONFIG: Record<HighlightSourceType, { icon: React.ReactNode; label:
   other: { icon: <FileText className="w-3 h-3" />, label: 'Content', color: 'text-surface-600 bg-surface-50' },
 };
 
+// Render content with styled citations [1], [2], etc.
+function renderContentWithCitations(
+  content: string, 
+  materialRefs?: Array<{ index: number; name: string; type: string }>
+): React.ReactNode {
+  if (!content) return null;
+  
+  // Split by citation pattern [1], [2], etc.
+  const parts = content.split(/(\[\d+\])/g);
+  
+  return parts.map((part, i) => {
+    const citationMatch = part.match(/^\[(\d+)\]$/);
+    if (citationMatch) {
+      const refIndex = parseInt(citationMatch[1]);
+      const ref = materialRefs?.find(r => r.index === refIndex);
+      
+      return (
+        <span
+          key={i}
+          className="inline-flex items-center px-1 py-0.5 mx-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded cursor-help hover:bg-blue-200 transition-colors"
+          title={ref ? `${ref.name} (${ref.type})` : `Reference ${refIndex}`}
+        >
+          [{refIndex}]
+        </span>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 export default function ContextualChatPanel() {
   const {
     currentHighlight,
@@ -162,9 +192,12 @@ export default function ContextualChatPanel() {
                     : 'bg-surface-100 text-surface-900'
                 }`}
               >
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                  {message.content}
-                </p>
+                <div className="text-sm leading-relaxed whitespace-pre-wrap">
+                  {message.role === 'assistant' 
+                    ? renderContentWithCitations(message.content, message.materialReferences)
+                    : message.content
+                  }
+                </div>
                 
                 {/* Material References Section */}
                 {message.materialReferences && message.materialReferences.length > 0 && (

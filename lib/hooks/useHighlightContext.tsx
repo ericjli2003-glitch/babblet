@@ -10,6 +10,7 @@ export type HighlightSourceType = 'question' | 'transcript' | 'rubric' | 'summar
 
 export interface HighlightMetadata {
   text: string;
+  fullContext?: string; // Full text when only a portion is highlighted (e.g., full question text)
   sourceType: HighlightSourceType;
   sourceId?: string; // question ID, segment ID, criterion ID
   timestamp?: string; // for transcript segments
@@ -179,6 +180,7 @@ export function HighlightContextProvider({ children }: HighlightContextProviderP
           message,
           context: {
             highlightedText: currentHighlight?.text,
+            fullContext: currentHighlight?.fullContext, // Full question/rubric text when partial selection
             sourceType: currentHighlight?.sourceType,
             sourceId: currentHighlight?.sourceId,
             timestamp: currentHighlight?.timestamp,

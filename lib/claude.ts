@@ -352,9 +352,9 @@ QUESTION CATEGORIES (use these exact category values):
 10. "clarification" - Clarification: "Can you explain what you mean by...?" Seeks clearer explanation.
 
 Your goals:
-1. Generate diverse questions across MULTIPLE categories (aim for at least 3 different categories)
+1. CRITICAL: Each question MUST be a DIFFERENT category - never repeat category types
 2. Avoid generic or low-value clarifications - every question should challenge the student
-3. Prioritize evidence, assumptions, counterarguments, limitations, and methodology questions
+3. Use the category priority order: evidence > assumption > counterargument > limitation > methodology > application > evaluation > synthesis > implication > clarification
 4. Questions should help students demonstrate deeper understanding and critical thinking
 5. Never repeat or closely paraphrase existing questions
 6. Do NOT invent facts; anchor questions to the transcript
@@ -478,14 +478,21 @@ GOOD examples (precise):
 - "toaster model of cognition"
 - "social cognition nobody's mastered"
 
-CATEGORY DIVERSITY REQUIREMENT:
-${settings?.targetCategories?.length 
-  ? `- **TARGETED MODE**: Generate ALL ${returnCount} questions from ONLY these categories: ${settings.targetCategories.join(', ')}
-- Distribute questions evenly across the selected categories if multiple are specified
-- Every single question MUST have its category set to one of: ${settings.targetCategories.join(', ')}`
-  : `- For ${returnCount} questions, use at least ${Math.min(Math.ceil(returnCount / 2), 5)} different categories
-- Avoid having more than 2 questions of the same category unless specifically requested
-- Prefer challenging categories (evidence, assumption, counterargument, limitation, methodology) over clarification`}
+CATEGORY DIVERSITY REQUIREMENT (CRITICAL):
+- You MUST use DIFFERENT categories for each question - NO DUPLICATES unless you have more questions than categories
+- For ${returnCount} questions, distribute across these categories in order of priority:
+  1. evidence (Evidence Request)
+  2. assumption (Assumption Challenge)  
+  3. counterargument (Counterargument)
+  4. limitation (Limitation)
+  5. methodology (Methodology)
+  6. application (Application)
+  7. evaluation (Evaluation)
+  8. synthesis (Synthesis)
+  9. implication (Implication)
+  10. clarification (Clarification) - use sparingly, only if truly needed
+- NEVER generate multiple questions with the same category - each question MUST be a different type
+- If generating 5 questions, use exactly 5 different categories from the list above
 
 JSON format:
 {

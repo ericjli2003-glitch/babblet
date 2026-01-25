@@ -181,8 +181,6 @@ export default function SubmissionDetailPage() {
   const [transcriptSearch, setTranscriptSearch] = useState('');
   const [questionCount, setQuestionCount] = useState(5);
   const [isRegenerating, setIsRegenerating] = useState(false);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [customQuestionCount, setCustomQuestionCount] = useState('');
   const [branchingQuestionId, setBranchingQuestionId] = useState<string | null>(null);
   const [showMaterialModal, setShowMaterialModal] = useState<{
     name: string;
@@ -465,15 +463,6 @@ export default function SubmissionDetailPage() {
     }
   }, []);
 
-  // Toggle a category selection
-  const toggleCategory = useCallback((category: string) => {
-    setSelectedCategories(prev => 
-      prev.includes(category) 
-        ? prev.filter(c => c !== category)
-        : [...prev, category]
-    );
-  }, []);
-
   // Handle branch from a specific question
   const handleBranchQuestion = useCallback(async (questionId: string, count: number, customization?: string) => {
     const question = submission?.questions?.find(q => q.id === questionId);
@@ -539,16 +528,8 @@ export default function SubmissionDetailPage() {
     setShowMaterialModal(ref);
   }, []);
 
-  // Get effective question count (from custom input or dropdown)
-  const effectiveQuestionCount = useMemo(() => {
-    if (customQuestionCount && !isNaN(parseInt(customQuestionCount))) {
-      return Math.max(1, parseInt(customQuestionCount));
-    }
-    return questionCount;
-  }, [customQuestionCount, questionCount]);
-
-  // Regenerate questions with the selected count and optionally specific categories
-  const handleRegenerateQuestions = useCallback(async (targetCategories?: string[]) => {
+  // Regenerate questions with the selected count
+  const handleRegenerateQuestions = useCallback(async () => {
     if (!submission || isRegenerating) return;
     
     // Check if we have transcript content
@@ -561,22 +542,9 @@ export default function SubmissionDetailPage() {
       return;
     }
     
-    const categoriesToUse = targetCategories || selectedCategories;
-    const countToGenerate = effectiveQuestionCount;
-    
     setIsRegenerating(true);
     try {
-      console.log('[Regenerate] Starting with transcript length:', fullTranscript.length, 'questionCount:', countToGenerate, 'categories:', categoriesToUse);
-      
-      // Build priorities based on selected categories
-      const priorities: Record<string, number> = {};
-      if (categoriesToUse.length > 0) {
-        // Set all to "avoid" (0), then prioritize selected ones (2)
-        ['clarification', 'evidence', 'assumption', 'counterargument', 'application', 
-         'synthesis', 'evaluation', 'methodology', 'limitation', 'implication'].forEach(cat => {
-          priorities[cat] = categoriesToUse.includes(cat) ? 2 : 0;
-        });
-      }
+      console.log('[Regenerate] Starting with transcript length:', fullTranscript.length, 'questionCount:', questionCount);
       
       const res = await fetch('/api/generate-questions', {
         method: 'POST',
@@ -587,9 +555,7 @@ export default function SubmissionDetailPage() {
             transcript: fullTranscript,
           },
           settings: {
-            maxQuestions: countToGenerate,
-            priorities: categoriesToUse.length > 0 ? priorities : undefined,
-            targetCategories: categoriesToUse.length > 0 ? categoriesToUse : undefined,
+            maxQuestions: questionCount,
           },
         }),
       });
@@ -599,34 +565,18 @@ export default function SubmissionDetailPage() {
       
       if (data.success && data.questions && data.questions.length > 0) {
         // Map questions with all fields
-        const mapQuestion = (q: { id: string; question: string; category: string; rationale?: string; rubricCriterion?: string; rubricJustification?: string; relevantSnippet?: string }) => ({
+        const mapQuestion = (q: { id: string; question: string; category: string; materialReferences?: Array<{ id: string; name: string; type: string; excerpt?: string }> }) => ({
           id: q.id,
           question: q.question,
           category: q.category,
-          rationale: q.rationale,
-          rubricCriterion: q.rubricCriterion,
-          rubricJustification: q.rubricJustification,
-          relevantSnippet: q.relevantSnippet,
+          materialReferences: q.materialReferences,
         });
         
-        // If we're adding to specific categories, append instead of replace
-        if (categoriesToUse.length > 0) {
-          setSubmission(prev => {
-            if (!prev) return null;
-            const newQuestions = data.questions.map(mapQuestion);
-            // Append new questions to existing ones
-            return {
-              ...prev,
-              questions: [...(prev.questions || []), ...newQuestions],
-            };
-          });
-        } else {
-          // Replace all questions
-          setSubmission(prev => prev ? {
-            ...prev,
-            questions: data.questions.map(mapQuestion),
-          } : null);
-        }
+        // Replace all questions
+        setSubmission(prev => prev ? {
+          ...prev,
+          questions: data.questions.map(mapQuestion),
+        } : null);
       } else {
         console.error('Failed to regenerate questions:', data.error);
         alert('Failed to regenerate questions: ' + (data.error || 'No questions generated'));
@@ -637,7 +587,7 @@ export default function SubmissionDetailPage() {
     } finally {
       setIsRegenerating(false);
     }
-  }, [submission, submissionId, sortedSegments, effectiveQuestionCount, selectedCategories, isRegenerating]);
+  }, [submission, submissionId, sortedSegments, questionCount, isRegenerating]);
 
   if (loading) {
     return (
@@ -1053,168 +1003,40 @@ export default function SubmissionDetailPage() {
                   exit={{ opacity: 0, y: -10 }}
                   className="space-y-6"
                 >
-                  {/* Targeted Question Generation Section */}
-                  <div className="bg-white rounded-2xl border border-surface-200 p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-4">
-                        {/* Icon */}
-                        <div className="w-12 h-12 rounded-xl bg-primary-50 flex items-center justify-center">
-                          <Target className="w-6 h-6 text-primary-600" />
-                        </div>
-                        <div>
-                          <h2 className="text-lg font-semibold text-surface-900">Targeted Question Generation</h2>
-                          <p className="text-sm text-surface-500 mt-0.5">
-                            Refine your question set by selecting specific pedagogical categories for the AI to focus on.
-                          </p>
-                        </div>
-                      </div>
+                  {/* Follow-up Questions Header */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-lg font-semibold text-surface-900">Follow-up Questions</h2>
+                      <p className="text-sm text-surface-500">
+                        Based on the transcript analysis, these questions test depth of understanding across different cognitive levels.
+                      </p>
                     </div>
-
-                    {/* Category Pills */}
-                    <div className="flex flex-wrap gap-2 mt-5">
-                      {[
-                        { id: 'evidence', label: 'Evidence Request', icon: FileSearch, color: 'purple' },
-                        { id: 'assumption', label: 'Assumption Challenge', icon: AlertTriangle, color: 'orange' },
-                        { id: 'counterargument', label: 'Counterargument', icon: Swords, color: 'red' },
-                        { id: 'limitation', label: 'Limitation', icon: AlertCircle, color: 'amber' },
-                        { id: 'methodology', label: 'Methodology', icon: Microscope, color: 'cyan' },
-                      ].map(cat => {
-                        const isSelected = selectedCategories.includes(cat.id);
-                        const Icon = cat.icon;
-                        const colorClasses = {
-                          purple: isSelected ? 'bg-purple-100 border-purple-300 text-purple-700' : 'bg-white border-surface-200 text-surface-600 hover:border-purple-200 hover:bg-purple-50',
-                          orange: isSelected ? 'bg-orange-100 border-orange-300 text-orange-700' : 'bg-white border-surface-200 text-surface-600 hover:border-orange-200 hover:bg-orange-50',
-                          red: isSelected ? 'bg-red-100 border-red-300 text-red-700' : 'bg-white border-surface-200 text-surface-600 hover:border-red-200 hover:bg-red-50',
-                          amber: isSelected ? 'bg-amber-100 border-amber-300 text-amber-700' : 'bg-white border-surface-200 text-surface-600 hover:border-amber-200 hover:bg-amber-50',
-                          cyan: isSelected ? 'bg-cyan-100 border-cyan-300 text-cyan-700' : 'bg-white border-surface-200 text-surface-600 hover:border-cyan-200 hover:bg-cyan-50',
-                        };
-                        return (
-                          <button
-                            key={cat.id}
-                            onClick={() => toggleCategory(cat.id)}
-                            disabled={isRegenerating}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-full border text-sm font-medium transition-all ${colorClasses[cat.color as keyof typeof colorClasses]}`}
-                          >
-                            <Icon className="w-4 h-4" />
-                            {cat.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    
-                    {/* Show message when categories are selected */}
-                    {selectedCategories.length > 0 && (
-                      <div className="flex items-center justify-between mt-3">
-                        <p className="text-xs text-primary-600 font-medium">
-                          {selectedCategories.length} categor{selectedCategories.length === 1 ? 'y' : 'ies'} selected - new questions will be added to your existing set
-                        </p>
-                        <button
-                          onClick={() => setSelectedCategories([])}
-                          className="text-xs text-surface-500 hover:text-surface-700 underline"
-                        >
-                          Clear selection
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Count and Regenerate */}
-                    <div className="flex items-center justify-between mt-5 pt-5 border-t border-surface-100">
-                      <div className="flex items-center gap-4">
-                        {/* Preset Dropdown */}
-                        <div className="flex items-center gap-2">
-                          <select
-                            value={customQuestionCount ? '' : questionCount}
-                            onChange={(e) => {
-                              setQuestionCount(Number(e.target.value));
-                              setCustomQuestionCount('');
-                            }}
-                            className="px-3 py-2 border border-surface-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                            disabled={isRegenerating}
-                          >
-                            <option value={3}>3 questions</option>
-                            <option value={5}>5 questions</option>
-                            <option value={10}>10 questions</option>
-                            <option value={15}>15 questions</option>
-                            <option value={20}>20 questions</option>
-                          </select>
-                        </div>
-                        
-                        {/* Or Custom Input */}
-                        <span className="text-surface-400 text-sm">or</span>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => {
-                              const current = customQuestionCount ? parseInt(customQuestionCount) : questionCount;
-                              if (current > 1) setCustomQuestionCount(String(current - 1));
-                            }}
-                            disabled={isRegenerating}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg border border-surface-200 hover:bg-surface-50 disabled:opacity-50"
-                          >
-                            <Minus className="w-4 h-4" />
-                          </button>
-                          <input
-                            type="number"
-                            min="1"
-                            max="100"
-                            value={customQuestionCount}
-                            onChange={(e) => setCustomQuestionCount(e.target.value)}
-                            placeholder={String(questionCount)}
-                            className="w-16 px-2 py-2 text-center border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                            disabled={isRegenerating}
-                          />
-                          <button
-                            onClick={() => {
-                              const current = customQuestionCount ? parseInt(customQuestionCount) : questionCount;
-                              setCustomQuestionCount(String(current + 1));
-                            }}
-                            disabled={isRegenerating}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg border border-surface-200 hover:bg-surface-50 disabled:opacity-50"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-surface-500">Generate</span>
+                      <select
+                        value={questionCount}
+                        onChange={(e) => setQuestionCount(Number(e.target.value))}
+                        className="px-3 py-2 border border-surface-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        disabled={isRegenerating}
+                      >
+                        <option value={5}>5 questions</option>
+                        <option value={3}>3 questions</option>
+                        <option value={10}>10 questions</option>
+                      </select>
                       <button 
                         onClick={() => handleRegenerateQuestions()}
                         disabled={isRegenerating}
-                        className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                           isRegenerating 
                             ? 'bg-primary-400 text-white cursor-wait' 
-                            : 'bg-primary-500 text-white hover:bg-primary-600 shadow-sm'
+                            : 'bg-white border border-surface-200 text-surface-700 hover:bg-primary-50 hover:border-primary-300 hover:text-primary-600'
                         }`}
                       >
                         <Sparkles className={`w-4 h-4 ${isRegenerating ? 'animate-pulse' : ''}`} />
                         {isRegenerating ? 'Generating...' : 'Regenerate'}
                       </button>
                     </div>
-
-                    {/* Selected categories helper text */}
-                    {selectedCategories.length > 0 && (
-                      <p className="text-xs text-surface-500 mt-3">
-                        Generating {effectiveQuestionCount} {selectedCategories.length === 1 ? selectedCategories[0] : 'targeted'} question{effectiveQuestionCount !== 1 ? 's' : ''} focused on: {selectedCategories.join(', ')}
-                      </p>
-                    )}
                   </div>
-                  
-                  {/* Regenerating Indicator */}
-                  {isRegenerating && (
-                    <div className="bg-primary-50 border border-primary-200 rounded-xl p-4 flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
-                        <RefreshCw className="w-4 h-4 text-primary-600 animate-spin" />
-                    </div>
-                      <div>
-                        <p className="text-sm font-medium text-primary-900">
-                          Babblet is generating {effectiveQuestionCount} new {selectedCategories.length > 0 ? 'targeted ' : ''}questions...
-                        </p>
-                        <p className="text-xs text-primary-600">
-                          {selectedCategories.length > 0 
-                            ? `Focusing on: ${selectedCategories.join(', ')}`
-                            : 'Analyzing transcript and creating diverse questions'}
-                        </p>
-                </div>
-              </div>
-            )}
 
                   {/* Question Cards */}
                   <div className="space-y-4">
@@ -1246,10 +1068,6 @@ export default function SubmissionDetailPage() {
                                 text: `Referenced during the ${segmentPreview.toLowerCase()}${segment?.text && segment.text.length > 60 ? '...' : ''} segment at`,
                                 timestamps: [formatTimestamp(timestampMs)],
                               }}
-                              rationale={q.rationale}
-                              rubricCriterion={q.rubricCriterion}
-                              rubricJustification={q.rubricJustification}
-                              relevantSnippet={q.relevantSnippet}
                               materialReferences={q.materialReferences}
                               onMaterialClick={handleMaterialClick}
                               onBranch={(count, customization) => handleBranchQuestion(q.id, count, customization)}
@@ -1305,16 +1123,9 @@ export default function SubmissionDetailPage() {
                   {/* Question Stats */}
                   {submission.questions && submission.questions.length > 0 && (
                     <div className="bg-surface-50 rounded-xl p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <span className="text-sm text-surface-600">
-                          <span className="font-semibold text-surface-900">{submission.questions.length}</span> total questions
-                        </span>
-                        {selectedCategories.length > 0 && (
-                          <span className="text-sm text-primary-600">
-                            Filtered by: {selectedCategories.join(', ')}
-                          </span>
-                        )}
-                      </div>
+                      <span className="text-sm text-surface-600">
+                        <span className="font-semibold text-surface-900">{submission.questions.length}</span> total questions
+                      </span>
                       {submission.questions.length > 20 && (
                         <span className="text-xs text-surface-500">
                           Showing first 20 questions

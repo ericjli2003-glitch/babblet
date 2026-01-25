@@ -164,7 +164,6 @@ export default function QuestionCard({
   // Get config with fallback for unknown categories
   const config = categoryConfig[category] || categoryConfig.clarification;
   
-  const hasRationale = rationale || rubricCriterion || rubricJustification || relevantSnippet;
   const hasMaterialRefs = materialReferences && materialReferences.length > 0;
 
   return (
@@ -203,12 +202,6 @@ export default function QuestionCard({
             </button>
           )}
           
-          {hasRationale && (
-            <span className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-primary-600 bg-primary-50 rounded-md">
-              <Sparkles className="w-3 h-3" />
-              AI Rationale Available
-            </span>
-          )}
         </div>
         <div className="flex items-center gap-2">
           {onToggle && (
@@ -361,71 +354,8 @@ export default function QuestionCard({
         </div>
       )}
 
-      {/* Why This Question? - Expandable Section */}
-      {hasRationale && (
-        <div className="mt-4 border border-surface-100 rounded-lg overflow-hidden">
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="w-full flex items-center justify-between p-3 bg-surface-50 hover:bg-surface-100 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <Info className="w-4 h-4 text-primary-600" />
-              <span className="text-sm font-semibold text-surface-700">WHY THIS QUESTION?</span>
-            </div>
-            <ChevronDown className={`w-4 h-4 text-surface-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-          </button>
-          
-          {isExpanded && (
-            <div className="p-4 space-y-4 bg-white">
-              {/* Transcript Analysis */}
-              {(relevantSnippet || (context && context.timestamps.length > 0)) && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <FileText className="w-4 h-4 text-surface-500" />
-                    <span className="text-xs font-semibold text-surface-500 uppercase tracking-wide">Transcript Analysis</span>
-                  </div>
-                  <p className="text-sm text-surface-700">
-                    {relevantSnippet ? (
-                      <>
-                        The student mentioned <span className="font-semibold text-surface-900">&quot;{relevantSnippet}&quot;</span>
-                        {context?.timestamps?.[0] && (
-                          <> at <button 
-                            onClick={() => onTimestampClick?.(context.timestamps[0])}
-                            className="text-primary-600 hover:text-primary-700 hover:underline font-medium"
-                          >
-                            [{context.timestamps[0]}]
-                          </button></>
-                        )}
-                        . {rationale}
-                      </>
-                    ) : (
-                      rationale || 'This question tests understanding of key concepts from the presentation.'
-                    )}
-                  </p>
-                </div>
-              )}
-
-              {/* Rubric Alignment */}
-              {(rubricCriterion || rubricJustification) && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <BookOpen className="w-4 h-4 text-surface-500" />
-                    <span className="text-xs font-semibold text-surface-500 uppercase tracking-wide">Thematic Mastery Goals</span>
-                  </div>
-                  <p className="text-sm text-surface-700">
-                    {rubricJustification || (
-                      <>Directly connects to the <span className="font-semibold text-surface-900">&quot;{rubricCriterion}&quot;</span> criterion. Tests ability to demonstrate mastery of course content.</>
-                    )}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Simple Context Line (shown when no expanded rationale) */}
-      {!hasRationale && context && (
+      {/* Context Line - shows timestamp reference */}
+      {context && context.timestamps.length > 0 && (
         <div className="flex items-start gap-2 pt-3 border-t border-surface-100">
           <Info className="w-3.5 h-3.5 text-primary-500 mt-0.5 flex-shrink-0" />
           <p className="text-xs text-surface-500">
