@@ -161,8 +161,25 @@ export default function QuestionCard({
     setBranchCount(1);
   };
   
+  // Normalize legacy categories to new ones for display
+  const normalizeCategory = (cat: string): string => {
+    const legacyMappings: Record<string, string> = {
+      'critical-thinking': 'assumption',
+      'criticalthinking': 'assumption',
+      'clarifying': 'clarification',
+      'expansion': 'synthesis',
+      'basic': 'evidence',
+      'intermediate': 'application',
+      'advanced': 'synthesis',
+    };
+    const lower = cat.toLowerCase().trim();
+    return legacyMappings[lower] || cat;
+  };
+  
+  const normalizedCategory = normalizeCategory(category);
+  
   // Get config with fallback for unknown categories
-  const config = categoryConfig[category] || categoryConfig.clarification;
+  const config = categoryConfig[normalizedCategory] || categoryConfig.clarification;
   
   const hasMaterialRefs = materialReferences && materialReferences.length > 0;
 
