@@ -580,6 +580,17 @@ Respond ONLY with valid JSON.`;
           }));
       }
       
+      // Parse external sources if present
+      let externalSources = undefined;
+      if (Array.isArray(q.externalSources) && q.externalSources.length > 0) {
+        externalSources = q.externalSources
+          .filter((src: any) => src.name)
+          .map((src: any) => ({
+            name: String(src.name),
+            type: String(src.type || 'website'),
+          }));
+      }
+      
       return {
         id: uuidv4(),
         question: String(q.question || '').trim(),
@@ -594,6 +605,7 @@ Respond ONLY with valid JSON.`;
         tags: Array.isArray(q.tags) ? q.tags.map((t: any) => String(t)) : undefined,
         relevantSnippet: typeof q.relevantSnippet === 'string' ? q.relevantSnippet : '',
         materialReferences: materialRefs && materialRefs.length > 0 ? materialRefs : undefined,
+        externalSources: externalSources && externalSources.length > 0 ? externalSources : undefined,
         timestamp: Date.now(),
       };
     }).filter((q: GeneratedQuestion) => q.question.length > 0);

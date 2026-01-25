@@ -193,6 +193,8 @@ export interface GeneratedQuestion {
   relevantSnippet?: string; // Quote from transcript this question relates to
   /** References to course materials that this question relates to */
   materialReferences?: MaterialReference[];
+  /** External sources cited in the question (for facts from outside course materials) */
+  externalSources?: ExternalSource[];
   timestamp: number;
 }
 
@@ -203,6 +205,12 @@ export interface MaterialReference {
   type: string;
   excerpt?: string;
   documentId?: string;
+}
+
+/** External source cited in a question */
+export interface ExternalSource {
+  name: string;
+  type: 'study' | 'article' | 'book' | 'website' | string;
 }
 
 // ============================================
