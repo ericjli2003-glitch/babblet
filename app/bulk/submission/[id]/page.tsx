@@ -555,7 +555,8 @@ export default function SubmissionDetailPage() {
       : submission?.transcript || '';
     
     // Find the criterion data to include score and feedback
-    const criterionData = submission?.rubric?.criteriaBreakdown?.find(c => c.criterion === criterionTitle);
+    const rubricData = submission?.rubricEvaluation;
+    const criterionData = rubricData?.criteriaBreakdown?.find(c => c.criterion === criterionTitle);
     const criterionInfo = criterionData 
       ? `Score: ${criterionData.score}/${criterionData.maxScore || 10}. Feedback: ${criterionData.feedback || criterionData.rationale || 'N/A'}`
       : '';
