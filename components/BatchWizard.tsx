@@ -18,7 +18,9 @@ interface Course {
 }
 
 interface RubricLevel {
-  score: number;
+  score: number; // For single scores, or the midpoint/representative score
+  minScore?: number; // For ranges: minimum score
+  maxScore?: number; // For ranges: maximum score
   label: string;
   description: string;
 }
@@ -810,7 +812,9 @@ Organization (30 points)
                                   <span className={`text-xs font-semibold ${
                                     idx === criterion.levels!.length - 1 ? 'text-primary-600' : 'text-surface-500'
                                   }`}>
-                                    {level.label} ({level.score})
+                                    {level.label} ({level.minScore !== undefined && level.maxScore !== undefined 
+                                      ? `${level.minScore}-${level.maxScore}` 
+                                      : level.score})
                                   </span>
                                   {idx === criterion.levels!.length - 1 && (
                                     <span className="w-4 h-4 bg-primary-500 rounded-full flex items-center justify-center">

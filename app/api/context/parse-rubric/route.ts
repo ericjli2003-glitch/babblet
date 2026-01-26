@@ -20,7 +20,9 @@ interface ParsedCriterion {
   description: string;
   weight: number;
   levels?: Array<{
-    score: number;
+    score: number; // Single score or representative value
+    minScore?: number; // For ranges: minimum score (e.g., 18 in "18-20")
+    maxScore?: number; // For ranges: maximum score (e.g., 20 in "18-20")
     label: string;
     description: string;
   }>;
@@ -107,10 +109,10 @@ Return your response as a JSON object with this exact structure:
       "description": "Description of what this evaluates",
       "weight": 25,
       "levels": [
-        { "score": 1, "label": "Poor", "description": "..." },
-        { "score": 2, "label": "Fair", "description": "..." },
-        { "score": 3, "label": "Good", "description": "..." },
-        { "score": 4, "label": "Excellent", "description": "..." }
+        { "score": 0, "minScore": 0, "maxScore": 5, "label": "Needs Improvement", "description": "..." },
+        { "score": 10, "minScore": 6, "maxScore": 11, "label": "Developing", "description": "..." },
+        { "score": 14, "minScore": 12, "maxScore": 16, "label": "Good", "description": "..." },
+        { "score": 18, "minScore": 17, "maxScore": 20, "label": "Excellent", "description": "..." }
       ],
       "confidence": "high",
       "originalText": "The exact text fragment..."
@@ -134,6 +136,7 @@ IMPORTANT:
 - If levels/score bands are not present per criterion, omit the "levels" field entirely.
 - If you cannot parse anything meaningful, return an empty criteria array with warnings explaining why.
 - CRITICAL: Levels must be ordered from LOWEST score to HIGHEST score (e.g., Poor=1, Fair=2, Good=3, Excellent=4). The highest grade should be LAST in the array.
+- For SCORE RANGES (e.g., "Excellent 18-20", "Good 14-17"), always include minScore and maxScore fields. The "score" field should be the midpoint or typical value in that range.
 
 RUBRIC TEXT:
 `;
@@ -260,7 +263,12 @@ export async function POST(request: NextRequest) {
       ...c,
       id: c.id || `criterion-${idx + 1}`,
       // Sort levels by score ascending (lowest first, highest last for right-side display)
-      levels: c.levels ? [...c.levels].sort((a, b) => a.score - b.score) : undefined,
+      // Use minScore if available (for ranges), otherwise use score
+      levels: c.levels ? [...c.levels].sort((a, b) => {
+        const aVal = a.minScore !== undefined ? a.minScore : a.score;
+        const bVal = b.minScore !== undefined ? b.minScore : b.score;
+        return aVal - bVal;
+      }) : undefined,
     }));
     
     // Calculate overall confidence based on individual criteria
