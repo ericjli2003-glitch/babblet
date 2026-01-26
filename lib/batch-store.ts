@@ -144,6 +144,20 @@ export interface Submission {
     isGraded?: boolean;
     gradedAt?: number;
   };
+  // Extracted slide content from video (screen share)
+  slideContent?: {
+    slides: Array<{
+      slideNumber: number;
+      timestamp: number;
+      title?: string;
+      textContent: string;
+      keyPoints: string[];
+      visualElements?: string[];
+      dataOrCharts?: string[];
+    }>;
+    presentationType: 'screen_share' | 'webcam_only' | 'mixed';
+    summary: string;
+  };
   // Timing
   createdAt: number;
   startedAt?: number;
