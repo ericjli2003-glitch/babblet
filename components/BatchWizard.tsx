@@ -440,10 +440,9 @@ function Step2ContextRubric({
     try {
       // Create a text blob and send as file
       const textBlob = new Blob([rubricText], { type: 'text/plain' });
-      const textFile = new File([textBlob], 'rubric.txt', { type: 'text/plain' });
       
       const formData = new FormData();
-      formData.append('file', textFile);
+      formData.append('file', textBlob, 'rubric.txt');
 
       const res = await fetch('/api/context/parse-rubric', {
         method: 'POST',
