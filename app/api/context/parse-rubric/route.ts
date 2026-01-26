@@ -107,8 +107,10 @@ Return your response as a JSON object with this exact structure:
       "description": "Description of what this evaluates",
       "weight": 25,
       "levels": [
-        { "score": 25, "label": "Excellent", "description": "..." },
-        { "score": 20, "label": "Good", "description": "..." }
+        { "score": 1, "label": "Poor", "description": "..." },
+        { "score": 2, "label": "Fair", "description": "..." },
+        { "score": 3, "label": "Good", "description": "..." },
+        { "score": 4, "label": "Excellent", "description": "..." }
       ],
       "confidence": "high",
       "originalText": "The exact text fragment..."
@@ -131,6 +133,7 @@ IMPORTANT:
 - If bands are detected, include bands array: [{ "label": "Excellent", "minScore": 90, "maxScore": 100 }, ...]
 - If levels/score bands are not present per criterion, omit the "levels" field entirely.
 - If you cannot parse anything meaningful, return an empty criteria array with warnings explaining why.
+- CRITICAL: Levels must be ordered from LOWEST score to HIGHEST score (e.g., Poor=1, Fair=2, Good=3, Excellent=4). The highest grade should be LAST in the array.
 
 RUBRIC TEXT:
 `;
@@ -252,10 +255,12 @@ export async function POST(request: NextRequest) {
       }, { status: 422 });
     }
     
-    // Ensure all criteria have IDs
+    // Ensure all criteria have IDs and levels are sorted lowest-to-highest
     parseResult.criteria = parseResult.criteria.map((c, idx) => ({
       ...c,
       id: c.id || `criterion-${idx + 1}`,
+      // Sort levels by score ascending (lowest first, highest last for right-side display)
+      levels: c.levels ? [...c.levels].sort((a, b) => a.score - b.score) : undefined,
     }));
     
     // Calculate overall confidence based on individual criteria
