@@ -285,11 +285,12 @@ function Step2ContextRubric({
   rubrics, customRubric, setCustomRubric,
   onBack, onNext,
 }: Step2Props) {
-  const [rubricMode, setRubricMode] = useState<'upload' | 'select' | 'manual'>('upload');
+  const [rubricMode, setRubricMode] = useState<'upload' | 'select' | 'text'>('upload');
   const [isParsingRubric, setIsParsingRubric] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editingRubric, setEditingRubric] = useState<Rubric | null>(null);
+  const [rubricText, setRubricText] = useState('');
   const rubricFileInputRef = useRef<HTMLInputElement>(null);
 
   const startEditing = () => {
@@ -397,6 +398,55 @@ function Step2ContextRubric({
     }
   };
 
+  const handleRubricTextParse = async () => {
+    if (!rubricText.trim()) {
+      setParseError('Please enter rubric text');
+      return;
+    }
+    
+    setIsParsingRubric(true);
+    setParseError(null);
+
+    try {
+      // Create a text blob and send as file
+      const textBlob = new Blob([rubricText], { type: 'text/plain' });
+      const textFile = new File([textBlob], 'rubric.txt', { type: 'text/plain' });
+      
+      const formData = new FormData();
+      formData.append('file', textFile);
+
+      const res = await fetch('/api/context/parse-rubric', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.criteria) {
+        const parsed: Rubric = {
+          id: 'custom-text',
+          name: 'Custom Rubric',
+          totalPoints: data.totalPoints || data.criteria.reduce((sum: number, c: { weight: number }) => sum + (c.weight || 0), 0),
+          criteria: data.criteria.map((c: { name: string; description: string; weight: number; levels?: Array<{ score: number; label: string; description: string }> }) => ({
+            name: c.name,
+            description: c.description || '',
+            points: c.weight || 0,
+            levels: c.levels || defaultLevels,
+          })),
+        };
+        setCustomRubric(parsed);
+        setSelectedRubric('custom-text');
+      } else {
+        setParseError(data.error || 'Failed to parse rubric text');
+      }
+    } catch (err) {
+      setParseError('Failed to parse rubric text');
+      console.error(err);
+    } finally {
+      setIsParsingRubric(false);
+    }
+  };
+
   const allRubrics = customRubric ? [customRubric, ...rubrics] : rubrics;
   const currentRubric = allRubrics.find(r => r.id === selectedRubric);
 
@@ -429,9 +479,11 @@ function Step2ContextRubric({
               <FileText className="w-3.5 h-3.5 text-primary-600" />
             </div>
             <div>
-              <h3 className="font-semibold text-surface-900">Class Context</h3>
+              <h3 className="font-semibold text-surface-900">
+                Class Context <span className="text-surface-400 font-normal text-sm">(optional)</span>
+              </h3>
               <p className="text-sm text-surface-500">
-                Provide lecture notes, specific instructions, or grading constraints that the AI should consider.
+                Optionally provide lecture notes, specific instructions, or grading constraints that the AI should consider. You can skip this if you don&apos;t have any specific context.
               </p>
             </div>
           </div>
@@ -439,7 +491,7 @@ function Step2ContextRubric({
             value={classContext}
             onChange={(e) => setClassContext(e.target.value)}
             rows={4}
-            placeholder="e.g. The presentation should focus on the economic impacts of the 1920s. Grade harshly on sources but be lenient on public speaking anxiety..."
+            placeholder="e.g. The presentation should focus on the economic impacts of the 1920s. Grade harshly on sources but be lenient on public speaking anxiety... (Leave blank to use default grading behavior)"
             className="w-full px-4 py-3 border border-surface-200 rounded-lg text-surface-900 placeholder:text-surface-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
           />
           <p className="text-xs text-surface-400 mt-2 flex items-center gap-1">
@@ -463,7 +515,8 @@ function Step2ContextRubric({
           {/* Mode Tabs */}
           <div className="flex gap-2 mb-4">
             {[
-              { id: 'upload', label: 'Upload Rubric' },
+              { id: 'upload', label: 'Upload File' },
+              { id: 'text', label: 'Paste Text' },
               { id: 'select', label: 'Use Template' },
             ].map((tab) => (
               <button
@@ -521,6 +574,60 @@ function Step2ContextRubric({
                 <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-emerald-600" />
                   <span className="text-sm text-emerald-700">Rubric parsed: {customRubric.name}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Text Mode */}
+          {rubricMode === 'text' && (
+            <div className="mb-4">
+              <textarea
+                value={rubricText}
+                onChange={(e) => setRubricText(e.target.value)}
+                rows={8}
+                placeholder={`Paste your rubric text here. Example format:
+
+Content Quality (40 points)
+- Excellent (4): Demonstrates deep understanding with accurate information
+- Good (3): Shows solid understanding with minor gaps
+- Fair (2): Basic understanding but missing key elements
+- Poor (1): Significant gaps in understanding
+
+Presentation Skills (30 points)
+- Clear delivery and good eye contact
+- Appropriate pacing and volume
+
+Organization (30 points)
+- Logical structure with clear introduction and conclusion`}
+                className="w-full px-4 py-3 border border-surface-200 rounded-lg text-surface-900 placeholder:text-surface-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none text-sm font-mono"
+              />
+              <div className="flex items-center justify-between mt-3">
+                <p className="text-xs text-surface-500">
+                  AI will automatically parse criteria, points, and levels from your text
+                </p>
+                <button
+                  onClick={handleRubricTextParse}
+                  disabled={isParsingRubric || !rubricText.trim()}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isParsingRubric ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Parsing...
+                    </>
+                  ) : (
+                    'Parse Rubric'
+                  )}
+                </button>
+              </div>
+              {parseError && (
+                <p className="text-sm text-red-600 mt-2">{parseError}</p>
+              )}
+              {customRubric && selectedRubric === 'custom-text' && (
+                <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                  <span className="text-sm text-emerald-700">Rubric parsed: {customRubric.criteria.length} criteria found</span>
                 </div>
               )}
             </div>
