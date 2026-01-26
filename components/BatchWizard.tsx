@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, ArrowRight, Check, Upload, Plus, Minus,
   FileText, Trash2, Cloud, Loader2, CheckCircle, AlertCircle, HelpCircle,
-  Edit2, Save
+  Edit2, Save, Video, Music, FileImage, File
 } from 'lucide-react';
 
 // ============================================
@@ -100,6 +100,34 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getFileTypeInfo(filename: string): { type: 'video' | 'audio' | 'document' | 'image' | 'other'; label: string; color: string } {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  
+  if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)) {
+    return { type: 'video', label: 'Video', color: 'bg-purple-100 text-purple-700' };
+  }
+  if (['mp3', 'wav', 'ogg', 'm4a', 'aac'].includes(ext)) {
+    return { type: 'audio', label: 'Audio', color: 'bg-amber-100 text-amber-700' };
+  }
+  if (['pdf', 'doc', 'docx', 'ppt', 'pptx'].includes(ext)) {
+    return { type: 'document', label: ext.toUpperCase(), color: 'bg-blue-100 text-blue-700' };
+  }
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) {
+    return { type: 'image', label: 'Image', color: 'bg-emerald-100 text-emerald-700' };
+  }
+  return { type: 'other', label: ext.toUpperCase() || 'File', color: 'bg-surface-100 text-surface-700' };
+}
+
+function getFileIcon(type: 'video' | 'audio' | 'document' | 'image' | 'other') {
+  switch (type) {
+    case 'video': return Video;
+    case 'audio': return Music;
+    case 'document': return FileText;
+    case 'image': return FileImage;
+    default: return File;
+  }
 }
 
 // ============================================
@@ -1013,82 +1041,147 @@ function Step3Upload({ files, setFiles, onBack, onComplete, isCreating }: Step3P
         {files.length > 0 && (
           <div className="mt-6">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-surface-900">Queued Files ({files.length})</h3>
-              <button onClick={clearAll} className="text-sm text-primary-600 hover:text-primary-700 font-medium">
+              <div className="flex items-center gap-3">
+                <h3 className="font-semibold text-surface-900">Uploaded Files</h3>
+                <span className="px-2.5 py-1 bg-primary-100 text-primary-700 rounded-full text-xs font-medium">
+                  {files.length} file{files.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <button 
+                onClick={clearAll} 
+                className="flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 font-medium"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
                 Clear All
               </button>
             </div>
-            <div className="space-y-2">
-              {files.map((file) => (
-                <div
-                  key={file.id}
-                  className={`flex items-center gap-4 p-4 rounded-lg border ${
-                    file.status === 'complete'
-                      ? 'bg-emerald-50 border-emerald-200'
-                      : file.status === 'error'
-                        ? 'bg-red-50 border-red-200'
-                        : 'bg-white border-surface-200'
-                  }`}
-                >
-                  {/* Status Icon */}
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                    file.status === 'complete'
-                      ? 'bg-emerald-100'
-                      : file.status === 'uploading'
-                        ? 'bg-primary-100'
+            
+            {/* Summary by type */}
+            <div className="flex gap-2 mb-3 flex-wrap">
+              {(() => {
+                const videoCount = files.filter(f => getFileTypeInfo(f.name).type === 'video').length;
+                const audioCount = files.filter(f => getFileTypeInfo(f.name).type === 'audio').length;
+                const docCount = files.filter(f => getFileTypeInfo(f.name).type === 'document').length;
+                return (
+                  <>
+                    {videoCount > 0 && (
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium">
+                        <Video className="w-3.5 h-3.5" />
+                        {videoCount} video{videoCount !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {audioCount > 0 && (
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg text-xs font-medium">
+                        <Music className="w-3.5 h-3.5" />
+                        {audioCount} audio
+                      </span>
+                    )}
+                    {docCount > 0 && (
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium">
+                        <FileText className="w-3.5 h-3.5" />
+                        {docCount} document{docCount !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+            
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {files.map((file) => {
+                const fileTypeInfo = getFileTypeInfo(file.name);
+                const FileIcon = getFileIcon(fileTypeInfo.type);
+                
+                return (
+                  <div
+                    key={file.id}
+                    className={`flex items-center gap-4 p-4 rounded-xl border transition-all hover:shadow-sm ${
+                      file.status === 'complete'
+                        ? 'bg-emerald-50 border-emerald-200'
                         : file.status === 'error'
-                          ? 'bg-red-100'
-                          : 'bg-surface-100'
-                  }`}>
-                    {file.status === 'complete' ? (
-                      <CheckCircle className="w-5 h-5 text-emerald-600" />
-                    ) : file.status === 'uploading' ? (
-                      <Loader2 className="w-5 h-5 text-primary-600 animate-spin" />
-                    ) : file.status === 'error' ? (
-                      <AlertCircle className="w-5 h-5 text-red-600" />
-                    ) : (
-                      <FileText className="w-5 h-5 text-surface-500" />
-                    )}
-                  </div>
-
-                  {/* File Info */}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-surface-900 truncate">{file.name}</p>
-                    <p className="text-sm text-surface-500">
-                      {formatFileSize(file.size)}
-                      {file.status === 'complete' && ' • Upload complete'}
-                      {file.status === 'waiting' && ' • Waiting...'}
-                      {file.status === 'uploading' && ` • ${file.progress}%`}
-                      {file.status === 'error' && ` • ${file.error || 'Upload failed'}`}
-                    </p>
-                  </div>
-
-                  {/* Progress Bar (if uploading) */}
-                  {file.status === 'uploading' && (
-                    <div className="w-32">
-                      <div className="h-1.5 bg-surface-200 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary-500 transition-all"
-                          style={{ width: `${file.progress}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-surface-500 mt-1 text-right">{file.progress}%</p>
-                    </div>
-                  )}
-
-                  {/* Remove Button */}
-                  <button
-                    onClick={() => removeFile(file.id)}
-                    className="p-2 text-surface-400 hover:text-red-500 transition-colors"
+                          ? 'bg-red-50 border-red-200'
+                          : 'bg-white border-surface-200 hover:border-surface-300'
+                    }`}
                   >
-                    {file.status === 'uploading' ? (
-                      <X className="w-5 h-5" />
-                    ) : (
-                      <Trash2 className="w-5 h-5" />
+                    {/* File Type Icon */}
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                      file.status === 'complete'
+                        ? 'bg-emerald-100'
+                        : file.status === 'uploading'
+                          ? 'bg-primary-100'
+                          : file.status === 'error'
+                            ? 'bg-red-100'
+                            : fileTypeInfo.type === 'video' 
+                              ? 'bg-purple-100'
+                              : fileTypeInfo.type === 'audio'
+                                ? 'bg-amber-100'
+                                : 'bg-surface-100'
+                    }`}>
+                      {file.status === 'complete' ? (
+                        <CheckCircle className="w-6 h-6 text-emerald-600" />
+                      ) : file.status === 'uploading' ? (
+                        <Loader2 className="w-6 h-6 text-primary-600 animate-spin" />
+                      ) : file.status === 'error' ? (
+                        <AlertCircle className="w-6 h-6 text-red-600" />
+                      ) : (
+                        <FileIcon className={`w-6 h-6 ${
+                          fileTypeInfo.type === 'video' ? 'text-purple-600' :
+                          fileTypeInfo.type === 'audio' ? 'text-amber-600' :
+                          'text-surface-500'
+                        }`} />
+                      )}
+                    </div>
+
+                    {/* File Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="font-medium text-surface-900 truncate">{file.name}</p>
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${fileTypeInfo.color}`}>
+                          {fileTypeInfo.label}
+                        </span>
+                      </div>
+                      <p className="text-sm text-surface-500">
+                        {formatFileSize(file.size)}
+                        {file.status === 'complete' && (
+                          <span className="text-emerald-600"> • Ready for processing</span>
+                        )}
+                        {file.status === 'waiting' && ' • Queued'}
+                        {file.status === 'uploading' && (
+                          <span className="text-primary-600"> • Uploading {file.progress}%</span>
+                        )}
+                        {file.status === 'error' && (
+                          <span className="text-red-600"> • {file.error || 'Upload failed'}</span>
+                        )}
+                      </p>
+                    </div>
+
+                    {/* Progress Bar (if uploading) */}
+                    {file.status === 'uploading' && (
+                      <div className="w-24">
+                        <div className="h-2 bg-surface-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-primary-500 transition-all rounded-full"
+                            style={{ width: `${file.progress}%` }}
+                          />
+                        </div>
+                      </div>
                     )}
-                  </button>
-                </div>
-              ))}
+
+                    {/* Delete Button */}
+                    <button
+                      onClick={() => removeFile(file.id)}
+                      className="p-2.5 text-surface-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                      title="Remove file"
+                    >
+                      {file.status === 'uploading' ? (
+                        <X className="w-5 h-5" />
+                      ) : (
+                        <Trash2 className="w-5 h-5" />
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
