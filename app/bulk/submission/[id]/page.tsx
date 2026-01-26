@@ -106,6 +106,20 @@ interface Submission {
     status: string;
     statement: string;
   }>;
+  // Extracted slide content from video (screen share)
+  slideContent?: {
+    slides: Array<{
+      slideNumber: number;
+      timestamp: number;
+      title?: string;
+      textContent: string;
+      keyPoints: string[];
+      visualElements?: string[];
+      dataOrCharts?: string[];
+    }>;
+    presentationType: 'screen_share' | 'webcam_only' | 'mixed';
+    summary: string;
+  };
   createdAt: number;
   completedAt?: number;
 }
@@ -561,16 +575,21 @@ export default function SubmissionDetailPage() {
       ? `Score: ${criterionData.score}/${criterionData.maxScore || 10}. Feedback: ${criterionData.feedback || criterionData.rationale || 'N/A'}`
       : '';
     
+    // Include slide content if available
+    const slideContext = submission?.slideContent?.slides?.map(s => 
+      `[Slide ${s.slideNumber}${s.title ? `: ${s.title}` : ''}] ${s.textContent}`
+    ).join('\n') || '';
+    
     const response = await fetch('/api/contextual-chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: `Provide detailed insights about how this student performed on the "${criterionTitle}" criterion. ${criterionInfo}. What did they do well? What could be improved? Give specific, actionable feedback based on the transcript.`,
+        message: `Provide detailed insights about how this student performed on the "${criterionTitle}" criterion. ${criterionInfo}. What did they do well? What could be improved? Give specific, actionable feedback based on the transcript${slideContext ? ' and their presentation slides' : ''}.`,
         context: {
           highlightedText: criterionTitle,
           sourceType: 'rubric',
           rubricCriterion: criterionTitle,
-          fullContext: fullTranscript,
+          fullContext: fullTranscript + (slideContext ? `\n\nPRESENTATION SLIDES:\n${slideContext}` : ''),
           analysisData: submission?.analysis ? JSON.stringify(submission.analysis) : undefined,
         },
         conversationHistory: [],

@@ -12,6 +12,7 @@ import {
 import { getPresignedDownloadUrl } from '@/lib/r2';
 import { analyzeWithClaude, isClaudeConfigured, generateQuestionsWithClaude, evaluateWithClaude } from '@/lib/claude';
 import { verifyWithClaude } from '@/lib/verify';
+import { analyzeVideoForSlides, buildPresentationContext, isGeminiConfigured } from '@/lib/gemini';
 import { createClient } from '@deepgram/sdk';
 import { config } from '@/lib/config';
 
@@ -138,13 +139,34 @@ async function processSubmission(submissionId: string, batchId: string): Promise
     const batch = await getBatch(submission.batchId);
     const rubricCriteria = batch?.rubricCriteria;
 
+    // Extract slide content from video if Gemini is configured
+    // This analyzes screen shares in Zoom recordings
+    let slideContent: { slides: Array<{ slideNumber: number; timestamp: number; title?: string; textContent: string; keyPoints: string[]; visualElements?: string[]; dataOrCharts?: string[] }>; presentationType: string; summary: string } | null = null;
+    let presentationContext = '';
+    
+    if (isGeminiConfigured()) {
+      try {
+        console.log(`[Worker] Extracting slide content from video ${submissionId}...`);
+        const slideStart = Date.now();
+        slideContent = await analyzeVideoForSlides(downloadUrl, submission.mimeType || 'video/mp4');
+        console.log(`[Worker] Slide extraction complete: ${slideContent.slides.length} slides in ${Date.now() - slideStart}ms`);
+        
+        if (slideContent.slides.length > 0) {
+          presentationContext = buildPresentationContext(slideContent.slides);
+          console.log(`[Worker] Presentation context built: ${presentationContext.length} chars`);
+        }
+      } catch (slideErr) {
+        console.error(`[Worker] Slide extraction failed (continuing without slides):`, slideErr);
+      }
+    }
+
     // Run analysis pipeline (if AI is configured)
     if (isClaudeConfigured()) {
       console.log(`[Worker] Analyzing ${submissionId}...`);
       const analyzeStart = Date.now();
       
-      // 1. Analyze transcript (required for other steps)
-      const analysis = await analyzeWithClaude(transcript);
+      // 1. Analyze transcript with presentation context (required for other steps)
+      const analysis = await analyzeWithClaude(transcript, presentationContext || undefined);
       console.log(`[Worker] Analysis complete for ${submissionId} in ${Date.now() - analyzeStart}ms`);
       
       // 2. Run rubric eval, questions, and verification in PARALLEL
@@ -204,6 +226,12 @@ async function processSubmission(submissionId: string, batchId: string): Promise
           category: q.category,
         })),
         verificationFindings,
+        // Store extracted slide content for reference in feedback
+        slideContent: slideContent && slideContent.slides.length > 0 ? {
+          slides: slideContent.slides,
+          presentationType: slideContent.presentationType,
+          summary: slideContent.summary,
+        } : undefined,
         status: 'ready',
         completedAt: Date.now(),
       });

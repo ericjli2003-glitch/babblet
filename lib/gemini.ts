@@ -251,3 +251,196 @@ export async function* streamTranscription(
   }
 }
 
+// ============================================
+// Video/Presentation Analysis
+// Extract and analyze visual content from videos
+// ============================================
+
+export interface SlideContent {
+  slideNumber: number;
+  timestamp: number; // ms from start
+  title?: string;
+  textContent: string;
+  keyPoints: string[];
+  visualElements?: string[];
+  dataOrCharts?: string[];
+}
+
+export interface VideoAnalysisResult {
+  slides: SlideContent[];
+  presentationType: 'screen_share' | 'webcam_only' | 'mixed';
+  summary: string;
+}
+
+/**
+ * Analyze video for presentation content using Gemini's native video understanding
+ * Works with Zoom recordings, screen shares, etc.
+ */
+export async function analyzeVideoForSlides(
+  videoUrl: string,
+  mimeType: string = 'video/mp4'
+): Promise<VideoAnalysisResult> {
+  try {
+    console.log(`[Gemini] Analyzing video for slide content: ${videoUrl.slice(0, 100)}...`);
+    
+    const client = getGeminiClient();
+    // Gemini 2.5 Flash supports video understanding
+    const model = client.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+    const result = await model.generateContent([
+      {
+        fileData: {
+          mimeType,
+          fileUri: videoUrl,
+        },
+      },
+      {
+        text: `Analyze this presentation video. Extract information about any slides or screen share content shown.
+
+For each distinct slide or screen shown, provide:
+1. Approximate timestamp (in seconds from start)
+2. Slide title if visible
+3. All text content on the slide
+4. Key points or bullet points
+5. Description of any charts, graphs, or visual elements
+6. Any data or statistics shown
+
+Also determine:
+- Is this a screen share presentation, webcam only, or mixed?
+- Provide a brief summary of the overall presentation content
+
+Respond ONLY with valid JSON in this format:
+{
+  "presentationType": "screen_share" | "webcam_only" | "mixed",
+  "summary": "Brief summary of presentation content",
+  "slides": [
+    {
+      "slideNumber": 1,
+      "timestamp": 0,
+      "title": "Slide title if visible",
+      "textContent": "All text visible on this slide",
+      "keyPoints": ["Point 1", "Point 2"],
+      "visualElements": ["Description of charts/images"],
+      "dataOrCharts": ["Any statistics or data shown"]
+    }
+  ]
+}
+
+If no slides/screen share content is detected, return empty slides array.`,
+      },
+    ]);
+
+    const response = result.response;
+    const text = response.text();
+    
+    console.log(`[Gemini] Video analysis response length: ${text.length}`);
+
+    // Parse JSON response
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      
+      // Convert timestamps from seconds to milliseconds
+      const slides: SlideContent[] = (parsed.slides || []).map((s: {
+        slideNumber: number;
+        timestamp: number;
+        title?: string;
+        textContent: string;
+        keyPoints: string[];
+        visualElements?: string[];
+        dataOrCharts?: string[];
+      }, i: number) => ({
+        slideNumber: s.slideNumber || i + 1,
+        timestamp: (s.timestamp || 0) * 1000,
+        title: s.title,
+        textContent: s.textContent || '',
+        keyPoints: s.keyPoints || [],
+        visualElements: s.visualElements,
+        dataOrCharts: s.dataOrCharts,
+      }));
+
+      console.log(`[Gemini] Extracted ${slides.length} slides, type: ${parsed.presentationType}`);
+
+      return {
+        slides,
+        presentationType: parsed.presentationType || 'mixed',
+        summary: parsed.summary || '',
+      };
+    }
+
+    return {
+      slides: [],
+      presentationType: 'webcam_only',
+      summary: 'Could not extract slide content from video',
+    };
+  } catch (error) {
+    console.error('[Gemini] Video analysis error:', error);
+    return {
+      slides: [],
+      presentationType: 'webcam_only',
+      summary: 'Video analysis failed',
+    };
+  }
+}
+
+/**
+ * Correlate extracted slides with transcript segments
+ * Returns enriched transcript with slide context
+ */
+export function correlateSlidesWithTranscript(
+  slides: SlideContent[],
+  transcriptSegments: Array<{ id: string; text: string; timestamp: number }>
+): Array<{ id: string; text: string; timestamp: number; slideContext?: SlideContent }> {
+  if (slides.length === 0) {
+    return transcriptSegments;
+  }
+
+  // Sort slides by timestamp
+  const sortedSlides = [...slides].sort((a, b) => a.timestamp - b.timestamp);
+
+  return transcriptSegments.map(segment => {
+    // Find the slide that was showing at this transcript timestamp
+    let currentSlide: SlideContent | undefined;
+    
+    for (const slide of sortedSlides) {
+      if (slide.timestamp <= segment.timestamp) {
+        currentSlide = slide;
+      } else {
+        break;
+      }
+    }
+
+    return {
+      ...segment,
+      slideContext: currentSlide,
+    };
+  });
+}
+
+/**
+ * Build a presentation context string for AI prompts
+ */
+export function buildPresentationContext(slides: SlideContent[]): string {
+  if (slides.length === 0) return '';
+
+  const parts = ['PRESENTATION SLIDES CONTENT:'];
+  
+  for (const slide of slides) {
+    parts.push(`\n[Slide ${slide.slideNumber}${slide.title ? `: ${slide.title}` : ''}]`);
+    if (slide.textContent) {
+      parts.push(`Text: ${slide.textContent}`);
+    }
+    if (slide.keyPoints.length > 0) {
+      parts.push(`Key Points: ${slide.keyPoints.join('; ')}`);
+    }
+    if (slide.visualElements && slide.visualElements.length > 0) {
+      parts.push(`Visuals: ${slide.visualElements.join('; ')}`);
+    }
+    if (slide.dataOrCharts && slide.dataOrCharts.length > 0) {
+      parts.push(`Data: ${slide.dataOrCharts.join('; ')}`);
+    }
+  }
+
+  return parts.join('\n');
+}
+

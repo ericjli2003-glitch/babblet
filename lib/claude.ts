@@ -760,7 +760,10 @@ Respond ONLY with valid JSON.`;
 }
 
 // Analyze transcript using Babblet AI
-export async function analyzeWithClaude(transcript: string): Promise<AnalysisSummary> {
+export async function analyzeWithClaude(
+  transcript: string,
+  presentationContext?: string
+): Promise<AnalysisSummary> {
   const client = getAnthropicClient();
 
   const systemPrompt = `You are an expert at analyzing academic presentations. You focus on substantive issues, not minor stylistic choices.
@@ -815,11 +818,11 @@ Be conservative. Flag fewer, higher-quality issues rather than many minor observ
 If the presentation is reasonably coherent, return minimal or empty gap/evidence arrays.`;
 
   const userPrompt = `Analyze this presentation transcript. Be conservative - only flag substantive issues.
-
+${presentationContext ? `\n${presentationContext}\n` : ''}
 TRANSCRIPT:
 ${transcript}
 
-Apply STRICT ANALYSIS MODE. Return fewer, higher-quality findings.
+Apply STRICT ANALYSIS MODE. Return fewer, higher-quality findings.${presentationContext ? '\n\nIMPORTANT: Use the presentation slides content above to provide more specific feedback. Reference slide content when relevant.' : ''}
 
 IMPORTANT: For each item, include a "relevantSnippet" field with a SHORT quote (5-12 words) from the transcript - the specific phrase, not a whole sentence.
 
