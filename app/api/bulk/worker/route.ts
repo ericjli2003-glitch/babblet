@@ -229,7 +229,7 @@ async function processSubmission(submissionId: string, batchId: string): Promise
         // Store extracted slide content for reference in feedback
         slideContent: slideContent && slideContent.slides.length > 0 ? {
           slides: slideContent.slides,
-          presentationType: slideContent.presentationType,
+          presentationType: slideContent.presentationType as 'screen_share' | 'webcam_only' | 'mixed',
           summary: slideContent.summary,
         } : undefined,
         status: 'ready',
