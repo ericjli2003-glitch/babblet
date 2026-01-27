@@ -190,21 +190,60 @@ export default function AssignmentDashboardPage() {
     if (queuedCount === 0) return;
 
     setIsStartingGrading(true);
+    setGradingStarted(true);
     console.log(`[AssignmentDashboard] Starting grading for ${queuedCount} submissions`);
 
     try {
       // Fire multiple parallel requests to process submissions concurrently
       const numWorkers = Math.min(queuedCount, 3);
-      const processingPromises = Array.from({ length: numWorkers }, () =>
-        fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST' })
-          .catch(err => console.error('[AssignmentDashboard] Process trigger error:', err))
-      );
+      
+      const processingPromises = Array.from({ length: numWorkers }, async (_, i) => {
+        try {
+          console.log(`[AssignmentDashboard] Triggering worker ${i + 1}/${numWorkers}`);
+          const res = await fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST' });
+          const data = await res.json();
+          console.log(`[AssignmentDashboard] Worker ${i + 1} response:`, data);
+          
+          if (data.error) {
+            console.error(`[AssignmentDashboard] Worker ${i + 1} error:`, data.error);
+          }
+          return data;
+        } catch (err) {
+          console.error(`[AssignmentDashboard] Worker ${i + 1} failed:`, err);
+          return { error: err instanceof Error ? err.message : 'Unknown error' };
+        }
+      });
 
-      await Promise.all(processingPromises);
-      console.log(`[AssignmentDashboard] Triggered ${numWorkers} processing workers`);
-      setGradingStarted(true);
+      const results = await Promise.all(processingPromises);
+      console.log(`[AssignmentDashboard] All workers completed:`, results);
+      
+      // Check if any had errors
+      const errors = results.filter(r => r.error);
+      if (errors.length === results.length) {
+        // All failed
+        console.error('[AssignmentDashboard] All processing workers failed');
+        alert('Failed to start grading. Check console for details.');
+      }
+      
+      // Immediately refresh to get updated status
+      const statusRes = await fetch(`/api/bulk/status?batchId=${batchId}`);
+      const statusData = await statusRes.json();
+      
+      if (statusData.submissions) {
+        setSubmissions(statusData.submissions.map((sub: any) => ({
+          id: sub.id,
+          studentName: sub.studentName || 'Unknown Student',
+          originalFilename: sub.originalFilename || 'Unknown',
+          status: sub.status,
+          createdAt: sub.createdAt || Date.now(),
+          completedAt: sub.completedAt,
+          overallScore: sub.rubricEvaluation?.overallScore,
+          aiSentiment: sub.analysis?.sentiment,
+        })));
+      }
     } catch (err) {
       console.error('[AssignmentDashboard] Failed to start grading:', err);
+      alert('Failed to start grading: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setIsStartingGrading(false);
     }
@@ -450,23 +489,28 @@ export default function AssignmentDashboardPage() {
               Export CSV
             </button>
             {/* Show Start Grading button when there are queued submissions */}
-            {showStartGrading ? (
+            {isStartingGrading ? (
+              <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Starting Grading...
+              </div>
+            ) : showStartGrading && !gradingStarted ? (
               <button
                 onClick={handleStartGrading}
-                disabled={isStartingGrading}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 text-sm font-medium disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 text-sm font-medium"
               >
-                {isStartingGrading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Play className="w-4 h-4" />
-                )}
+                <Play className="w-4 h-4" />
                 Start Grading ({submissions.filter(s => s.status === 'queued').length})
               </button>
             ) : showGradingInProgress ? (
               <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Grading in Progress...
+              </div>
+            ) : gradingStarted && hasQueuedSubmissions ? (
+              <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Processing Queue...
               </div>
             ) : submissions.length > 0 ? (
               <button
