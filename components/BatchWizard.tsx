@@ -1300,9 +1300,9 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses, defa
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              fileName: queuedFile.name,
-              fileType: queuedFile.file.type,
-              fileSize: queuedFile.size,
+              batchId,
+              filename: queuedFile.name,
+              contentType: queuedFile.file.type,
             }),
           });
           const presignData = await presignRes.json();
@@ -1312,7 +1312,7 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses, defa
           }
 
           // Upload to R2
-          const uploadRes = await fetch(presignData.url, {
+          const uploadRes = await fetch(presignData.uploadUrl, {
             method: 'PUT',
             body: queuedFile.file,
             headers: { 'Content-Type': queuedFile.file.type },
@@ -1328,9 +1328,10 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses, defa
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               batchId,
-              fileName: queuedFile.name,
-              fileKey: presignData.key,
+              originalFilename: queuedFile.name,
+              fileKey: presignData.fileKey,
               fileSize: queuedFile.size,
+              mimeType: queuedFile.file.type,
             }),
           });
 
@@ -1347,6 +1348,19 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses, defa
           );
         }
       }
+
+      // Trigger processing for all queued submissions
+      // Fire multiple parallel requests to process submissions concurrently
+      const successfulUploads = files.filter(f => f.status !== 'error').length;
+      const processingPromises = Array.from({ length: Math.min(successfulUploads, 3) }, () =>
+        fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST' })
+          .catch(err => console.error('[BatchWizard] Process trigger error:', err))
+      );
+      
+      // Fire and don't wait - processing happens in background
+      Promise.all(processingPromises).then(() => {
+        console.log(`[BatchWizard] Triggered processing for batch ${batchId}`);
+      });
 
       // Complete
       onComplete(batchId);

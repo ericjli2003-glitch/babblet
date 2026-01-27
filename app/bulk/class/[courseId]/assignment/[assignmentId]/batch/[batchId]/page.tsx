@@ -177,6 +177,27 @@ export default function AssignmentDashboardPage() {
     loadData();
   }, [batchId, courseId]);
 
+  // Trigger processing for queued submissions
+  useEffect(() => {
+    if (!batchId || submissions.length === 0) return;
+
+    const queuedCount = submissions.filter(s => s.status === 'queued').length;
+    if (queuedCount === 0) return;
+
+    console.log(`[AssignmentDashboard] Found ${queuedCount} queued submissions, triggering processing`);
+
+    // Fire multiple parallel requests to process submissions concurrently
+    const numWorkers = Math.min(queuedCount, 3);
+    const processingPromises = Array.from({ length: numWorkers }, () =>
+      fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST' })
+        .catch(err => console.error('[AssignmentDashboard] Process trigger error:', err))
+    );
+
+    Promise.all(processingPromises).then(() => {
+      console.log(`[AssignmentDashboard] Triggered ${numWorkers} processing workers`);
+    });
+  }, [batchId, submissions.length]); // Only trigger when submissions are first loaded
+
   // Poll for updates
   useEffect(() => {
     if (!batchId || submissions.length === 0) return;
