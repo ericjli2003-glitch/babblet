@@ -413,8 +413,23 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Get next queued submission
-    const submissionId = await getNextQueuedSubmission();
+    // Get next queued submission - prefer from specified batch if provided
+    let submissionId: string | null = null;
+    
+    if (batchId) {
+      // Get submissions from this specific batch
+      const batchSubmissions = await getBatchSubmissions(batchId);
+      const queuedSubmission = batchSubmissions.find(s => s.status === 'queued');
+      if (queuedSubmission) {
+        submissionId = queuedSubmission.id;
+        console.log(`[ProcessNow] Found queued submission in batch ${batchId}: ${submissionId}`);
+      }
+    }
+    
+    // Fall back to global queue if no batch-specific submission found
+    if (!submissionId) {
+      submissionId = await getNextQueuedSubmission();
+    }
     
     if (!submissionId) {
       return NextResponse.json({
