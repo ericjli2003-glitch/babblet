@@ -275,7 +275,7 @@ export default function AssignmentDashboardPage() {
   const uploadsInProgress = expectedUploads > 0 && submissions.length < expectedUploads;
   const uploadProgress = expectedUploads > 0 ? Math.round((submissions.length / expectedUploads) * 100) : 100;
 
-  // Poll for updates (also poll when waiting for uploads)
+  // Poll for updates (also poll when waiting for uploads or grading)
   useEffect(() => {
     if (!batchId) return;
 
@@ -283,11 +283,14 @@ export default function AssignmentDashboardPage() {
       ['queued', 'uploading', 'transcribing', 'analyzing'].includes(s.status)
     );
 
-    // Keep polling if uploads are expected or there's active work
-    if (!hasActiveWork && !uploadsInProgress && submissions.length > 0) return;
+    // Keep polling if uploads are expected, grading started, or there's active work
+    const shouldPoll = hasActiveWork || uploadsInProgress || gradingStarted || submissions.length === 0;
+    if (!shouldPoll && submissions.length > 0) return;
 
-    // Poll faster when uploads are in progress
-    const pollInterval = uploadsInProgress ? 1500 : 3000;
+    // Poll faster when grading or uploads are in progress
+    const pollInterval = (uploadsInProgress || gradingStarted) ? 2000 : 3000;
+    
+    console.log(`[AssignmentDashboard] Polling enabled: hasActiveWork=${hasActiveWork}, gradingStarted=${gradingStarted}, interval=${pollInterval}ms`);
 
     const interval = setInterval(async () => {
       try {
@@ -295,6 +298,10 @@ export default function AssignmentDashboardPage() {
         const data = await res.json();
 
         if (data.submissions) {
+          console.log(`[AssignmentDashboard] Poll received ${data.submissions.length} submissions:`, 
+            data.submissions.map((s: any) => ({ id: s.id.slice(-6), status: s.status, score: s.overallScore }))
+          );
+          
           // When uploads are in progress, add new submissions to the list
           if (uploadsInProgress) {
             const newSubs: Submission[] = data.submissions
@@ -311,23 +318,27 @@ export default function AssignmentDashboardPage() {
               }));
             
             if (newSubs.length > 0) {
+              console.log(`[AssignmentDashboard] Adding ${newSubs.length} new submissions`);
               setSubmissions(prev => [...prev, ...newSubs]);
             }
           }
           
-          // Update existing submissions
-          setSubmissions(prev => prev.map(sub => {
-            const updated = data.submissions.find((s: any) => s.id === sub.id);
-            if (!updated) return sub;
-
-            return {
-              ...sub,
-              status: updated.status,
-              overallScore: updated.rubricEvaluation?.overallScore,
-              completedAt: updated.completedAt,
-              aiSentiment: updated.analysis?.sentiment || (updated.status === 'ready' ? 'Confident' : undefined),
-            };
+          // Always replace with fresh data from server to ensure we get all updates
+          const updatedSubs: Submission[] = data.submissions.map((sub: any) => ({
+            id: sub.id,
+            studentName: sub.studentName || 'Unknown Student',
+            originalFilename: sub.originalFilename || 'Unknown',
+            status: sub.status,
+            createdAt: sub.createdAt || Date.now(),
+            completedAt: sub.completedAt,
+            overallScore: sub.overallScore,
+            videoLength: undefined,
+            aiSentiment: sub.analysis?.sentiment || (sub.status === 'ready' ? 'Confident' : undefined),
+            flagged: sub.flagged,
+            flagReason: sub.flagReason,
           }));
+          
+          setSubmissions(updatedSubs);
           
           if (data.batch) {
             setBatch(prev => prev ? {
@@ -344,7 +355,7 @@ export default function AssignmentDashboardPage() {
     }, pollInterval);
 
     return () => clearInterval(interval);
-  }, [batchId, submissions, uploadsInProgress, expectedUploads]);
+  }, [batchId, submissions, uploadsInProgress, expectedUploads, gradingStarted]);
 
   // Derived stats
   const stats = useMemo(() => {
