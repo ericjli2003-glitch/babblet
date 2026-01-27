@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   Download, RefreshCw, ChevronLeft, ChevronRight, Filter,
   Loader2, AlertTriangle, TrendingUp, Clock, Flag, Eye,
-  Play, AlertCircle, CheckCircle, ArrowLeft
+  Play, AlertCircle, CheckCircle, ArrowLeft, Trash2, MoreVertical
 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
@@ -110,6 +110,8 @@ export default function AssignmentDashboardPage() {
   const [batch, setBatch] = useState<BatchInfo | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [isRegrading, setIsRegrading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
@@ -276,6 +278,27 @@ export default function AssignmentDashboardPage() {
 
   const handleExport = () => {
     window.open(`/api/bulk/export?batchId=${batchId}`, '_blank');
+  };
+
+  const handleDeleteSubmission = async (submissionId: string) => {
+    setDeletingId(submissionId);
+    try {
+      const res = await fetch(`/api/bulk/submissions?id=${submissionId}`, {
+        method: 'DELETE',
+      });
+      
+      if (res.ok) {
+        // Remove from local state
+        setSubmissions(prev => prev.filter(s => s.id !== submissionId));
+        setShowDeleteConfirm(null);
+      } else {
+        console.error('Failed to delete submission');
+      }
+    } catch (err) {
+      console.error('[AssignmentDashboard] Delete error:', err);
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   if (loading) {
@@ -498,30 +521,65 @@ export default function AssignmentDashboardPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      {submission.status === 'ready' ? (
-                        <Link
-                          href={`/bulk/submission/${submission.id}`}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors"
-                        >
-                          <Eye className="w-4 h-4" />
-                          View Report
-                        </Link>
-                      ) : submission.flagged ? (
-                        <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors">
-                          <Flag className="w-4 h-4" />
-                          Audit Flag
-                        </button>
-                      ) : ['queued', 'transcribing', 'analyzing'].includes(submission.status) ? (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-surface-500">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Processing
-                        </span>
-                      ) : (
-                        <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors">
-                          <Play className="w-4 h-4" />
-                          Start Grading
-                        </button>
-                      )}
+                      <div className="flex items-center justify-end gap-2">
+                        {submission.status === 'ready' ? (
+                          <Link
+                            href={`/bulk/submission/${submission.id}`}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors"
+                          >
+                            <Eye className="w-4 h-4" />
+                            View
+                          </Link>
+                        ) : submission.flagged ? (
+                          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors">
+                            <Flag className="w-4 h-4" />
+                            Audit
+                          </button>
+                        ) : ['queued', 'transcribing', 'analyzing'].includes(submission.status) ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-surface-500">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Processing
+                          </span>
+                        ) : (
+                          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors">
+                            <Play className="w-4 h-4" />
+                            Grade
+                          </button>
+                        )}
+                        
+                        {/* Delete Button with Confirmation */}
+                        <div className="relative">
+                          {showDeleteConfirm === submission.id ? (
+                            <div className="flex items-center gap-1 bg-red-50 border border-red-200 rounded-lg p-1">
+                              <button
+                                onClick={() => handleDeleteSubmission(submission.id)}
+                                disabled={deletingId === submission.id}
+                                className="px-2 py-1 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded transition-colors disabled:opacity-50"
+                              >
+                                {deletingId === submission.id ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  'Confirm'
+                                )}
+                              </button>
+                              <button
+                                onClick={() => setShowDeleteConfirm(null)}
+                                className="px-2 py-1 text-xs font-medium text-surface-600 hover:text-surface-800 rounded transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setShowDeleteConfirm(submission.id)}
+                              className="p-1.5 text-surface-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete submission"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 ))}

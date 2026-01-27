@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSubmission, updateSubmission } from '@/lib/batch-store';
+import { getSubmission, updateSubmission, deleteSubmission } from '@/lib/batch-store';
 
 // GET /api/bulk/submissions?id=xxx - Get full submission details
 export async function GET(request: NextRequest) {
@@ -52,6 +52,31 @@ export async function PATCH(request: NextRequest) {
     console.error('[UpdateSubmission] Error:', error);
     return NextResponse.json(
       { error: 'Failed to update submission', details: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/bulk/submissions?id=xxx - Delete a submission
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const submissionId = searchParams.get('id');
+
+    if (!submissionId) {
+      return NextResponse.json({ error: 'Submission ID required' }, { status: 400 });
+    }
+
+    const deleted = await deleteSubmission(submissionId);
+    if (!deleted) {
+      return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, message: 'Submission deleted' });
+  } catch (error) {
+    console.error('[DeleteSubmission] Error:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete submission', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

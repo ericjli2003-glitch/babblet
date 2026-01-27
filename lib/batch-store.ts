@@ -290,6 +290,25 @@ export async function deleteBatch(batchId: string): Promise<void> {
   await kv.del(`${BATCH_PREFIX}${batchId}`);
 }
 
+export async function deleteSubmission(submissionId: string): Promise<boolean> {
+  // Get submission first to find its batch
+  const submission = await getSubmission(submissionId);
+  if (!submission) {
+    return false;
+  }
+
+  // Remove from batch's submission set
+  await kv.srem(`${BATCH_SUBMISSIONS_PREFIX}${submission.batchId}`, submissionId);
+
+  // Delete the submission
+  await kv.del(`${SUBMISSION_PREFIX}${submissionId}`);
+
+  // Update batch stats
+  await updateBatchStats(submission.batchId);
+
+  return true;
+}
+
 // ============================================
 // Submission Operations
 // ============================================
