@@ -208,9 +208,14 @@ export default function AssignmentDashboardPage() {
 
   // Check if grading is in progress (for UI state)
   const hasQueuedSubmissions = submissions.some(s => s.status === 'queued');
+  const hasUngradedSubmissions = submissions.some(s => 
+    s.overallScore === undefined && s.status !== 'failed' && s.status !== 'ready'
+  );
   const hasActiveProcessing = submissions.some(s => 
     ['transcribing', 'analyzing'].includes(s.status)
   );
+  // Show Start Grading if there are queued OR ungraded submissions (and not currently processing)
+  const showStartGrading = (hasQueuedSubmissions || (submissions.length > 0 && submissions.every(s => s.status === 'queued'))) && !hasActiveProcessing && !gradingStarted;
 
   // Poll for updates
   useEffect(() => {
@@ -400,8 +405,8 @@ export default function AssignmentDashboardPage() {
               <Download className="w-4 h-4" />
               Export CSV
             </button>
-            {/* Show Start Grading button when there are queued submissions */}
-            {hasQueuedSubmissions && !hasActiveProcessing && !gradingStarted ? (
+            {/* Show Start Grading button when there are queued/ungraded submissions */}
+            {showStartGrading ? (
               <button
                 onClick={handleStartGrading}
                 disabled={isStartingGrading}
@@ -412,14 +417,14 @@ export default function AssignmentDashboardPage() {
                 ) : (
                   <Play className="w-4 h-4" />
                 )}
-                Start Grading
+                Start Grading ({submissions.filter(s => s.status === 'queued').length})
               </button>
-            ) : hasActiveProcessing || (gradingStarted && hasQueuedSubmissions) ? (
+            ) : hasActiveProcessing || gradingStarted ? (
               <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Grading in Progress...
               </div>
-            ) : (
+            ) : submissions.length > 0 ? (
               <button
                 onClick={handleRegrade}
                 disabled={isRegrading}
@@ -432,7 +437,7 @@ export default function AssignmentDashboardPage() {
                 )}
                 Re-grade All
               </button>
-            )}
+            ) : null}
         </div>
       </div>
 
@@ -569,16 +574,24 @@ export default function AssignmentDashboardPage() {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        {getSentimentIcon(submission.aiSentiment)}
-                        <span className={getSentimentColor(submission.aiSentiment)}>
-                          {submission.aiSentiment || '--'}
-                        </span>
-                      </div>
+                      {submission.status === 'ready' && submission.overallScore !== undefined ? (
+                        <div className="flex items-center gap-2">
+                          {getSentimentIcon(submission.aiSentiment)}
+                          <span className={getSentimentColor(submission.aiSentiment)}>
+                            {submission.aiSentiment || '--'}
+                          </span>
+                        </div>
+                      ) : submission.status === 'queued' ? (
+                        <span className="text-surface-400 text-sm">Awaiting grading</span>
+                      ) : ['transcribing', 'analyzing'].includes(submission.status) ? (
+                        <span className="text-amber-600 text-sm">Processing...</span>
+                      ) : (
+                        <span className="text-surface-400">--</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {submission.status === 'ready' ? (
+                        {submission.status === 'ready' && submission.overallScore !== undefined ? (
                           <Link
                             href={`/bulk/submission/${submission.id}`}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors"
@@ -586,21 +599,30 @@ export default function AssignmentDashboardPage() {
                             <Eye className="w-4 h-4" />
                             View
                           </Link>
+                        ) : submission.status === 'failed' ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-500">
+                            <AlertCircle className="w-4 h-4" />
+                            Failed
+                          </span>
                         ) : submission.flagged ? (
                           <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors">
                             <Flag className="w-4 h-4" />
                             Audit
                           </button>
-                        ) : ['queued', 'transcribing', 'analyzing'].includes(submission.status) ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-surface-500">
+                        ) : ['transcribing', 'analyzing'].includes(submission.status) ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-amber-600">
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            Processing
+                            Grading...
+                          </span>
+                        ) : submission.status === 'queued' ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-surface-500">
+                            <Clock className="w-4 h-4" />
+                            Awaiting
                           </span>
                         ) : (
-                          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors">
-                            <Play className="w-4 h-4" />
-                            Grade
-                          </button>
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-surface-400">
+                            --
+                          </span>
                         )}
                         
                         {/* Delete Button with Confirmation */}
