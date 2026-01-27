@@ -207,6 +207,7 @@ function BulkUploadPageContent() {
   const searchParams = useSearchParams();
   const urlCourseId = searchParams.get('courseId');
   const urlAssignmentId = searchParams.get('assignmentId');
+  const urlBatchId = searchParams.get('batchId');
 
   // Class-scoped state
   const [classScopedInfo, setClassScopedInfo] = useState<ClassScopedInfo | null>(null);
@@ -466,6 +467,69 @@ function BulkUploadPageContent() {
       loadAvailableContexts();
     }
   }, [showBatchWizard, loadAvailableContexts]);
+
+  // ============================================
+  // Load Batch from URL Params
+  // ============================================
+
+  useEffect(() => {
+    const loadBatchFromUrl = async () => {
+      if (!urlBatchId) return;
+      
+      console.log(`[BulkUpload] Loading batch from URL: ${urlBatchId}`);
+      
+      try {
+        setInitialLoading(true);
+        const res = await fetch(`/api/bulk/status?batchId=${urlBatchId}`);
+        const data = await res.json();
+        
+        if (data.success && data.batch) {
+          console.log(`[BulkUpload] Loaded batch: ${data.batch.name}, ${data.submissions?.length || 0} submissions`);
+          setSelectedBatchId(urlBatchId);
+          setCurrentBatch(data.batch);
+          setView('batch');
+          
+          // Map submissions to pipeline format
+          if (data.submissions) {
+            const mappedPipeline: PipelineFile[] = data.submissions.map((sub: { id: string; studentName?: string; originalFilename?: string; status?: string; overallScore?: number }) => ({
+              id: sub.id,
+              filename: sub.originalFilename || 'Unknown',
+              fileSize: 0,
+              fileType: 'video/mp4',
+              studentName: sub.studentName || 'Unknown Student',
+              uploadProgress: 100,
+              uploadSpeed: 0,
+              bytesUploaded: 0,
+              stage: serverStatusToStage(sub.status || 'queued'),
+              addedAt: Date.now(),
+              overallScore: sub.overallScore,
+              submissionId: sub.id,
+            }));
+            setPipeline(mappedPipeline);
+          }
+          
+          // Trigger processing if there are queued items
+          const queuedCount = data.submissions?.filter((s: { status?: string }) => s.status === 'queued').length || 0;
+          if (queuedCount > 0) {
+            console.log(`[BulkUpload] Found ${queuedCount} queued submissions, triggering processing`);
+            const numWorkers = Math.min(queuedCount, 3);
+            for (let i = 0; i < numWorkers; i++) {
+              fetch(`/api/bulk/process-now?batchId=${urlBatchId}`, { method: 'POST' })
+                .catch(err => console.error('[BulkUpload] Process trigger error:', err));
+            }
+          }
+        } else {
+          console.error(`[BulkUpload] Failed to load batch: ${data.error}`);
+        }
+      } catch (err) {
+        console.error('[BulkUpload] Error loading batch from URL:', err);
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+    
+    loadBatchFromUrl();
+  }, [urlBatchId]);
 
   // ============================================
   // Load Class Context from URL Params
