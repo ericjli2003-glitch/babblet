@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   Download, RefreshCw, ChevronLeft, ChevronRight, Filter,
   Loader2, AlertTriangle, TrendingUp, Clock, Flag, Eye,
-  Play, AlertCircle, CheckCircle, ArrowLeft, Trash2, MoreVertical
+  Play, AlertCircle, CheckCircle, ArrowLeft, Trash2, MoreVertical, Upload
 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
@@ -101,9 +101,13 @@ function getSentimentIcon(sentiment?: string) {
 
 export default function AssignmentDashboardPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const courseId = params.courseId as string;
   const assignmentId = params.assignmentId as string;
   const batchId = params.batchId as string;
+  
+  // Check if files are still uploading (passed from wizard)
+  const expectedUploads = parseInt(searchParams.get('uploading') || '0', 10);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -217,15 +221,23 @@ export default function AssignmentDashboardPage() {
   // Show Start Grading if there are queued OR ungraded submissions (and not currently processing)
   const showStartGrading = (hasQueuedSubmissions || (submissions.length > 0 && submissions.every(s => s.status === 'queued'))) && !hasActiveProcessing && !gradingStarted;
 
-  // Poll for updates
+  // Calculate if uploads are still in progress
+  const uploadsInProgress = expectedUploads > 0 && submissions.length < expectedUploads;
+  const uploadProgress = expectedUploads > 0 ? Math.round((submissions.length / expectedUploads) * 100) : 100;
+
+  // Poll for updates (also poll when waiting for uploads)
   useEffect(() => {
-    if (!batchId || submissions.length === 0) return;
+    if (!batchId) return;
 
     const hasActiveWork = submissions.some(s => 
       ['queued', 'uploading', 'transcribing', 'analyzing'].includes(s.status)
     );
 
-    if (!hasActiveWork) return;
+    // Keep polling if uploads are expected or there's active work
+    if (!hasActiveWork && !uploadsInProgress && submissions.length > 0) return;
+
+    // Poll faster when uploads are in progress
+    const pollInterval = uploadsInProgress ? 1500 : 3000;
 
     const interval = setInterval(async () => {
       try {
@@ -233,6 +245,27 @@ export default function AssignmentDashboardPage() {
         const data = await res.json();
 
         if (data.submissions) {
+          // When uploads are in progress, add new submissions to the list
+          if (uploadsInProgress) {
+            const newSubs: Submission[] = data.submissions
+              .filter((s: any) => !submissions.find(existing => existing.id === s.id))
+              .map((sub: any) => ({
+                id: sub.id,
+                studentName: sub.studentName || 'Unknown Student',
+                originalFilename: sub.originalFilename || 'Unknown',
+                status: sub.status,
+                createdAt: sub.createdAt || Date.now(),
+                completedAt: sub.completedAt,
+                overallScore: sub.rubricEvaluation?.overallScore,
+                aiSentiment: sub.analysis?.sentiment,
+              }));
+            
+            if (newSubs.length > 0) {
+              setSubmissions(prev => [...prev, ...newSubs]);
+            }
+          }
+          
+          // Update existing submissions
           setSubmissions(prev => prev.map(sub => {
             const updated = data.submissions.find((s: any) => s.id === sub.id);
             if (!updated) return sub;
@@ -258,10 +291,10 @@ export default function AssignmentDashboardPage() {
       } catch (err) {
         console.error('[AssignmentDashboard] Poll error:', err);
       }
-    }, 3000);
+    }, pollInterval);
 
     return () => clearInterval(interval);
-  }, [batchId, submissions]);
+  }, [batchId, submissions, uploadsInProgress, expectedUploads]);
 
   // Derived stats
   const stats = useMemo(() => {
@@ -440,6 +473,35 @@ export default function AssignmentDashboardPage() {
             ) : null}
         </div>
       </div>
+
+        {/* Upload Progress Banner */}
+        {uploadsInProgress && (
+          <div className="mb-6 bg-primary-50 border border-primary-200 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
+                  <Upload className="w-5 h-5 text-primary-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-surface-900">Uploading Files</h3>
+                  <p className="text-sm text-surface-600">
+                    {submissions.length} of {expectedUploads} files uploaded
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-5 h-5 text-primary-600 animate-spin" />
+                <span className="text-sm font-medium text-primary-700">{uploadProgress}%</span>
+              </div>
+            </div>
+            <div className="h-2 bg-primary-100 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-primary-500 rounded-full transition-all duration-500"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-4 gap-4 mb-8">

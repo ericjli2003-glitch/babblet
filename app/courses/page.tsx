@@ -1133,21 +1133,15 @@ function CoursesContent() {
         <BatchWizard
           isOpen={showBatchWizard}
           onClose={() => setShowBatchWizard(false)}
-          onComplete={async (batchId) => {
+          onComplete={async (batchId, expectedFileCount) => {
             setShowBatchWizard(false);
-            // Refresh course data to show new assignment
-            await loadCoursesAndBatches();
-            // Get batch info to determine course for navigation
-            try {
-              const batchRes = await fetch(`/api/bulk/status?batchId=${batchId}`);
-              const batchData = await batchRes.json();
-              const courseId = batchData.batch?.courseId || selectedCourse?.id || 'unknown';
-              // Navigate to the assignment batch page
-              router.push(`/bulk/class/${courseId}/assignment/${batchId}/batch/${batchId}`);
-            } catch {
-              // Fallback to courses page if batch fetch fails
-              router.push(`/courses?courseId=${selectedCourse?.id || ''}`);
-            }
+            // Navigate immediately - don't wait for refresh
+            const courseId = selectedCourse?.id || 'unknown';
+            // Pass expected file count so assignment page can show upload progress
+            const uploadParam = expectedFileCount ? `?uploading=${expectedFileCount}` : '';
+            router.push(`/bulk/class/${courseId}/assignment/${batchId}/batch/${batchId}${uploadParam}`);
+            // Refresh course data in background
+            loadCoursesAndBatches();
           }}
           courses={courses.map(c => ({ id: c.id, name: c.courseCode ? `${c.courseCode} - ${c.name}` : c.name }))}
           defaultCourseId={selectedCourse?.id}

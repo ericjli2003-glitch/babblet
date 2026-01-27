@@ -52,7 +52,7 @@ interface QueuedFile {
 interface BatchWizardProps {
   isOpen: boolean;
   onClose: () => void;
-  onComplete: (batchId: string) => void;
+  onComplete: (batchId: string, expectedFileCount?: number) => void;
   courses: Course[];
   defaultCourseId?: string;
 }
@@ -1287,91 +1287,79 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses, defa
       }
 
       const batchId = data.batchId;
-      console.log(`[BatchWizard] Created batch ${batchId}, uploading ${files.length} files`);
+      console.log(`[BatchWizard] Created batch ${batchId}, will upload ${files.length} files in background`);
 
-      // Track successful uploads
-      let successfulUploads = 0;
+      // Capture files before closing wizard (they'll be cleared on close)
+      const filesToUpload = [...files];
 
-      // Upload files
-      for (const queuedFile of files) {
-        setFiles((prev) =>
-          prev.map((f) => (f.id === queuedFile.id ? { ...f, status: 'uploading' as const, progress: 0 } : f))
-        );
+      // Close wizard and navigate to assignment page IMMEDIATELY
+      // Files will upload in background - pass expected count for progress display
+      onComplete(batchId, filesToUpload.length);
 
-        try {
-          console.log(`[BatchWizard] Uploading ${queuedFile.name}, type=${queuedFile.file.type}`);
-          
-          // Get presigned URL
-          const presignRes = await fetch('/api/bulk/presign', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              batchId,
-              filename: queuedFile.name,
-              contentType: queuedFile.file.type,
-            }),
-          });
-          const presignData = await presignRes.json();
-          console.log(`[BatchWizard] Presign response:`, presignData);
+      // Upload files in background (fire and forget)
+      // This continues even after the wizard component unmounts
+      (async () => {
+        let successfulUploads = 0;
+        
+        for (const queuedFile of filesToUpload) {
+          try {
+            console.log(`[BatchWizard Background] Uploading ${queuedFile.name}`);
+            
+            // Get presigned URL
+            const presignRes = await fetch('/api/bulk/presign', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                batchId,
+                filename: queuedFile.name,
+                contentType: queuedFile.file.type,
+              }),
+            });
+            const presignData = await presignRes.json();
 
-          if (!presignData.success) {
-            throw new Error(presignData.error || 'Failed to get upload URL');
+            if (!presignData.success) {
+              console.error(`[BatchWizard Background] Presign failed for ${queuedFile.name}:`, presignData.error);
+              continue;
+            }
+
+            // Upload to R2
+            const uploadRes = await fetch(presignData.uploadUrl, {
+              method: 'PUT',
+              body: queuedFile.file,
+              headers: { 'Content-Type': queuedFile.file.type },
+            });
+
+            if (!uploadRes.ok) {
+              console.error(`[BatchWizard Background] R2 upload failed for ${queuedFile.name}: ${uploadRes.status}`);
+              continue;
+            }
+
+            // Enqueue for processing
+            const enqueueRes = await fetch('/api/bulk/enqueue', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                batchId,
+                originalFilename: queuedFile.name,
+                fileKey: presignData.fileKey,
+                fileSize: queuedFile.size,
+                mimeType: queuedFile.file.type,
+              }),
+            });
+            const enqueueData = await enqueueRes.json();
+
+            if (enqueueData.success) {
+              successfulUploads++;
+              console.log(`[BatchWizard Background] Enqueued ${queuedFile.name}`);
+            }
+          } catch (err) {
+            console.error(`[BatchWizard Background] Error uploading ${queuedFile.name}:`, err);
           }
-
-          // Upload to R2
-          const uploadRes = await fetch(presignData.uploadUrl, {
-            method: 'PUT',
-            body: queuedFile.file,
-            headers: { 'Content-Type': queuedFile.file.type },
-          });
-
-          if (!uploadRes.ok) {
-            console.error(`[BatchWizard] R2 upload failed: ${uploadRes.status} ${uploadRes.statusText}`);
-            throw new Error(`Upload failed: ${uploadRes.status}`);
-          }
-
-          console.log(`[BatchWizard] Uploaded to R2, now enqueuing...`);
-
-          // Enqueue for processing
-          const enqueueRes = await fetch('/api/bulk/enqueue', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              batchId,
-              originalFilename: queuedFile.name,
-              fileKey: presignData.fileKey,
-              fileSize: queuedFile.size,
-              mimeType: queuedFile.file.type,
-            }),
-          });
-          const enqueueData = await enqueueRes.json();
-          console.log(`[BatchWizard] Enqueue response:`, enqueueData);
-
-          if (!enqueueData.success) {
-            throw new Error(enqueueData.error || 'Failed to enqueue');
-          }
-
-          successfulUploads++;
-          setFiles((prev) =>
-            prev.map((f) => (f.id === queuedFile.id ? { ...f, status: 'complete' as const, progress: 100 } : f))
-          );
-        } catch (err) {
-          console.error(`[BatchWizard] Upload error for ${queuedFile.name}:`, err);
-          setFiles((prev) =>
-            prev.map((f) =>
-              f.id === queuedFile.id
-                ? { ...f, status: 'error' as const, error: err instanceof Error ? err.message : 'Upload failed' }
-                : f
-            )
-          );
         }
-      }
 
-      console.log(`[BatchWizard] Uploaded ${successfulUploads}/${files.length} files successfully`);
+        console.log(`[BatchWizard Background] Completed: ${successfulUploads}/${filesToUpload.length} files uploaded`);
+      })();
 
-      // Don't auto-process - let user trigger grading from the assignment page
-      // Complete and navigate to assignment page
-      onComplete(batchId);
     } catch (error) {
       console.error('Batch creation error:', error);
       setIsCreating(false);
