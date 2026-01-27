@@ -1001,192 +1001,176 @@ function Step3Upload({ files, setFiles, onBack, onComplete, isCreating }: Step3P
           </div>
         </div>
 
-        {/* Upload Zone */}
+        {/* Upload Zone & Files - Side by side when files exist */}
         <div className="px-8">
-        <div
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors ${
-            isDragging
-              ? 'border-primary-400 bg-primary-50'
-              : 'border-surface-200 hover:border-surface-300'
-          }`}
-        >
-          <div className="w-16 h-16 rounded-full bg-primary-100 flex items-center justify-center mx-auto mb-4">
-            <Cloud className="w-8 h-8 text-primary-500" />
-          </div>
-          <h3 className="font-semibold text-surface-900 mb-1">Drag and drop student files here</h3>
-          <p className="text-sm text-surface-500 mb-4">
-            Supports MP4, MOV, MP3, and WAV up to 500MB per file.
-          </p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept=".mp4,.mov,.mp3,.wav,.pdf,.pptx,.docx"
-            onChange={(e) => e.target.files && addFiles(e.target.files)}
-            className="hidden"
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="px-6 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-medium"
-          >
-            Browse Files
-          </button>
-        </div>
-
-        {/* Queued Files */}
-        {files.length > 0 && (
-          <div className="mt-6">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <h3 className="font-semibold text-surface-900">Uploaded Files</h3>
-                <span className="px-2.5 py-1 bg-primary-100 text-primary-700 rounded-full text-xs font-medium">
-                  {files.length} file{files.length !== 1 ? 's' : ''}
-                </span>
+          <div className={`grid gap-6 ${files.length > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {/* Dropzone - compact when files exist */}
+            <div
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              className={`border-2 border-dashed rounded-xl text-center transition-colors ${
+                files.length > 0 ? 'p-6' : 'p-12'
+              } ${
+                isDragging
+                  ? 'border-primary-400 bg-primary-50'
+                  : 'border-surface-200 hover:border-surface-300'
+              }`}
+            >
+              <div className={`rounded-full bg-primary-100 flex items-center justify-center mx-auto mb-3 ${
+                files.length > 0 ? 'w-12 h-12' : 'w-16 h-16 mb-4'
+              }`}>
+                <Cloud className={files.length > 0 ? 'w-6 h-6 text-primary-500' : 'w-8 h-8 text-primary-500'} />
               </div>
-              <button 
-                onClick={clearAll} 
-                className="flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 font-medium"
+              <h3 className={`font-semibold text-surface-900 mb-1 ${files.length > 0 ? 'text-sm' : ''}`}>
+                {files.length > 0 ? 'Add more files' : 'Drag and drop student files here'}
+              </h3>
+              <p className={`text-surface-500 mb-3 ${files.length > 0 ? 'text-xs' : 'text-sm mb-4'}`}>
+                Supports MP4, MOV, MP3, and WAV up to 500MB per file.
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".mp4,.mov,.mp3,.wav,.pdf,.pptx,.docx"
+                onChange={(e) => e.target.files && addFiles(e.target.files)}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className={`bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-medium ${
+                  files.length > 0 ? 'px-4 py-2 text-sm' : 'px-6 py-2.5'
+                }`}
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                Clear All
+                Browse Files
               </button>
             </div>
-            
-            {/* Summary by type */}
-            <div className="flex gap-2 mb-3 flex-wrap">
-              {(() => {
-                const videoCount = files.filter(f => getFileTypeInfo(f.name).type === 'video').length;
-                const audioCount = files.filter(f => getFileTypeInfo(f.name).type === 'audio').length;
-                const docCount = files.filter(f => getFileTypeInfo(f.name).type === 'document').length;
-                return (
-                  <>
-                    {videoCount > 0 && (
-                      <span className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium">
-                        <Video className="w-3.5 h-3.5" />
-                        {videoCount} video{videoCount !== 1 ? 's' : ''}
-                      </span>
-                    )}
-                    {audioCount > 0 && (
-                      <span className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg text-xs font-medium">
-                        <Music className="w-3.5 h-3.5" />
-                        {audioCount} audio
-                      </span>
-                    )}
-                    {docCount > 0 && (
-                      <span className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium">
-                        <FileText className="w-3.5 h-3.5" />
-                        {docCount} document{docCount !== 1 ? 's' : ''}
-                      </span>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-            
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {files.map((file) => {
-                const fileTypeInfo = getFileTypeInfo(file.name);
-                const FileIcon = getFileIcon(fileTypeInfo.type);
-                
-                return (
-                  <div
-                    key={file.id}
-                    className={`flex items-center gap-4 p-4 rounded-xl border transition-all hover:shadow-sm ${
-                      file.status === 'complete'
-                        ? 'bg-emerald-50 border-emerald-200'
-                        : file.status === 'error'
-                          ? 'bg-red-50 border-red-200'
-                          : 'bg-white border-surface-200 hover:border-surface-300'
-                    }`}
-                  >
-                    {/* File Type Icon */}
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                      file.status === 'complete'
-                        ? 'bg-emerald-100'
-                        : file.status === 'uploading'
-                          ? 'bg-primary-100'
-                          : file.status === 'error'
-                            ? 'bg-red-100'
-                            : fileTypeInfo.type === 'video' 
-                              ? 'bg-purple-100'
-                              : fileTypeInfo.type === 'audio'
-                                ? 'bg-amber-100'
-                                : 'bg-surface-100'
-                    }`}>
-                      {file.status === 'complete' ? (
-                        <CheckCircle className="w-6 h-6 text-emerald-600" />
-                      ) : file.status === 'uploading' ? (
-                        <Loader2 className="w-6 h-6 text-primary-600 animate-spin" />
-                      ) : file.status === 'error' ? (
-                        <AlertCircle className="w-6 h-6 text-red-600" />
-                      ) : (
-                        <FileIcon className={`w-6 h-6 ${
-                          fileTypeInfo.type === 'video' ? 'text-purple-600' :
-                          fileTypeInfo.type === 'audio' ? 'text-amber-600' :
-                          'text-surface-500'
-                        }`} />
-                      )}
-                    </div>
 
-                    {/* File Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <p className="font-medium text-surface-900 truncate">{file.name}</p>
-                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${fileTypeInfo.color}`}>
-                          {fileTypeInfo.label}
-                        </span>
-                      </div>
-                      <p className="text-sm text-surface-500">
-                        {formatFileSize(file.size)}
-                        {file.status === 'complete' && (
-                          <span className="text-emerald-600"> • Ready for processing</span>
-                        )}
-                        {file.status === 'waiting' && ' • Queued'}
-                        {file.status === 'uploading' && (
-                          <span className="text-primary-600"> • Uploading {file.progress}%</span>
-                        )}
-                        {file.status === 'error' && (
-                          <span className="text-red-600"> • {file.error || 'Upload failed'}</span>
-                        )}
-                      </p>
-                    </div>
-
-                    {/* Progress Bar (if uploading) */}
-                    {file.status === 'uploading' && (
-                      <div className="w-24">
-                        <div className="h-2 bg-surface-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-primary-500 transition-all rounded-full"
-                            style={{ width: `${file.progress}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Delete Button */}
-                    <button
-                      onClick={() => removeFile(file.id)}
-                      className="p-2.5 text-surface-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                      title="Remove file"
-                    >
-                      {file.status === 'uploading' ? (
-                        <X className="w-5 h-5" />
-                      ) : (
-                        <Trash2 className="w-5 h-5" />
-                      )}
-                    </button>
+            {/* Queued Files */}
+            {files.length > 0 && (
+              <div className="flex flex-col">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-surface-900 text-sm">Uploaded Files</h3>
+                    <span className="px-2 py-0.5 bg-primary-100 text-primary-700 rounded-full text-xs font-medium">
+                      {files.length}
+                    </span>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+                  <button 
+                    onClick={clearAll} 
+                    className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 font-medium"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Clear All
+                  </button>
+                </div>
+                
+                {/* Summary by type - compact */}
+                <div className="flex gap-1.5 mb-2 flex-wrap">
+                  {(() => {
+                    const videoCount = files.filter(f => getFileTypeInfo(f.name).type === 'video').length;
+                    const audioCount = files.filter(f => getFileTypeInfo(f.name).type === 'audio').length;
+                    const docCount = files.filter(f => getFileTypeInfo(f.name).type === 'document').length;
+                    return (
+                      <>
+                        {videoCount > 0 && (
+                          <span className="flex items-center gap-1 px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-xs font-medium">
+                            <Video className="w-3 h-3" />
+                            {videoCount} video{videoCount !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {audioCount > 0 && (
+                          <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-xs font-medium">
+                            <Music className="w-3 h-3" />
+                            {audioCount} audio
+                          </span>
+                        )}
+                        {docCount > 0 && (
+                          <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium">
+                            <FileText className="w-3 h-3" />
+                            {docCount} doc{docCount !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+                
+                <div className="space-y-1 max-h-40 overflow-y-auto flex-1">
+                  {files.map((file) => {
+                    const fileTypeInfo = getFileTypeInfo(file.name);
+                    const FileIcon = getFileIcon(fileTypeInfo.type);
+                    
+                    return (
+                      <div
+                        key={file.id}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
+                          file.status === 'complete'
+                            ? 'bg-emerald-50 border-emerald-200'
+                            : file.status === 'error'
+                              ? 'bg-red-50 border-red-200'
+                              : 'bg-white border-surface-200'
+                        }`}
+                      >
+                        {/* File Type Icon - compact */}
+                        <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 ${
+                          file.status === 'complete'
+                            ? 'bg-emerald-100'
+                            : file.status === 'uploading'
+                              ? 'bg-primary-100'
+                              : file.status === 'error'
+                                ? 'bg-red-100'
+                                : fileTypeInfo.type === 'video' 
+                                  ? 'bg-purple-100'
+                                  : fileTypeInfo.type === 'audio'
+                                    ? 'bg-amber-100'
+                                    : 'bg-surface-100'
+                        }`}>
+                          {file.status === 'complete' ? (
+                            <CheckCircle className="w-4 h-4 text-emerald-600" />
+                          ) : file.status === 'uploading' ? (
+                            <Loader2 className="w-4 h-4 text-primary-600 animate-spin" />
+                          ) : file.status === 'error' ? (
+                            <AlertCircle className="w-4 h-4 text-red-600" />
+                          ) : (
+                            <FileIcon className={`w-4 h-4 ${
+                              fileTypeInfo.type === 'video' ? 'text-purple-600' :
+                              fileTypeInfo.type === 'audio' ? 'text-amber-600' :
+                              'text-surface-500'
+                            }`} />
+                          )}
+                        </div>
 
-        {/* Info Card */}
-        <div className="px-8 pb-6">
+                        {/* File Info - compact */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-surface-900 truncate">{file.name}</p>
+                          <p className="text-xs text-surface-500">
+                            {formatFileSize(file.size)}
+                            {file.status === 'complete' && <span className="text-emerald-600"> • Ready</span>}
+                            {file.status === 'uploading' && <span className="text-primary-600"> • {file.progress}%</span>}
+                            {file.status === 'error' && <span className="text-red-600"> • Failed</span>}
+                          </p>
+                        </div>
+
+                        {/* Delete Button - compact */}
+                        <button
+                          onClick={() => removeFile(file.id)}
+                          className="p-1.5 text-surface-400 hover:text-red-500 hover:bg-red-50 rounded transition-all flex-shrink-0"
+                          title="Remove file"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Info Card - more compact */}
+        <div className="px-8 pb-4">
           <div className="bg-primary-50 border border-primary-100 rounded-xl p-4 flex items-start gap-3">
             <HelpCircle className="w-5 h-5 text-primary-500 flex-shrink-0 mt-0.5" />
             <div>
@@ -1197,7 +1181,6 @@ function Step3Upload({ files, setFiles, onBack, onComplete, isCreating }: Step3P
               </p>
             </div>
           </div>
-        </div>
         </div>
       </div>
 
