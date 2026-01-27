@@ -212,14 +212,25 @@ export default function AssignmentDashboardPage() {
 
   // Check if grading is in progress (for UI state)
   const hasQueuedSubmissions = submissions.some(s => s.status === 'queued');
-  const hasUngradedSubmissions = submissions.some(s => 
-    s.overallScore === undefined && s.status !== 'failed' && s.status !== 'ready'
-  );
   const hasActiveProcessing = submissions.some(s => 
     ['transcribing', 'analyzing'].includes(s.status)
   );
-  // Show Start Grading if there are queued OR ungraded submissions (and not currently processing)
-  const showStartGrading = (hasQueuedSubmissions || (submissions.length > 0 && submissions.every(s => s.status === 'queued'))) && !hasActiveProcessing && !gradingStarted;
+  const allProcessed = submissions.length > 0 && submissions.every(s => 
+    s.status === 'ready' || s.status === 'failed'
+  );
+
+  // Reset gradingStarted if all submissions are processed
+  useEffect(() => {
+    if (allProcessed && gradingStarted) {
+      setGradingStarted(false);
+    }
+  }, [allProcessed, gradingStarted]);
+
+  // Show Start Grading button if there are queued submissions and nothing actively processing
+  const showStartGrading = hasQueuedSubmissions && !hasActiveProcessing;
+  
+  // Show Grading in Progress only if actively processing
+  const showGradingInProgress = hasActiveProcessing;
 
   // Calculate if uploads are still in progress
   const uploadsInProgress = expectedUploads > 0 && submissions.length < expectedUploads;
@@ -438,7 +449,7 @@ export default function AssignmentDashboardPage() {
               <Download className="w-4 h-4" />
               Export CSV
             </button>
-            {/* Show Start Grading button when there are queued/ungraded submissions */}
+            {/* Show Start Grading button when there are queued submissions */}
             {showStartGrading ? (
               <button
                 onClick={handleStartGrading}
@@ -452,7 +463,7 @@ export default function AssignmentDashboardPage() {
                 )}
                 Start Grading ({submissions.filter(s => s.status === 'queued').length})
               </button>
-            ) : hasActiveProcessing || gradingStarted ? (
+            ) : showGradingInProgress ? (
               <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Grading in Progress...
