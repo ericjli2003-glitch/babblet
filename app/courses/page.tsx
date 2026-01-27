@@ -1137,8 +1137,17 @@ function CoursesContent() {
             setShowBatchWizard(false);
             // Refresh course data to show new assignment
             await loadCoursesAndBatches();
-            // Navigate to the batch detail view
-            router.push(`/bulk?batchId=${batchId}`);
+            // Get batch info to determine course for navigation
+            try {
+              const batchRes = await fetch(`/api/bulk/status?batchId=${batchId}`);
+              const batchData = await batchRes.json();
+              const courseId = batchData.batch?.courseId || selectedCourse?.id || 'unknown';
+              // Navigate to the assignment batch page
+              router.push(`/bulk/class/${courseId}/assignment/${batchId}/batch/${batchId}`);
+            } catch {
+              // Fallback to courses page if batch fetch fails
+              router.push(`/courses?courseId=${selectedCourse?.id || ''}`);
+            }
           }}
           courses={courses.map(c => ({ id: c.id, name: c.courseCode ? `${c.courseCode} - ${c.name}` : c.name }))}
           defaultCourseId={selectedCourse?.id}

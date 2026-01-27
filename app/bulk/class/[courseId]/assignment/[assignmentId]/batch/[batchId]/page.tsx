@@ -177,26 +177,40 @@ export default function AssignmentDashboardPage() {
     loadData();
   }, [batchId, courseId]);
 
-  // Trigger processing for queued submissions
-  useEffect(() => {
-    if (!batchId || submissions.length === 0) return;
+  // Start grading handler - manually triggered by user
+  const [isStartingGrading, setIsStartingGrading] = useState(false);
+  const [gradingStarted, setGradingStarted] = useState(false);
 
+  const handleStartGrading = async () => {
     const queuedCount = submissions.filter(s => s.status === 'queued').length;
     if (queuedCount === 0) return;
 
-    console.log(`[AssignmentDashboard] Found ${queuedCount} queued submissions, triggering processing`);
+    setIsStartingGrading(true);
+    console.log(`[AssignmentDashboard] Starting grading for ${queuedCount} submissions`);
 
-    // Fire multiple parallel requests to process submissions concurrently
-    const numWorkers = Math.min(queuedCount, 3);
-    const processingPromises = Array.from({ length: numWorkers }, () =>
-      fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST' })
-        .catch(err => console.error('[AssignmentDashboard] Process trigger error:', err))
-    );
+    try {
+      // Fire multiple parallel requests to process submissions concurrently
+      const numWorkers = Math.min(queuedCount, 3);
+      const processingPromises = Array.from({ length: numWorkers }, () =>
+        fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST' })
+          .catch(err => console.error('[AssignmentDashboard] Process trigger error:', err))
+      );
 
-    Promise.all(processingPromises).then(() => {
+      await Promise.all(processingPromises);
       console.log(`[AssignmentDashboard] Triggered ${numWorkers} processing workers`);
-    });
-  }, [batchId, submissions.length]); // Only trigger when submissions are first loaded
+      setGradingStarted(true);
+    } catch (err) {
+      console.error('[AssignmentDashboard] Failed to start grading:', err);
+    } finally {
+      setIsStartingGrading(false);
+    }
+  };
+
+  // Check if grading is in progress (for UI state)
+  const hasQueuedSubmissions = submissions.some(s => s.status === 'queued');
+  const hasActiveProcessing = submissions.some(s => 
+    ['transcribing', 'analyzing'].includes(s.status)
+  );
 
   // Poll for updates
   useEffect(() => {
@@ -386,18 +400,39 @@ export default function AssignmentDashboardPage() {
               <Download className="w-4 h-4" />
               Export CSV
             </button>
+            {/* Show Start Grading button when there are queued submissions */}
+            {hasQueuedSubmissions && !hasActiveProcessing && !gradingStarted ? (
               <button
-              onClick={handleRegrade}
-              disabled={isRegrading}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium disabled:opacity-50"
-            >
-              {isRegrading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
-              )}
-              Re-grade All
+                onClick={handleStartGrading}
+                disabled={isStartingGrading}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 text-sm font-medium disabled:opacity-50"
+              >
+                {isStartingGrading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Play className="w-4 h-4" />
+                )}
+                Start Grading
               </button>
+            ) : hasActiveProcessing || (gradingStarted && hasQueuedSubmissions) ? (
+              <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Grading in Progress...
+              </div>
+            ) : (
+              <button
+                onClick={handleRegrade}
+                disabled={isRegrading}
+                className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium disabled:opacity-50"
+              >
+                {isRegrading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                Re-grade All
+              </button>
+            )}
         </div>
       </div>
 

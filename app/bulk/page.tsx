@@ -508,16 +508,7 @@ function BulkUploadPageContent() {
             setPipeline(mappedPipeline);
           }
           
-          // Trigger processing if there are queued items
-          const queuedCount = data.submissions?.filter((s: { status?: string }) => s.status === 'queued').length || 0;
-          if (queuedCount > 0) {
-            console.log(`[BulkUpload] Found ${queuedCount} queued submissions, triggering processing`);
-            const numWorkers = Math.min(queuedCount, 3);
-            for (let i = 0; i < numWorkers; i++) {
-              fetch(`/api/bulk/process-now?batchId=${urlBatchId}`, { method: 'POST' })
-                .catch(err => console.error('[BulkUpload] Process trigger error:', err));
-            }
-          }
+          // Don't auto-process - let user trigger grading from the assignment page
         } else {
           console.error(`[BulkUpload] Failed to load batch: ${data.error}`);
         }

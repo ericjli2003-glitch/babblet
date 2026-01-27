@@ -1369,26 +1369,8 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses, defa
 
       console.log(`[BatchWizard] Uploaded ${successfulUploads}/${files.length} files successfully`);
 
-      // Trigger processing for all queued submissions
-      if (successfulUploads > 0) {
-        // Fire multiple parallel requests to process submissions concurrently
-        const numWorkers = Math.min(successfulUploads, 3);
-        console.log(`[BatchWizard] Triggering ${numWorkers} processing workers...`);
-        
-        const processingPromises = Array.from({ length: numWorkers }, () =>
-          fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST' })
-            .then(res => res.json())
-            .then(data => console.log('[BatchWizard] Process response:', data))
-            .catch(err => console.error('[BatchWizard] Process trigger error:', err))
-        );
-        
-        // Fire and don't wait - processing happens in background
-        Promise.all(processingPromises).then(() => {
-          console.log(`[BatchWizard] Triggered processing for batch ${batchId}`);
-        });
-      }
-
-      // Complete
+      // Don't auto-process - let user trigger grading from the assignment page
+      // Complete and navigate to assignment page
       onComplete(batchId);
     } catch (error) {
       console.error('Batch creation error:', error);
