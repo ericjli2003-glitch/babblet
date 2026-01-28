@@ -5,58 +5,6 @@ import { getAllBatches, getBatch, deleteBatch, getBatchSubmissions, getSubmissio
 import { deleteFile, isR2Configured } from '@/lib/r2';
 import { kv } from '@vercel/kv';
 
-// ============================================
-// SUBMISSION VISIBILITY: Single source of truth
-// All submissions with a valid submission.id are counted and displayed.
-// Processing state is represented at UI level, not by filtering rows.
-// This recovery logic matches /api/bulk/status for consistency.
-// ============================================
-async function recoverBatchSubmissions(batchId: string, existingIds: Set<string>) {
-  const recovered: string[] = [];
-
-  // Try 1: Check the queue for queued submissions
-  const queueItems = await kv.lrange('submission_queue', 0, -1) as string[];
-  console.log(`[Batches] Queue has ${queueItems?.length || 0} items for recovery`);
-  
-  for (const subId of queueItems || []) {
-    if (existingIds.has(subId)) continue;
-    const sub = await getSubmission(subId as string);
-    if (sub && sub.batchId === batchId) {
-      await kv.sadd(`batch_submissions:${batchId}`, subId);
-      recovered.push(subId as string);
-      existingIds.add(subId);
-    }
-  }
-
-  // Try 2: Scan for orphaned submission keys
-  let cursor = 0;
-  let scanCount = 0;
-  const maxScans = 20; // Match status route for consistency
-
-  do {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result: [number, string[]] = await kv.scan(cursor, { match: 'submission:*', count: 100 }) as any;
-    cursor = result[0];
-    const keys = result[1];
-
-    for (const key of keys) {
-      const subId = key.replace('submission:', '');
-      if (existingIds.has(subId)) continue;
-      
-      const sub = await getSubmission(subId);
-      if (sub && sub.batchId === batchId) {
-        await kv.sadd(`batch_submissions:${batchId}`, subId);
-        recovered.push(subId);
-        existingIds.add(subId);
-      }
-    }
-
-    scanCount++;
-  } while (cursor !== 0 && scanCount < maxScans);
-
-  return recovered;
-}
-
 // GET /api/bulk/batches - List all batches
 export async function GET() {
   try {
@@ -64,12 +12,10 @@ export async function GET() {
     const hydrated = await Promise.all(
       batches.map(async (batch) => {
         // ============================================
-        // SUBMISSION VISIBILITY: Set membership is the source of truth
-        // No scan-based recovery to avoid inconsistent counts
+        // SUBMISSION IDS: Use batch.submissionIds as source of truth
+        // This is stored atomically with the batch, avoiding eventual consistency issues
         // ============================================
-        
-        // Get submission IDs from the KV set (source of truth)
-        const submissionIds = await kv.smembers(`batch_submissions:${batch.id}`) as string[];
+        const submissionIds = batch.submissionIds || [];
         
         // Fetch all submissions (regardless of status)
         const submissions = (await Promise.all(submissionIds.map(id => getSubmission(id)))).filter(Boolean);

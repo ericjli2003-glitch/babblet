@@ -122,38 +122,15 @@ export async function GET(request: NextRequest) {
     }
 
     // ============================================
-    // SUBMISSION VISIBILITY: Set membership is the source of truth
-    // Pull submission IDs directly from the KV set for consistency
-    // No scan-based recovery during normal polling to avoid fluctuations
+    // SUBMISSION IDS: Use batch.submissionIds as source of truth
+    // This is stored atomically with the batch, avoiding eventual consistency issues
     // ============================================
-    const submissionIds = await kv.smembers(`batch_submissions:${batchId}`) as string[];
-    console.log(`[Status] BatchId=${batchId} Found ${submissionIds.length} submission IDs in set`);
+    const submissionIds = batch.submissionIds || [];
+    console.log(`[Status] BatchId=${batchId} Found ${submissionIds.length} submission IDs in batch`);
     
-    // Fetch all submissions from the set
+    // Fetch all submissions
     const submissionResults = await Promise.all(submissionIds.map(id => getSubmission(id)));
-    let submissions = submissionResults.filter(Boolean) as NonNullable<Awaited<ReturnType<typeof getSubmission>>>[];
-    
-    // Only do recovery if we have ZERO submissions (initial load case)
-    // This prevents fluctuating counts during normal polling
-    if (submissions.length === 0 && batch.expectedUploadCount && batch.expectedUploadCount > 0) {
-      console.log(`[Status] No submissions found but expecting ${batch.expectedUploadCount}, checking queue...`);
-      
-      const existingIds = new Set<string>();
-      
-      // Only check the processing queue - no expensive scans
-      const queueItems = await kv.lrange('submission_queue', 0, -1) as string[];
-      
-      for (const subId of queueItems || []) {
-        if (existingIds.has(subId)) continue;
-        const sub = await getSubmission(subId);
-        if (sub && sub.batchId === batchId) {
-          submissions.push(sub);
-          existingIds.add(sub.id);
-          await kv.sadd(`batch_submissions:${batchId}`, subId);
-          console.log(`[Status] Recovered submission ${subId} from queue`);
-        }
-      }
-    }
+    const submissions = submissionResults.filter(Boolean) as NonNullable<Awaited<ReturnType<typeof getSubmission>>>[];
     
     console.log(`[Status] Returning ${submissions.length} submissions`);
     
