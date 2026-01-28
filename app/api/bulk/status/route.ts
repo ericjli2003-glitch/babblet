@@ -4,6 +4,95 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getBatch, getQueueLength, getSubmission, updateBatch, updateBatchStats } from '@/lib/batch-store';
 import { kv } from '@vercel/kv';
 
+// ============================================
+// GRADING STATUS: Single Source of Truth
+// Status is computed from actual submission data, not stored counts
+// ============================================
+export type GradingStatus = 
+  | 'not_started'   // No submissions or all queued
+  | 'in_progress'   // Some processing or some graded but not all
+  | 'completed'     // All submissions have grades (overallScore defined)
+  | 'error';        // Mismatch: status says ready but no grade data
+
+/**
+ * Computes the authoritative grading status from submission data.
+ * A submission is "graded" only if it has an actual score, not just status='ready'.
+ */
+function computeGradingStatus(submissions: Array<{
+  status: string;
+  overallScore?: number;
+}>): { status: GradingStatus; gradedCount: number; totalCount: number; message: string } {
+  const totalCount = submissions.length;
+  
+  if (totalCount === 0) {
+    return { status: 'not_started', gradedCount: 0, totalCount: 0, message: 'No submissions' };
+  }
+  
+  // Count submissions that actually have grade data (score defined)
+  const gradedCount = submissions.filter(s => 
+    s.status === 'ready' && s.overallScore !== undefined && s.overallScore !== null
+  ).length;
+  
+  // Count by status
+  const readyCount = submissions.filter(s => s.status === 'ready').length;
+  const failedCount = submissions.filter(s => s.status === 'failed').length;
+  const processingCount = submissions.filter(s => 
+    s.status === 'transcribing' || s.status === 'analyzing'
+  ).length;
+  const queuedCount = submissions.filter(s => s.status === 'queued').length;
+  
+  // All finished (ready or failed)
+  const allFinished = (readyCount + failedCount) === totalCount;
+  
+  // Check for error state: status says ready but no score
+  const readyWithoutScore = submissions.filter(s => 
+    s.status === 'ready' && (s.overallScore === undefined || s.overallScore === null)
+  ).length;
+  
+  if (allFinished && readyWithoutScore > 0) {
+    return { 
+      status: 'error', 
+      gradedCount, 
+      totalCount,
+      message: `${readyWithoutScore} submission(s) marked ready but missing grade data`
+    };
+  }
+  
+  if (gradedCount === totalCount) {
+    return { 
+      status: 'completed', 
+      gradedCount, 
+      totalCount,
+      message: 'All submissions successfully evaluated'
+    };
+  }
+  
+  if (processingCount > 0 || gradedCount > 0) {
+    return { 
+      status: 'in_progress', 
+      gradedCount, 
+      totalCount,
+      message: `${gradedCount} of ${totalCount} completed`
+    };
+  }
+  
+  if (queuedCount === totalCount) {
+    return { 
+      status: 'not_started', 
+      gradedCount: 0, 
+      totalCount,
+      message: 'Awaiting grading'
+    };
+  }
+  
+  return { 
+    status: 'in_progress', 
+    gradedCount, 
+    totalCount,
+    message: `${gradedCount} of ${totalCount} completed`
+  };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -82,20 +171,32 @@ export async function GET(request: NextRequest) {
     const deduped = new Map(submissions.map(s => [s.id, s]));
     submissions = Array.from(deduped.values());
     
-    // ALWAYS sync batch stats to match actual submissions found
-    // This ensures consistency between what we show
-    const processedCount = submissions.filter(s => s.status === 'ready').length;
+    // Compute grading status from actual submission data (SINGLE SOURCE OF TRUTH)
+    const submissionData = submissions.map(s => ({
+      status: s.status,
+      overallScore: s.rubricEvaluation?.overallScore,
+    }));
+    const gradingStatusResult = computeGradingStatus(submissionData);
+    
+    // Sync batch stats to match actual graded count (submissions with scores)
+    const processedCount = gradingStatusResult.gradedCount;
     const failedCount = submissions.filter(s => s.status === 'failed').length;
+    
+    // Map grading status to batch status for backward compatibility
+    const batchStatus = gradingStatusResult.status === 'completed' ? 'completed' 
+                      : gradingStatusResult.status === 'not_started' ? 'active'
+                      : 'processing';
     
     if (batch.totalSubmissions !== submissions.length || 
         batch.processedCount !== processedCount || 
-        batch.failedCount !== failedCount) {
-      console.log(`[Status] Syncing batch stats: total ${batch.totalSubmissions}->${submissions.length}, processed ${batch.processedCount}->${processedCount}`);
+        batch.failedCount !== failedCount ||
+        batch.status !== batchStatus) {
+      console.log(`[Status] Syncing batch stats: total ${batch.totalSubmissions}->${submissions.length}, processed ${batch.processedCount}->${processedCount}, status ${batch.status}->${batchStatus}`);
       batch = await updateBatch(batchId, {
         totalSubmissions: submissions.length,
         processedCount,
         failedCount,
-        status: submissions.length > 0 && processedCount + failedCount === submissions.length ? 'completed' : 'processing',
+        status: batchStatus,
       }) || batch;
     }
 
@@ -115,13 +216,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       batch,
+      // GRADING STATUS: Single source of truth for UI consistency
+      gradingStatus: {
+        status: gradingStatusResult.status,
+        gradedCount: gradingStatusResult.gradedCount,
+        totalCount: gradingStatusResult.totalCount,
+        message: gradingStatusResult.message,
+      },
       submissions: submissions.map(s => ({
         id: s.id,
         studentName: s.studentName,
         originalFilename: s.originalFilename,
         status: s.status,
         errorMessage: s.errorMessage,
-        overallScore: s.rubricEvaluation?.overallScore,
+        // Only report score if actually defined (not undefined/null)
+        overallScore: s.rubricEvaluation?.overallScore ?? null,
+        hasGradeData: s.rubricEvaluation?.overallScore !== undefined && s.rubricEvaluation?.overallScore !== null,
         createdAt: s.createdAt,
         completedAt: s.completedAt,
       })),

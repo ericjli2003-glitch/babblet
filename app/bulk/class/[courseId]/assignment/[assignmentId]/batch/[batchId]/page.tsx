@@ -14,6 +14,16 @@ import DashboardLayout from '@/components/DashboardLayout';
 // Types
 // ============================================
 
+// GRADING STATUS: Single source of truth enum (matches API)
+type GradingStatusType = 'not_started' | 'in_progress' | 'completed' | 'error';
+
+interface GradingStatus {
+  status: GradingStatusType;
+  gradedCount: number;
+  totalCount: number;
+  message: string;
+}
+
 interface Submission {
   id: string;
   studentName: string;
@@ -21,7 +31,8 @@ interface Submission {
   status: 'queued' | 'uploading' | 'transcribing' | 'analyzing' | 'ready' | 'failed';
   createdAt: number;
   completedAt?: number;
-  overallScore?: number;
+  overallScore?: number | null;
+  hasGradeData?: boolean; // True only if overallScore is defined
   aiSentiment?: 'Confident' | 'Moderate' | 'Engaging' | 'Script Reading?' | 'Uncertain';
   videoLength?: string;
   flagged?: boolean;
@@ -113,6 +124,13 @@ export default function AssignmentDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [batch, setBatch] = useState<BatchInfo | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  // GRADING STATUS: Single source of truth from API
+  const [gradingStatus, setGradingStatus] = useState<GradingStatus>({
+    status: 'not_started',
+    gradedCount: 0,
+    totalCount: 0,
+    message: '',
+  });
   const [isRegrading, setIsRegrading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
@@ -154,20 +172,26 @@ export default function AssignmentDashboardPage() {
           status: batchData.batch.status,
         });
 
-        // Map submissions
+        // GRADING STATUS: Set from API response (single source of truth)
+        if (batchData.gradingStatus) {
+          setGradingStatus(batchData.gradingStatus);
+        }
+
+        // Map submissions - use hasGradeData from API
         const subs: Submission[] = (batchData.submissions || []).map((sub: any) => ({
-            id: sub.id,
+          id: sub.id,
           studentName: sub.studentName || 'Unknown Student',
           originalFilename: sub.originalFilename || 'Unknown',
           status: sub.status,
           createdAt: sub.createdAt || Date.now(),
-            completedAt: sub.completedAt,
-            overallScore: sub.rubricEvaluation?.overallScore,
+          completedAt: sub.completedAt,
+          overallScore: sub.overallScore,
+          hasGradeData: sub.hasGradeData ?? false,
           videoLength: sub.duration ? formatDuration(sub.duration) : undefined,
-          aiSentiment: sub.analysis?.sentiment || (sub.status === 'ready' ? 'Confident' : undefined),
+          aiSentiment: sub.analysis?.sentiment || (sub.hasGradeData ? 'Confident' : undefined),
           flagged: sub.flagged,
           flagReason: sub.flagReason,
-          }));
+        }));
 
         setSubmissions(subs);
       } catch (err) {
@@ -310,28 +334,12 @@ export default function AssignmentDashboardPage() {
 
         if (data.submissions) {
           console.log(`[AssignmentDashboard] Poll received ${data.submissions.length} submissions:`, 
-            data.submissions.map((s: any) => ({ id: s.id.slice(-6), status: s.status, score: s.overallScore }))
+            data.submissions.map((s: any) => ({ id: s.id.slice(-6), status: s.status, score: s.overallScore, hasGrade: s.hasGradeData }))
           );
           
-          // When uploads are in progress, add new submissions to the list
-          if (uploadsInProgress) {
-            const newSubs: Submission[] = data.submissions
-              .filter((s: any) => !submissions.find(existing => existing.id === s.id))
-              .map((sub: any) => ({
-                id: sub.id,
-                studentName: sub.studentName || 'Unknown Student',
-                originalFilename: sub.originalFilename || 'Unknown',
-                status: sub.status,
-                createdAt: sub.createdAt || Date.now(),
-                completedAt: sub.completedAt,
-                overallScore: sub.rubricEvaluation?.overallScore,
-                aiSentiment: sub.analysis?.sentiment,
-              }));
-            
-            if (newSubs.length > 0) {
-              console.log(`[AssignmentDashboard] Adding ${newSubs.length} new submissions`);
-              setSubmissions(prev => [...prev, ...newSubs]);
-            }
+          // GRADING STATUS: Update from API (single source of truth)
+          if (data.gradingStatus) {
+            setGradingStatus(data.gradingStatus);
           }
           
           // Always replace with fresh data from server to ensure we get all updates
@@ -343,8 +351,9 @@ export default function AssignmentDashboardPage() {
             createdAt: sub.createdAt || Date.now(),
             completedAt: sub.completedAt,
             overallScore: sub.overallScore,
+            hasGradeData: sub.hasGradeData ?? false,
             videoLength: undefined,
-            aiSentiment: sub.analysis?.sentiment || (sub.status === 'ready' ? 'Confident' : undefined),
+            aiSentiment: sub.analysis?.sentiment || (sub.hasGradeData ? 'Confident' : undefined),
             flagged: sub.flagged,
             flagReason: sub.flagReason,
           }));
@@ -596,8 +605,8 @@ export default function AssignmentDashboardPage() {
           </div>
         )}
 
-        {/* Grading Progress Banner */}
-        {(gradingStarted || hasActiveProcessing) && !allProcessed && (
+        {/* Grading Progress Banner - uses gradingStatus from API */}
+        {gradingStatus.status === 'in_progress' && (
           <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-3">
@@ -605,9 +614,9 @@ export default function AssignmentDashboardPage() {
                   <Play className="w-5 h-5 text-amber-600" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-surface-900">Grading in Progress</h3>
+                  <h3 className="font-semibold text-surface-900">Grading in progress</h3>
                   <p className="text-sm text-surface-600">
-                    {submissions.filter(s => s.status === 'ready' || s.status === 'failed').length} of {submissions.length} submissions graded
+                    {gradingStatus.gradedCount} of {gradingStatus.totalCount} completed
                     {activeWorkers > 0 && ` • ${activeWorkers} active worker${activeWorkers > 1 ? 's' : ''}`}
                   </p>
                 </div>
@@ -626,27 +635,54 @@ export default function AssignmentDashboardPage() {
               <div 
                 className="h-full bg-amber-500 rounded-full transition-all duration-500"
                 style={{ 
-                  width: `${Math.round((submissions.filter(s => s.status === 'ready' || s.status === 'failed').length / Math.max(submissions.length, 1)) * 100)}%` 
+                  width: `${Math.round((gradingStatus.gradedCount / Math.max(gradingStatus.totalCount, 1)) * 100)}%` 
                 }}
               />
             </div>
           </div>
         )}
 
-        {/* Grading Complete Banner */}
-        {allProcessed && submissions.length > 0 && completedDuringSession > 0 && (
+        {/* Grading Complete Banner - only shows when gradingStatus is 'completed' */}
+        {gradingStatus.status === 'completed' && submissions.length > 0 && (
           <div className="mb-6 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
                 <CheckCircle className="w-5 h-5 text-emerald-600" />
               </div>
               <div>
-                <h3 className="font-semibold text-surface-900">Grading Complete</h3>
+                <h3 className="font-semibold text-surface-900">Grading complete</h3>
                 <p className="text-sm text-surface-600">
-                  All {submissions.length} submissions have been graded
+                  {gradingStatus.message}
                   {stats.avgScore !== undefined && ` • Average score: ${stats.avgScore}%`}
                 </p>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Grading Error Banner - shows when status mismatch detected */}
+        {gradingStatus.status === 'error' && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-surface-900">Grading issue detected</h3>
+                  <p className="text-sm text-red-600">
+                    {gradingStatus.message}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleRegrade}
+                disabled={isRegrading}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium disabled:opacity-50"
+              >
+                {isRegrading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                Re-grade
+              </button>
             </div>
           </div>
         )}
@@ -763,8 +799,9 @@ export default function AssignmentDashboardPage() {
                       {submission.videoLength || '--'}
                     </td>
                     <td className="px-6 py-4">
-                      {submission.status === 'ready' && submission.overallScore !== undefined ? (
-                      <div className="flex items-center gap-2">
+                      {/* GRADING STATUS: Use hasGradeData to determine if grade should display */}
+                      {submission.hasGradeData && submission.overallScore != null ? (
+                        <div className="flex items-center gap-2">
                           <span className="font-semibold text-surface-900">
                             {Math.round(submission.overallScore)}/100
                           </span>
@@ -776,15 +813,28 @@ export default function AssignmentDashboardPage() {
                             {submission.overallScore >= 90 ? 'PASS' : 
                              submission.overallScore >= 70 ? 'PENDING' : 'FLAGGED'}
                           </span>
-                      </div>
+                        </div>
                       ) : submission.status === 'failed' ? (
                         <span className="text-red-500 text-sm">Failed</span>
+                      ) : submission.status === 'ready' && !submission.hasGradeData ? (
+                        // Error state: status is ready but no grade data
+                        <span className="text-red-500 text-sm flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" />
+                          Missing grade
+                        </span>
+                      ) : ['transcribing', 'analyzing'].includes(submission.status) ? (
+                        <span className="text-amber-600 text-sm flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Processing
+                        </span>
+                      ) : submission.status === 'queued' ? (
+                        <span className="text-surface-400 text-sm">Awaiting</span>
                       ) : (
                         <span className="text-surface-400">--</span>
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      {submission.status === 'ready' && submission.overallScore !== undefined ? (
+                      {submission.hasGradeData ? (
                         <div className="flex items-center gap-2">
                           {getSentimentIcon(submission.aiSentiment)}
                           <span className={getSentimentColor(submission.aiSentiment)}>
@@ -795,13 +845,15 @@ export default function AssignmentDashboardPage() {
                         <span className="text-surface-400 text-sm">Awaiting grading</span>
                       ) : ['transcribing', 'analyzing'].includes(submission.status) ? (
                         <span className="text-amber-600 text-sm">Processing...</span>
+                      ) : submission.status === 'ready' && !submission.hasGradeData ? (
+                        <span className="text-red-500 text-sm">Error</span>
                       ) : (
                         <span className="text-surface-400">--</span>
                       )}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {submission.status === 'ready' && submission.overallScore !== undefined ? (
+                        {submission.hasGradeData ? (
                           <Link
                             href={`/bulk/submission/${submission.id}`}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors"

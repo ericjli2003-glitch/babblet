@@ -781,11 +781,13 @@ function CoursesContent() {
               batchesByCourse[batch.courseId] = [];
             }
             
-            // Determine status based on batch data
+            // GRADING STATUS: Use batch.status which is synced from actual grade data
+            // Status is computed in /api/bulk/status from submission-level overallScore
+            // Only mark "completed" if batch.status === 'completed' (all have grades)
             let status: Assignment['status'] = 'not_started';
-            if (batch.processedCount > 0 && batch.processedCount >= batch.totalSubmissions && batch.totalSubmissions > 0) {
+            if (batch.status === 'completed') {
               status = 'completed';
-            } else if (batch.processedCount > 0 || batch.status === 'processing') {
+            } else if (batch.status === 'processing' || batch.processedCount > 0) {
               status = 'in_progress';
             }
             
