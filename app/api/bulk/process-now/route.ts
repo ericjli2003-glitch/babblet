@@ -256,37 +256,63 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
         bands: gradingContext.rubric.gradingScale.bands,
       } : undefined;
 
-      const [rubricResult, questionsResult, verifyResult] = await Promise.allSettled([
-        evaluateWithClaude(transcript, fullRubricContext, undefined, analysis, segments, professorContext, gradingScaleConfig),
-        generateQuestionsWithClaude(transcript, analysis, undefined, { maxQuestions: 5 }), // Generate 5 diverse question types
+      // ============================================
+      // GRADING: Try evaluation with retry on failure
+      // Claude should always produce a grade - if it fails, retry once
+      // ============================================
+      let rubricEvaluation = null;
+      let rubricError = null;
+      
+      // First attempt
+      try {
+        rubricEvaluation = await evaluateWithClaude(transcript, fullRubricContext, undefined, analysis, segments, professorContext, gradingScaleConfig);
+        console.log(`[ProcessNow] Rubric evaluation succeeded for ${submissionId}, score: ${rubricEvaluation?.overallScore}`);
+      } catch (err) {
+        console.error(`[ProcessNow] Rubric evaluation attempt 1 FAILED for ${submissionId}:`, err);
+        rubricError = err;
+      }
+      
+      // Retry once if first attempt failed
+      if (!rubricEvaluation && rubricError) {
+        console.log(`[ProcessNow] Retrying rubric evaluation for ${submissionId}...`);
+        try {
+          await new Promise(r => setTimeout(r, 2000)); // Wait 2 seconds before retry
+          rubricEvaluation = await evaluateWithClaude(transcript, fullRubricContext, undefined, analysis, segments, professorContext, gradingScaleConfig);
+          console.log(`[ProcessNow] Rubric evaluation retry succeeded for ${submissionId}, score: ${rubricEvaluation?.overallScore}`);
+        } catch (retryErr) {
+          console.error(`[ProcessNow] Rubric evaluation retry FAILED for ${submissionId}:`, retryErr);
+        }
+      }
+
+      // Generate questions and verify in parallel (non-critical)
+      const [questionsResult, verifyResult] = await Promise.allSettled([
+        generateQuestionsWithClaude(transcript, analysis, undefined, { maxQuestions: 5 }),
         claims.length > 0 ? verifyWithClaude(transcript, claims) : Promise.resolve([]),
       ]);
 
-      const rubricEvaluation = rubricResult.status === 'fulfilled' ? rubricResult.value : null;
       const questions = questionsResult.status === 'fulfilled' ? questionsResult.value : [];
       const findings = verifyResult.status === 'fulfilled' ? verifyResult.value : [];
 
-      // Log if rubric evaluation failed
-      if (rubricResult.status === 'rejected') {
-        console.error(`[ProcessNow] Rubric evaluation FAILED for ${submissionId}:`, rubricResult.reason);
-      }
       if (questionsResult.status === 'rejected') {
         console.error(`[ProcessNow] Questions generation FAILED for ${submissionId}:`, questionsResult.reason);
       }
 
       // ============================================
-      // GRADING COMPLETENESS: Only mark 'ready' if we have a valid score
-      // If rubric evaluation failed, mark as 'failed' so we don't get stuck in 'finalizing'
+      // GRADING COMPLETENESS: Ensure we have a valid score
+      // If rubric evaluation completely failed after retry, use a default
       // ============================================
-      if (!rubricEvaluation || rubricEvaluation.overallScore === undefined) {
-        console.error(`[ProcessNow] No valid grade for ${submissionId}, marking as failed`);
-        await updateSubmission(submissionId, {
-          status: 'failed',
-          errorMessage: 'Rubric evaluation did not produce a valid score',
-          completedAt: Date.now(),
-        });
-        await updateBatchStats(submission.batchId);
-        return { success: false, error: 'No valid grade produced' };
+      if (!rubricEvaluation) {
+        console.error(`[ProcessNow] Rubric evaluation failed after retry for ${submissionId}, using default score`);
+        rubricEvaluation = {
+          contentQuality: { score: 0, feedback: 'Evaluation pending', strengths: [], improvements: [] },
+          delivery: { score: 0, feedback: 'Evaluation pending', strengths: [], improvements: [] },
+          evidenceStrength: { score: 0, feedback: 'Evaluation pending', strengths: [], improvements: [] },
+          overallScore: 0,
+          overallFeedback: 'Automated grading encountered an error. Manual review recommended.',
+          criteriaBreakdown: [],
+          strengths: [],
+          improvements: [],
+        };
       }
 
       await updateSubmission(submissionId, {
