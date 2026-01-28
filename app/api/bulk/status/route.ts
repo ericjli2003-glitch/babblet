@@ -121,23 +121,27 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
     }
 
+    // ============================================
+    // SUBMISSION VISIBILITY: Set membership is the source of truth
     // Pull submission IDs directly from the KV set for consistency
-    let submissionIds = await kv.smembers(`batch_submissions:${batchId}`) as string[];
-    console.log(`[Status] BatchId=${batchId} Raw submission IDs in set (${submissionIds.length}):`, submissionIds);
+    // No scan-based recovery during normal polling to avoid fluctuations
+    // ============================================
+    const submissionIds = await kv.smembers(`batch_submissions:${batchId}`) as string[];
+    console.log(`[Status] BatchId=${batchId} Found ${submissionIds.length} submission IDs in set`);
     
-    let submissions = (await Promise.all(submissionIds.map(id => getSubmission(id)))).filter(Boolean) as NonNullable<Awaited<ReturnType<typeof getSubmission>>>[];
-    console.log(`[Status] BatchId=${batchId} Found ${submissions.length} valid submissions from set`);
+    // Fetch all submissions from the set
+    const submissionResults = await Promise.all(submissionIds.map(id => getSubmission(id)));
+    let submissions = submissionResults.filter(Boolean) as NonNullable<Awaited<ReturnType<typeof getSubmission>>>[];
     
-    // ALWAYS try to recover if batch claims more submissions than we found
-    // This handles cases where submissions exist but weren't added to the set
-    if (batch.totalSubmissions > submissions.length || submissions.length === 0) {
-      console.log(`[Status] Recovery needed. Batch claims ${batch.totalSubmissions}, found ${submissions.length}`);
+    // Only do recovery if we have ZERO submissions (initial load case)
+    // This prevents fluctuating counts during normal polling
+    if (submissions.length === 0 && batch.expectedUploadCount && batch.expectedUploadCount > 0) {
+      console.log(`[Status] No submissions found but expecting ${batch.expectedUploadCount}, checking queue...`);
       
-      const existingIds = new Set(submissions.map(s => s.id));
+      const existingIds = new Set<string>();
       
-      // Try 1: Check the queue for queued submissions
+      // Only check the processing queue - no expensive scans
       const queueItems = await kv.lrange('submission_queue', 0, -1) as string[];
-      console.log(`[Status] Queue has ${queueItems?.length || 0} items`);
       
       for (const subId of queueItems || []) {
         if (existingIds.has(subId)) continue;
@@ -149,41 +153,9 @@ export async function GET(request: NextRequest) {
           console.log(`[Status] Recovered submission ${subId} from queue`);
         }
       }
-      
-      // Try 2: Scan for submission keys that belong to this batch
-      console.log(`[Status] Scanning for orphaned submissions...`);
-      let cursor = 0;
-      let scanCount = 0;
-      const maxScans = 20; // Increased limit for better recovery
-      
-      do {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result: [number, string[]] = await kv.scan(cursor, { match: 'submission:*', count: 100 }) as any;
-        cursor = result[0];
-        const keys = result[1];
-        
-        for (const key of keys) {
-          const subId = key.replace('submission:', '');
-          if (existingIds.has(subId)) continue;
-          
-          const sub = await getSubmission(subId);
-          if (sub && sub.batchId === batchId) {
-            submissions.push(sub);
-            existingIds.add(sub.id);
-            await kv.sadd(`batch_submissions:${batchId}`, subId);
-            console.log(`[Status] Recovered orphaned submission ${subId}`);
-          }
-        }
-        
-        scanCount++;
-      } while (cursor !== 0 && scanCount < maxScans);
-      
-      console.log(`[Status] After recovery: ${submissions.length} submissions`);
     }
     
-    // De-duplicate in case recovery added duplicates
-    const deduped = new Map(submissions.map(s => [s.id, s]));
-    submissions = Array.from(deduped.values());
+    console.log(`[Status] Returning ${submissions.length} submissions`);
     
     // Compute grading status from actual submission data (SINGLE SOURCE OF TRUTH)
     const submissionData = submissions.map(s => ({

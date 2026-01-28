@@ -64,35 +64,16 @@ export async function GET() {
     const hydrated = await Promise.all(
       batches.map(async (batch) => {
         // ============================================
-        // SUBMISSION VISIBILITY: Single source of truth
-        // Count is based on existence of submission records, not status.
-        // This matches /api/bulk/status for consistency between pages.
+        // SUBMISSION VISIBILITY: Set membership is the source of truth
+        // No scan-based recovery to avoid inconsistent counts
         // ============================================
         
-        // Get raw submission IDs from the KV set
-        let submissionIds = await kv.smembers(`batch_submissions:${batch.id}`) as string[];
+        // Get submission IDs from the KV set (source of truth)
+        const submissionIds = await kv.smembers(`batch_submissions:${batch.id}`) as string[];
         
         // Fetch all submissions (regardless of status)
-        let submissions = (await Promise.all(submissionIds.map(id => getSubmission(id)))).filter(Boolean);
-        
-        // ALWAYS try to recover if batch claims more submissions than we found
-        // This ensures consistency with the detail page (status route)
-        if (batch.totalSubmissions > submissions.length || submissions.length === 0) {
-          console.log(`[Batches] Recovery needed for ${batch.id}. Batch claims ${batch.totalSubmissions}, found ${submissions.length}`);
-          const existingIds = new Set(submissions.map(s => s!.id));
-          const recovered = await recoverBatchSubmissions(batch.id, existingIds);
-          
-          if (recovered.length > 0) {
-            // Re-fetch to include recovered submissions
-            submissionIds = await kv.smembers(`batch_submissions:${batch.id}`) as string[];
-            submissions = (await Promise.all(submissionIds.map(id => getSubmission(id)))).filter(Boolean);
-            console.log(`[Batches] After recovery: ${submissions.length} submissions`);
-          }
-        }
-        
-        // De-duplicate in case recovery added duplicates
-        const deduped = new Map(submissions.map(s => [s!.id, s]));
-        const validSubmissions = Array.from(deduped.values()).filter(Boolean);
+        const submissions = (await Promise.all(submissionIds.map(id => getSubmission(id)))).filter(Boolean);
+        const validSubmissions = submissions;
         
         // ============================================
         // GRADING STATUS: Single source of truth
