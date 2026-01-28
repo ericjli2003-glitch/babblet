@@ -184,6 +184,65 @@ export default function AssignmentDashboardPage() {
   // Start grading handler - manually triggered by user
   const [isStartingGrading, setIsStartingGrading] = useState(false);
   const [gradingStarted, setGradingStarted] = useState(false);
+  const [gradingStartTime, setGradingStartTime] = useState<number | null>(null);
+  const [completedDuringSession, setCompletedDuringSession] = useState(0);
+  const [activeWorkers, setActiveWorkers] = useState(0);
+
+  // Calculate estimated time remaining
+  const getTimeEstimate = () => {
+    if (!gradingStartTime || completedDuringSession === 0) return null;
+    
+    const elapsed = Date.now() - gradingStartTime;
+    const avgTimePerSubmission = elapsed / completedDuringSession;
+    const remaining = submissions.filter(s => 
+      s.status === 'queued' || s.status === 'transcribing' || s.status === 'analyzing'
+    ).length;
+    
+    if (remaining === 0) return null;
+    
+    const estimatedMs = avgTimePerSubmission * remaining;
+    const minutes = Math.ceil(estimatedMs / 60000);
+    
+    if (minutes < 1) return 'Less than a minute';
+    if (minutes === 1) return '~1 minute';
+    return `~${minutes} minutes`;
+  };
+
+  // Process a single submission and return when done
+  const processOneSubmission = async (workerNum: number): Promise<boolean> => {
+    try {
+      console.log(`[AssignmentDashboard] Worker ${workerNum} processing...`);
+      const res = await fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST' });
+      const data = await res.json();
+      console.log(`[AssignmentDashboard] Worker ${workerNum} completed:`, data);
+      
+      if (data.processed > 0) {
+        setCompletedDuringSession(prev => prev + 1);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error(`[AssignmentDashboard] Worker ${workerNum} failed:`, err);
+      return false;
+    }
+  };
+
+  // Worker that keeps processing until no more queued submissions
+  const runWorker = async (workerId: number) => {
+    setActiveWorkers(prev => prev + 1);
+    let processed = true;
+    
+    while (processed) {
+      processed = await processOneSubmission(workerId);
+      
+      // Small delay to avoid hammering the server
+      if (processed) {
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
+    
+    setActiveWorkers(prev => prev - 1);
+  };
 
   const handleStartGrading = async () => {
     const queuedCount = submissions.filter(s => s.status === 'queued').length;
@@ -191,62 +250,19 @@ export default function AssignmentDashboardPage() {
 
     setIsStartingGrading(true);
     setGradingStarted(true);
+    setGradingStartTime(Date.now());
+    setCompletedDuringSession(0);
     console.log(`[AssignmentDashboard] Starting grading for ${queuedCount} submissions`);
 
-    try {
-      // Fire multiple parallel requests to process submissions concurrently
-      const numWorkers = Math.min(queuedCount, 3);
-      
-      const processingPromises = Array.from({ length: numWorkers }, async (_, i) => {
-        try {
-          console.log(`[AssignmentDashboard] Triggering worker ${i + 1}/${numWorkers}`);
-          const res = await fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST' });
-          const data = await res.json();
-          console.log(`[AssignmentDashboard] Worker ${i + 1} response:`, data);
-          
-          if (data.error) {
-            console.error(`[AssignmentDashboard] Worker ${i + 1} error:`, data.error);
-          }
-          return data;
-        } catch (err) {
-          console.error(`[AssignmentDashboard] Worker ${i + 1} failed:`, err);
-          return { error: err instanceof Error ? err.message : 'Unknown error' };
-        }
-      });
-
-      const results = await Promise.all(processingPromises);
-      console.log(`[AssignmentDashboard] All workers completed:`, results);
-      
-      // Check if any had errors
-      const errors = results.filter(r => r.error);
-      if (errors.length === results.length) {
-        // All failed
-        console.error('[AssignmentDashboard] All processing workers failed');
-        alert('Failed to start grading. Check console for details.');
-      }
-      
-      // Immediately refresh to get updated status
-      const statusRes = await fetch(`/api/bulk/status?batchId=${batchId}`);
-      const statusData = await statusRes.json();
-      
-      if (statusData.submissions) {
-        setSubmissions(statusData.submissions.map((sub: any) => ({
-          id: sub.id,
-          studentName: sub.studentName || 'Unknown Student',
-          originalFilename: sub.originalFilename || 'Unknown',
-          status: sub.status,
-          createdAt: sub.createdAt || Date.now(),
-          completedAt: sub.completedAt,
-          overallScore: sub.rubricEvaluation?.overallScore,
-          aiSentiment: sub.analysis?.sentiment,
-        })));
-      }
-    } catch (err) {
-      console.error('[AssignmentDashboard] Failed to start grading:', err);
-      alert('Failed to start grading: ' + (err instanceof Error ? err.message : 'Unknown error'));
-    } finally {
-      setIsStartingGrading(false);
+    // Start 3 parallel workers that each continuously process until queue is empty
+    const numWorkers = Math.min(queuedCount, 3);
+    
+    // Don't await - let workers run in background
+    for (let i = 0; i < numWorkers; i++) {
+      runWorker(i + 1);
     }
+    
+    setIsStartingGrading(false);
   };
 
   // Check if grading is in progress (for UI state)
@@ -258,18 +274,13 @@ export default function AssignmentDashboardPage() {
     s.status === 'ready' || s.status === 'failed'
   );
 
-  // Reset gradingStarted if all submissions are processed
+  // Reset gradingStarted if all submissions are processed and no active workers
   useEffect(() => {
-    if (allProcessed && gradingStarted) {
+    if (allProcessed && gradingStarted && activeWorkers === 0) {
       setGradingStarted(false);
+      setGradingStartTime(null);
     }
-  }, [allProcessed, gradingStarted]);
-
-  // Show Start Grading button if there are queued submissions and nothing actively processing
-  const showStartGrading = hasQueuedSubmissions && !hasActiveProcessing;
-  
-  // Show Grading in Progress only if actively processing
-  const showGradingInProgress = hasActiveProcessing;
+  }, [allProcessed, gradingStarted, activeWorkers]);
 
   // Calculate if uploads are still in progress
   const uploadsInProgress = expectedUploads > 0 && submissions.length < expectedUploads;
@@ -499,44 +510,60 @@ export default function AssignmentDashboardPage() {
               <Download className="w-4 h-4" />
               Export CSV
             </button>
-            {/* Show Start Grading button when there are queued submissions */}
-            {isStartingGrading ? (
-              <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Starting Grading...
-              </div>
-            ) : showStartGrading && !gradingStarted ? (
-              <button
-                onClick={handleStartGrading}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 text-sm font-medium"
-              >
-                <Play className="w-4 h-4" />
-                Start Grading ({submissions.filter(s => s.status === 'queued').length})
-              </button>
-            ) : showGradingInProgress ? (
-              <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Grading in Progress...
-              </div>
-            ) : gradingStarted && hasQueuedSubmissions ? (
-              <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Processing Queue...
-              </div>
-            ) : submissions.length > 0 ? (
-              <button
-                onClick={handleRegrade}
-                disabled={isRegrading}
-                className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium disabled:opacity-50"
-              >
-                {isRegrading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-4 h-4" />
-                )}
-                Re-grade All
-              </button>
-            ) : null}
+            {/* Grading action button - context-dependent */}
+            {(() => {
+              const queuedCount = submissions.filter(s => s.status === 'queued').length;
+              const isGradingActive = gradingStarted || hasActiveProcessing || activeWorkers > 0;
+              
+              if (isStartingGrading) {
+                return (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Starting Grading...
+                  </div>
+                );
+              }
+              
+              if (isGradingActive && !allProcessed) {
+                return (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Grading... ({submissions.filter(s => s.status === 'ready').length}/{submissions.length})
+                  </div>
+                );
+              }
+              
+              if (queuedCount > 0 && !isGradingActive) {
+                return (
+                  <button
+                    onClick={handleStartGrading}
+                    className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 text-sm font-medium"
+                  >
+                    <Play className="w-4 h-4" />
+                    Start Grading ({queuedCount})
+                  </button>
+                );
+              }
+              
+              if (submissions.length > 0) {
+                return (
+                  <button
+                    onClick={handleRegrade}
+                    disabled={isRegrading}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium disabled:opacity-50"
+                  >
+                    {isRegrading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                    Re-grade All
+                  </button>
+                );
+              }
+              
+              return null;
+            })()}
         </div>
       </div>
 
@@ -565,6 +592,61 @@ export default function AssignmentDashboardPage() {
                 className="h-full bg-primary-500 rounded-full transition-all duration-500"
                 style={{ width: `${uploadProgress}%` }}
               />
+            </div>
+          </div>
+        )}
+
+        {/* Grading Progress Banner */}
+        {(gradingStarted || hasActiveProcessing) && !allProcessed && (
+          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                  <Play className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-surface-900">Grading in Progress</h3>
+                  <p className="text-sm text-surface-600">
+                    {submissions.filter(s => s.status === 'ready' || s.status === 'failed').length} of {submissions.length} submissions graded
+                    {activeWorkers > 0 && ` • ${activeWorkers} active worker${activeWorkers > 1 ? 's' : ''}`}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {getTimeEstimate() && (
+                  <div className="flex items-center gap-2 text-amber-700">
+                    <Clock className="w-4 h-4" />
+                    <span className="text-sm font-medium">{getTimeEstimate()} remaining</span>
+                  </div>
+                )}
+                <Loader2 className="w-5 h-5 text-amber-600 animate-spin" />
+              </div>
+            </div>
+            <div className="h-2 bg-amber-100 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-amber-500 rounded-full transition-all duration-500"
+                style={{ 
+                  width: `${Math.round((submissions.filter(s => s.status === 'ready' || s.status === 'failed').length / Math.max(submissions.length, 1)) * 100)}%` 
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Grading Complete Banner */}
+        {allProcessed && submissions.length > 0 && completedDuringSession > 0 && (
+          <div className="mb-6 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                <CheckCircle className="w-5 h-5 text-emerald-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-surface-900">Grading Complete</h3>
+                <p className="text-sm text-surface-600">
+                  All {submissions.length} submissions have been graded
+                  {stats.avgScore !== undefined && ` • Average score: ${stats.avgScore}%`}
+                </p>
+              </div>
             </div>
           </div>
         )}
