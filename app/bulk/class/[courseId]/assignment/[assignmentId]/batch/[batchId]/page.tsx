@@ -281,6 +281,13 @@ export default function AssignmentDashboardPage() {
   };
 
   const handleStartGrading = async () => {
+    // Don't start grading while uploads are still in progress
+    const expected = batch?.expectedUploadCount || urlExpectedUploads;
+    if (expected > 0 && submissions.length < expected) {
+      console.log(`[AssignmentDashboard] Cannot start grading - uploads in progress (${submissions.length}/${expected})`);
+      return;
+    }
+    
     const queuedCount = submissions.filter(s => s.status === 'queued').length;
     if (queuedCount === 0) return;
 
@@ -592,6 +599,11 @@ export default function AssignmentDashboardPage() {
             {(() => {
               const queuedCount = submissions.filter(s => s.status === 'queued').length;
               const isGradingActive = gradingStarted || hasActiveProcessing || activeWorkers > 0;
+              
+              // Don't show grading controls while uploads are in progress
+              if (uploadsInProgress) {
+                return null; // Upload progress banner handles this state
+              }
               
               if (isStartingGrading) {
                 return (
