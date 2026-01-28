@@ -177,6 +177,12 @@ export interface Batch {
   // Settings (legacy - for batches without context)
   rubricCriteria?: string;
   rubricTemplateId?: string;
+  // ============================================
+  // UPLOAD TRACKING: Persistent expected upload count
+  // Set when batch is created, cleared when all files are uploaded
+  // This ensures consistent progress tracking across page refreshes
+  // ============================================
+  expectedUploadCount?: number;
   // Stats
   totalSubmissions: number;
   processedCount: number;
@@ -212,6 +218,8 @@ export async function createBatch(params: {
   courseId?: string;
   assignmentId?: string;
   bundleVersionId?: string;
+  // Upload tracking
+  expectedUploadCount?: number;
 }): Promise<Batch> {
   const batch: Batch = {
     id: uuidv4(),
@@ -225,6 +233,8 @@ export async function createBatch(params: {
     // Legacy settings
     rubricCriteria: params.rubricCriteria,
     rubricTemplateId: params.rubricTemplateId,
+    // Upload tracking - stored for persistent progress across refreshes
+    expectedUploadCount: params.expectedUploadCount,
     totalSubmissions: 0,
     processedCount: 0,
     failedCount: 0,
@@ -339,19 +349,16 @@ export async function createSubmission(params: {
   // Save submission
   await kv.set(`${SUBMISSION_PREFIX}${submission.id}`, submission);
 
-  // Add to batch's submissions set
+  // ============================================
+  // SUBMISSION COUNT: The set is the source of truth for count
+  // APIs should count from set membership, not totalSubmissions field
+  // ============================================
   await kv.sadd(`${BATCH_SUBMISSIONS_PREFIX}${params.batchId}`, submission.id);
 
   // Add to processing queue
   await kv.rpush(QUEUE_KEY, submission.id);
-
-  // Update batch count
-  const batch = await getBatch(params.batchId);
-  if (batch) {
-    await updateBatch(params.batchId, {
-      totalSubmissions: batch.totalSubmissions + 1,
-    });
-  }
+  
+  console.log(`[BatchStore] Created submission ${submission.id} for batch ${params.batchId}`);
 
   return submission;
 }
@@ -444,6 +451,10 @@ function inferStudentName(filename: string): string {
 /**
  * Update batch stats after a submission completes
  * Only updates if we can find submissions - protects against eventual consistency issues
+ * 
+ * GRADING STATUS: Single source of truth
+ * A submission is "graded" ONLY if it has an actual score (overallScore defined)
+ * This matches computeGradingStatus in /api/bulk/status/route.ts
  */
 export async function updateBatchStats(batchId: string): Promise<void> {
   const batch = await getBatch(batchId);
@@ -456,16 +467,29 @@ export async function updateBatchStats(batchId: string): Promise<void> {
     return;
   }
   
-  const processedCount = submissions.filter(s => s.status === 'ready').length;
+  // Count submissions with ACTUAL grades (score defined), not just status='ready'
+  const gradedCount = submissions.filter(s => 
+    s.status === 'ready' && 
+    s.rubricEvaluation?.overallScore !== undefined && 
+    s.rubricEvaluation?.overallScore !== null
+  ).length;
   const failedCount = submissions.filter(s => s.status === 'failed').length;
+  const readyCount = submissions.filter(s => s.status === 'ready').length;
   
-  const allDone = processedCount + failedCount === submissions.length && submissions.length > 0;
+  // Only mark completed when ALL submissions have actual grades
+  const allGraded = gradedCount === submissions.length && submissions.length > 0;
+  
+  // If all ready/failed but not all have grades, we're still processing (finalizing)
+  const allFinished = readyCount + failedCount === submissions.length && submissions.length > 0;
+  const status = allGraded ? 'completed' : (allFinished || gradedCount > 0) ? 'processing' : 'active';
+  
+  console.log(`[BatchStore] Updating stats for ${batchId}: graded=${gradedCount}, ready=${readyCount}, failed=${failedCount}, status=${status}`);
   
   await updateBatch(batchId, {
     totalSubmissions: submissions.length,
-    processedCount,
+    processedCount: gradedCount, // Report actual graded count
     failedCount,
-    status: allDone ? 'completed' : 'processing',
+    status,
   });
 }
 

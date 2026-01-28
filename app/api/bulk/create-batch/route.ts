@@ -21,6 +21,11 @@ export async function POST(request: NextRequest) {
       courseId,
       assignmentId,
       bundleVersionId,
+      // ============================================
+      // UPLOAD TRACKING: Expected file count from wizard
+      // Stored in batch for persistent tracking across refreshes
+      // ============================================
+      expectedUploadCount,
     } = body;
 
     if (!name) {
@@ -50,9 +55,11 @@ export async function POST(request: NextRequest) {
       courseId,
       assignmentId: assignmentId,
       bundleVersionId,
+      // Store expected upload count for persistent progress tracking
+      expectedUploadCount: expectedUploadCount || undefined,
     });
 
-    console.log(`[CreateBatch] Created batch ${batch.id} with bundleVersionId: ${bundleVersionId || 'none'}`);
+    console.log(`[CreateBatch] Created batch ${batch.id} with bundleVersionId: ${bundleVersionId || 'none'}, expectedUploads: ${expectedUploadCount || 'none'}`);
 
     // Return batchId at top level for wizard compatibility
     return NextResponse.json({ success: true, batch, batchId: batch.id });

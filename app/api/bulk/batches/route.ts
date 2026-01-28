@@ -5,43 +5,54 @@ import { getAllBatches, getBatch, deleteBatch, getBatchSubmissions, getSubmissio
 import { deleteFile, isR2Configured } from '@/lib/r2';
 import { kv } from '@vercel/kv';
 
-async function recoverBatchSubmissions(batchId: string) {
+// ============================================
+// SUBMISSION VISIBILITY: Single source of truth
+// All submissions with a valid submission.id are counted and displayed.
+// Processing state is represented at UI level, not by filtering rows.
+// This recovery logic matches /api/bulk/status for consistency.
+// ============================================
+async function recoverBatchSubmissions(batchId: string, existingIds: Set<string>) {
   const recovered: string[] = [];
 
-  // Try to recover from queue first
-  const queueItems = await kv.lrange('submission_queue', 0, -1);
+  // Try 1: Check the queue for queued submissions
+  const queueItems = await kv.lrange('submission_queue', 0, -1) as string[];
+  console.log(`[Batches] Queue has ${queueItems?.length || 0} items for recovery`);
+  
   for (const subId of queueItems || []) {
+    if (existingIds.has(subId)) continue;
     const sub = await getSubmission(subId as string);
     if (sub && sub.batchId === batchId) {
       await kv.sadd(`batch_submissions:${batchId}`, subId);
       recovered.push(subId as string);
+      existingIds.add(subId);
     }
   }
 
-  // If still empty, scan for orphaned submissions
-  if (recovered.length === 0) {
-    let cursor = 0;
-    let scanCount = 0;
-    const maxScans = 10;
+  // Try 2: Scan for orphaned submission keys
+  let cursor = 0;
+  let scanCount = 0;
+  const maxScans = 20; // Match status route for consistency
 
-    do {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result: [number, string[]] = await kv.scan(cursor, { match: 'submission:*', count: 100 }) as any;
-      cursor = result[0];
-      const keys = result[1];
+  do {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result: [number, string[]] = await kv.scan(cursor, { match: 'submission:*', count: 100 }) as any;
+    cursor = result[0];
+    const keys = result[1];
 
-      for (const key of keys) {
-        const subId = key.replace('submission:', '');
-        const sub = await getSubmission(subId);
-        if (sub && sub.batchId === batchId) {
-          await kv.sadd(`batch_submissions:${batchId}`, subId);
-          recovered.push(subId);
-        }
+    for (const key of keys) {
+      const subId = key.replace('submission:', '');
+      if (existingIds.has(subId)) continue;
+      
+      const sub = await getSubmission(subId);
+      if (sub && sub.batchId === batchId) {
+        await kv.sadd(`batch_submissions:${batchId}`, subId);
+        recovered.push(subId);
+        existingIds.add(subId);
       }
+    }
 
-      scanCount++;
-    } while (cursor !== 0 && scanCount < maxScans);
-  }
+    scanCount++;
+  } while (cursor !== 0 && scanCount < maxScans);
 
   return recovered;
 }
@@ -52,52 +63,92 @@ export async function GET() {
     const batches = await getAllBatches();
     const hydrated = await Promise.all(
       batches.map(async (batch) => {
+        // ============================================
+        // SUBMISSION VISIBILITY: Single source of truth
+        // Count is based on existence of submission records, not status.
+        // This matches /api/bulk/status for consistency between pages.
+        // ============================================
+        
         // Get raw submission IDs from the KV set
-        const submissionIds = await kv.smembers(`batch_submissions:${batch.id}`) as string[];
+        let submissionIds = await kv.smembers(`batch_submissions:${batch.id}`) as string[];
         
-        if (submissionIds.length === 0 && batch.totalSubmissions > 0) {
-          // Try to recover missing submissions
-          console.log(`[Batches] Recovering submissions for batch ${batch.id}`);
-          await recoverBatchSubmissions(batch.id);
-          const recoveredIds = await kv.smembers(`batch_submissions:${batch.id}`) as string[];
-          if (recoveredIds.length > 0) {
-            submissionIds.push(...recoveredIds);
+        // Fetch all submissions (regardless of status)
+        let submissions = (await Promise.all(submissionIds.map(id => getSubmission(id)))).filter(Boolean);
+        
+        // ALWAYS try to recover if batch claims more submissions than we found
+        // This ensures consistency with the detail page (status route)
+        if (batch.totalSubmissions > submissions.length || submissions.length === 0) {
+          console.log(`[Batches] Recovery needed for ${batch.id}. Batch claims ${batch.totalSubmissions}, found ${submissions.length}`);
+          const existingIds = new Set(submissions.map(s => s!.id));
+          const recovered = await recoverBatchSubmissions(batch.id, existingIds);
+          
+          if (recovered.length > 0) {
+            // Re-fetch to include recovered submissions
+            submissionIds = await kv.smembers(`batch_submissions:${batch.id}`) as string[];
+            submissions = (await Promise.all(submissionIds.map(id => getSubmission(id)))).filter(Boolean);
+            console.log(`[Batches] After recovery: ${submissions.length} submissions`);
           }
         }
         
-        if (submissionIds.length > 0) {
-          // Fetch all submissions in parallel for accurate stats
-          const submissions = await Promise.all(
-            submissionIds.map(id => getSubmission(id))
-          );
-          const validSubmissions = submissions.filter(Boolean);
-          
-          const processedCount = validSubmissions.filter(s => s!.status === 'ready').length;
-          const failedCount = validSubmissions.filter(s => s!.status === 'failed').length;
-          const pendingCount = validSubmissions.filter(s => s!.status !== 'ready' && s!.status !== 'failed').length;
-          
-          console.log(`[Batches] Batch ${batch.id}: ${validSubmissions.length} submissions, ready=${processedCount}, failed=${failedCount}, pending=${pendingCount}`);
-          
-          // Determine batch status from actual submissions
-          let status = batch.status;
-          if (validSubmissions.length > 0) {
-            if (processedCount + failedCount === validSubmissions.length) {
-              status = 'completed';
-            } else if (pendingCount > 0 || validSubmissions.some(s => s!.status === 'transcribing' || s!.status === 'analyzing')) {
-              status = 'processing';
-            }
+        // De-duplicate in case recovery added duplicates
+        const deduped = new Map(submissions.map(s => [s!.id, s]));
+        const validSubmissions = Array.from(deduped.values()).filter(Boolean);
+        
+        // ============================================
+        // GRADING STATUS: Single source of truth
+        // A submission is "graded" ONLY if it has an actual score (overallScore defined)
+        // This matches computeGradingStatus in /api/bulk/status/route.ts
+        // ============================================
+        const gradedCount = validSubmissions.filter(s => 
+          s!.status === 'ready' && 
+          s!.rubricEvaluation?.overallScore !== undefined && 
+          s!.rubricEvaluation?.overallScore !== null
+        ).length;
+        const failedCount = validSubmissions.filter(s => s!.status === 'failed').length;
+        const readyCount = validSubmissions.filter(s => s!.status === 'ready').length;
+        const processingCount = validSubmissions.filter(s => 
+          s!.status === 'transcribing' || s!.status === 'analyzing' || s!.status === 'queued'
+        ).length;
+        
+        console.log(`[Batches] Batch ${batch.id}: ${validSubmissions.length} submissions, graded=${gradedCount}, ready=${readyCount}, failed=${failedCount}, processing=${processingCount}`);
+        
+        // ============================================
+        // GRADING STATUS: Compute from actual grade data
+        // Only mark completed when ALL submissions have actual scores
+        // ============================================
+        let status = batch.status;
+        if (validSubmissions.length > 0) {
+          // All submissions have actual grades
+          if (gradedCount === validSubmissions.length) {
+            status = 'completed';
+          // All finished (ready or failed) but some missing grades - still processing/finalizing
+          } else if (readyCount + failedCount === validSubmissions.length) {
+            status = 'processing'; // Finalizing - scores being written
+          } else if (processingCount > 0 || gradedCount > 0) {
+            status = 'processing';
           }
-          
-          return {
-            ...batch,
-            totalSubmissions: validSubmissions.length,
-            processedCount,
-            failedCount,
-            status,
-          };
         }
         
-        return batch;
+        // ============================================
+        // UPLOAD TRACKING: Clear expectedUploadCount when all files are uploaded
+        // ============================================
+        const uploadsComplete = batch.expectedUploadCount !== undefined && 
+                               batch.expectedUploadCount > 0 && 
+                               validSubmissions.length >= batch.expectedUploadCount;
+        
+        // ============================================
+        // SUBMISSION VISIBILITY: Return actual submission count
+        // totalSubmissions reflects existing records, not filtered by status
+        // ============================================
+        return {
+          ...batch,
+          totalSubmissions: validSubmissions.length,
+          processedCount: gradedCount, // Use gradedCount for accurate reporting
+          failedCount,
+          status,
+          // Clear expected count once all files are uploaded
+          expectedUploadCount: uploadsComplete ? undefined : batch.expectedUploadCount,
+        };
       })
     );
 

@@ -15,7 +15,8 @@ import DashboardLayout from '@/components/DashboardLayout';
 // ============================================
 
 // GRADING STATUS: Single source of truth enum (matches API)
-type GradingStatusType = 'not_started' | 'in_progress' | 'completed' | 'error';
+// Grading is fully automated - these are system states, not user action states.
+type GradingStatusType = 'not_started' | 'processing' | 'finalizing' | 'completed' | 'retrying';
 
 interface GradingStatus {
   status: GradingStatusType;
@@ -50,6 +51,11 @@ interface BatchInfo {
   failedCount: number;
   averageScore?: number;
   status: string;
+  // ============================================
+  // UPLOAD TRACKING: Persistent expected upload count
+  // Stored in batch for consistent progress across page refreshes
+  // ============================================
+  expectedUploadCount?: number;
 }
 
 // ============================================
@@ -117,8 +123,11 @@ export default function AssignmentDashboardPage() {
   const assignmentId = params.assignmentId as string;
   const batchId = params.batchId as string;
   
-  // Check if files are still uploading (passed from wizard)
-  const expectedUploads = parseInt(searchParams.get('uploading') || '0', 10);
+  // ============================================
+  // UPLOAD TRACKING: Use stored expectedUploadCount from batch (persistent)
+  // Falls back to URL param for backward compatibility during initial navigation
+  // ============================================
+  const urlExpectedUploads = parseInt(searchParams.get('uploading') || '0', 10);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -170,6 +179,8 @@ export default function AssignmentDashboardPage() {
           failedCount: batchData.batch.failedCount || 0,
           averageScore: batchData.batch.averageScore,
           status: batchData.batch.status,
+          // Upload tracking from persistent storage
+          expectedUploadCount: batchData.batch.expectedUploadCount,
         });
 
         // GRADING STATUS: Set from API response (single source of truth)
@@ -205,12 +216,13 @@ export default function AssignmentDashboardPage() {
     loadData();
   }, [batchId, courseId]);
 
-  // Start grading handler - manually triggered by user
+  // Grading state
   const [isStartingGrading, setIsStartingGrading] = useState(false);
   const [gradingStarted, setGradingStarted] = useState(false);
   const [gradingStartTime, setGradingStartTime] = useState<number | null>(null);
   const [completedDuringSession, setCompletedDuringSession] = useState(0);
   const [activeWorkers, setActiveWorkers] = useState(0);
+  const [autoResumeAttempted, setAutoResumeAttempted] = useState(false);
 
   // Calculate estimated time remaining
   const getTimeEstimate = () => {
@@ -306,7 +318,52 @@ export default function AssignmentDashboardPage() {
     }
   }, [allProcessed, gradingStarted, activeWorkers]);
 
-  // Calculate if uploads are still in progress
+  // ============================================
+  // AUTO-RESUME: Continue grading on page refresh
+  // If there are queued submissions (and uploads complete) or stuck processing,
+  // automatically start grading workers
+  // ============================================
+  useEffect(() => {
+    // Only attempt auto-resume once per page load
+    if (autoResumeAttempted || loading || gradingStarted || activeWorkers > 0) return;
+    
+    // Calculate expected uploads from batch (persistent) or URL (fallback)
+    const expected = batch?.expectedUploadCount || urlExpectedUploads;
+    const uploadsStillInProgress = expected > 0 && submissions.length < expected;
+    
+    // Don't auto-resume while uploads are still in progress
+    if (uploadsStillInProgress) return;
+    
+    // Check if we have work to resume
+    const queuedCount = submissions.filter(s => s.status === 'queued').length;
+    const stuckCount = submissions.filter(s => 
+      ['transcribing', 'analyzing'].includes(s.status)
+    ).length;
+    
+    // Auto-resume if there are queued or stuck submissions
+    if (queuedCount > 0 || stuckCount > 0) {
+      console.log(`[AssignmentDashboard] Auto-resuming grading: ${queuedCount} queued, ${stuckCount} stuck`);
+      setAutoResumeAttempted(true);
+      
+      // Start grading automatically
+      setGradingStarted(true);
+      setGradingStartTime(Date.now());
+      
+      // Start workers
+      const numWorkers = Math.min(queuedCount + stuckCount, 3);
+      for (let i = 0; i < numWorkers; i++) {
+        runWorker(i + 1);
+      }
+    } else {
+      setAutoResumeAttempted(true);
+    }
+  }, [loading, submissions, batch, urlExpectedUploads, autoResumeAttempted, gradingStarted, activeWorkers]);
+
+  // ============================================
+  // UPLOAD TRACKING: Use stored expectedUploadCount from batch (persistent)
+  // Falls back to URL param for backward compatibility during initial navigation
+  // ============================================
+  const expectedUploads = batch?.expectedUploadCount || urlExpectedUploads;
   const uploadsInProgress = expectedUploads > 0 && submissions.length < expectedUploads;
   const uploadProgress = expectedUploads > 0 ? Math.round((submissions.length / expectedUploads) * 100) : 100;
 
@@ -317,15 +374,24 @@ export default function AssignmentDashboardPage() {
     const hasActiveWork = submissions.some(s => 
       ['queued', 'uploading', 'transcribing', 'analyzing'].includes(s.status)
     );
+    
+    // Check if grades are still being finalized (status says ready but no score yet)
+    const hasPendingGrades = submissions.some(s => 
+      s.status === 'ready' && !s.hasGradeData
+    );
+    
+    // GRADING STATUS: Continue polling until grading is truly complete
+    // Includes 'finalizing' and 'processing' states where scores are being written
+    const gradingNotComplete = ['processing', 'finalizing', 'retrying'].includes(gradingStatus.status);
 
-    // Keep polling if uploads are expected, grading started, or there's active work
-    const shouldPoll = hasActiveWork || uploadsInProgress || gradingStarted || submissions.length === 0;
-    if (!shouldPoll && submissions.length > 0) return;
+    // Keep polling if uploads are expected, grading started, active work, or grades pending
+    const shouldPoll = hasActiveWork || uploadsInProgress || gradingStarted || hasPendingGrades || gradingNotComplete || submissions.length === 0;
+    if (!shouldPoll && submissions.length > 0 && gradingStatus.status === 'completed') return;
 
     // Poll faster when grading or uploads are in progress
-    const pollInterval = (uploadsInProgress || gradingStarted) ? 2000 : 3000;
+    const pollInterval = (uploadsInProgress || gradingStarted || hasPendingGrades) ? 2000 : 3000;
     
-    console.log(`[AssignmentDashboard] Polling enabled: hasActiveWork=${hasActiveWork}, gradingStarted=${gradingStarted}, interval=${pollInterval}ms`);
+    console.log(`[AssignmentDashboard] Polling enabled: hasActiveWork=${hasActiveWork}, hasPendingGrades=${hasPendingGrades}, gradingStatus=${gradingStatus.status}, interval=${pollInterval}ms`);
 
     const interval = setInterval(async () => {
       try {
@@ -366,6 +432,9 @@ export default function AssignmentDashboardPage() {
               processedCount: data.batch.processedCount || 0,
               failedCount: data.batch.failedCount || 0,
               averageScore: data.batch.averageScore,
+              totalSubmissions: data.batch.totalSubmissions || prev.totalSubmissions,
+              // Update expectedUploadCount (cleared when uploads complete)
+              expectedUploadCount: data.batch.expectedUploadCount,
             } : null);
           }
         }
@@ -375,7 +444,7 @@ export default function AssignmentDashboardPage() {
     }, pollInterval);
 
     return () => clearInterval(interval);
-  }, [batchId, submissions, uploadsInProgress, expectedUploads, gradingStarted]);
+  }, [batchId, submissions, uploadsInProgress, expectedUploads, gradingStarted, gradingStatus.status]);
 
   // Derived stats
   const stats = useMemo(() => {
@@ -519,7 +588,7 @@ export default function AssignmentDashboardPage() {
               <Download className="w-4 h-4" />
               Export CSV
             </button>
-            {/* Grading action button - context-dependent */}
+            {/* Grading action button - uses gradingStatus from API (single source of truth) */}
             {(() => {
               const queuedCount = submissions.filter(s => s.status === 'queued').length;
               const isGradingActive = gradingStarted || hasActiveProcessing || activeWorkers > 0;
@@ -533,11 +602,22 @@ export default function AssignmentDashboardPage() {
                 );
               }
               
-              if (isGradingActive && !allProcessed) {
+              // Show progress during active grading or finalizing
+              if ((isGradingActive && !allProcessed) || gradingStatus.status === 'processing') {
                 return (
                   <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Grading... ({submissions.filter(s => s.status === 'ready').length}/{submissions.length})
+                    Grading... ({gradingStatus.gradedCount}/{gradingStatus.totalCount})
+                  </div>
+                );
+              }
+              
+              // Finalizing state - all processed but scores being written
+              if (gradingStatus.status === 'finalizing') {
+                return (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-primary-100 text-primary-700 rounded-lg text-sm font-medium">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Processing Queue...
                   </div>
                 );
               }
@@ -554,7 +634,8 @@ export default function AssignmentDashboardPage() {
                 );
               }
               
-              if (submissions.length > 0) {
+              // Only show Re-grade All when grading is truly complete
+              if (submissions.length > 0 && gradingStatus.status === 'completed') {
                 return (
                   <button
                     onClick={handleRegrade}
@@ -606,7 +687,8 @@ export default function AssignmentDashboardPage() {
         )}
 
         {/* Grading Progress Banner - uses gradingStatus from API */}
-        {gradingStatus.status === 'in_progress' && (
+        {/* Grading is fully automated - these are system states */}
+        {gradingStatus.status === 'processing' && (
           <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-3">
@@ -614,7 +696,7 @@ export default function AssignmentDashboardPage() {
                   <Play className="w-5 h-5 text-amber-600" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-surface-900">Grading in progress</h3>
+                  <h3 className="font-semibold text-surface-900">Automated grading in progress</h3>
                   <p className="text-sm text-surface-600">
                     {gradingStatus.gradedCount} of {gradingStatus.totalCount} completed
                     {activeWorkers > 0 && ` • ${activeWorkers} active worker${activeWorkers > 1 ? 's' : ''}`}
@@ -642,6 +724,46 @@ export default function AssignmentDashboardPage() {
           </div>
         )}
 
+        {/* Finalizing Banner - system is completing automated grading */}
+        {gradingStatus.status === 'finalizing' && (
+          <div className="mb-6 bg-primary-50 border border-primary-200 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
+                  <Loader2 className="w-5 h-5 text-primary-600 animate-spin" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-surface-900">Finalizing results</h3>
+                  <p className="text-sm text-surface-600">
+                    Automated grading complete, processing final scores...
+                  </p>
+                </div>
+              </div>
+              <Loader2 className="w-5 h-5 text-primary-600 animate-spin" />
+            </div>
+          </div>
+        )}
+
+        {/* Retrying Banner - system is retrying failed automated grading */}
+        {gradingStatus.status === 'retrying' && (
+          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                  <RefreshCw className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-surface-900">Automated grading retrying</h3>
+                  <p className="text-sm text-surface-600">
+                    {gradingStatus.message}
+                  </p>
+                </div>
+              </div>
+              <Loader2 className="w-5 h-5 text-amber-600 animate-spin" />
+            </div>
+          </div>
+        )}
+
         {/* Grading Complete Banner - only shows when gradingStatus is 'completed' */}
         {gradingStatus.status === 'completed' && submissions.length > 0 && (
           <div className="mb-6 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
@@ -656,33 +778,6 @@ export default function AssignmentDashboardPage() {
                   {stats.avgScore !== undefined && ` • Average score: ${stats.avgScore}%`}
                 </p>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Grading Error Banner - shows when status mismatch detected */}
-        {gradingStatus.status === 'error' && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
-                  <AlertTriangle className="w-5 h-5 text-red-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-surface-900">Grading issue detected</h3>
-                  <p className="text-sm text-red-600">
-                    {gradingStatus.message}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={handleRegrade}
-                disabled={isRegrading}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium disabled:opacity-50"
-              >
-                {isRegrading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                Re-grade
-              </button>
             </div>
           </div>
         )}
@@ -799,7 +894,7 @@ export default function AssignmentDashboardPage() {
                       {submission.videoLength || '--'}
                     </td>
                     <td className="px-6 py-4">
-                      {/* GRADING STATUS: Use hasGradeData to determine if grade should display */}
+                      {/* GRADING STATUS: Automated grading - system states only */}
                       {submission.hasGradeData && submission.overallScore != null ? (
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-surface-900">
@@ -815,25 +910,29 @@ export default function AssignmentDashboardPage() {
                           </span>
                         </div>
                       ) : submission.status === 'failed' ? (
-                        <span className="text-red-500 text-sm">Failed</span>
+                        <span className="text-amber-600 text-sm flex items-center gap-1">
+                          <RefreshCw className="w-3 h-3" />
+                          Retrying
+                        </span>
                       ) : submission.status === 'ready' && !submission.hasGradeData ? (
-                        // Error state: status is ready but no grade data
-                        <span className="text-red-500 text-sm flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3" />
-                          Missing grade
+                        // System is finalizing - automated grading complete, awaiting score
+                        <span className="text-primary-600 text-sm flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Finalizing
                         </span>
                       ) : ['transcribing', 'analyzing'].includes(submission.status) ? (
                         <span className="text-amber-600 text-sm flex items-center gap-1">
                           <Loader2 className="w-3 h-3 animate-spin" />
-                          Processing
+                          Grading
                         </span>
                       ) : submission.status === 'queued' ? (
-                        <span className="text-surface-400 text-sm">Awaiting</span>
+                        <span className="text-surface-400 text-sm">Queued</span>
                       ) : (
                         <span className="text-surface-400">--</span>
                       )}
                     </td>
                     <td className="px-6 py-4">
+                      {/* AI Sentiment - only shown when grade data is available */}
                       {submission.hasGradeData ? (
                         <div className="flex items-center gap-2">
                           {getSentimentIcon(submission.aiSentiment)}
@@ -842,17 +941,20 @@ export default function AssignmentDashboardPage() {
                           </span>
                         </div>
                       ) : submission.status === 'queued' ? (
-                        <span className="text-surface-400 text-sm">Awaiting grading</span>
+                        <span className="text-surface-400 text-sm">Queued</span>
                       ) : ['transcribing', 'analyzing'].includes(submission.status) ? (
-                        <span className="text-amber-600 text-sm">Processing...</span>
+                        <span className="text-amber-600 text-sm">Analyzing...</span>
                       ) : submission.status === 'ready' && !submission.hasGradeData ? (
-                        <span className="text-red-500 text-sm">Error</span>
+                        <span className="text-primary-600 text-sm">Finalizing...</span>
+                      ) : submission.status === 'failed' ? (
+                        <span className="text-amber-600 text-sm">Retrying...</span>
                       ) : (
                         <span className="text-surface-400">--</span>
                       )}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {/* Actions: System-owned states for automated grading */}
                         {submission.hasGradeData ? (
                           <Link
                             href={`/bulk/submission/${submission.id}`}
@@ -862,9 +964,14 @@ export default function AssignmentDashboardPage() {
                             View
                           </Link>
                         ) : submission.status === 'failed' ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-500">
-                            <AlertCircle className="w-4 h-4" />
-                            Failed
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-amber-600">
+                            <RefreshCw className="w-4 h-4" />
+                            Retrying
+                          </span>
+                        ) : submission.status === 'ready' && !submission.hasGradeData ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-primary-600">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Finalizing
                           </span>
                         ) : submission.flagged ? (
                           <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors">
@@ -874,12 +981,12 @@ export default function AssignmentDashboardPage() {
                         ) : ['transcribing', 'analyzing'].includes(submission.status) ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-amber-600">
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            Grading...
+                            Grading
                           </span>
                         ) : submission.status === 'queued' ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-surface-500">
                             <Clock className="w-4 h-4" />
-                            Awaiting
+                            Queued
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-surface-400">

@@ -1264,7 +1264,7 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses, defa
     setIsCreating(true);
 
     try {
-      // Create the batch
+      // Create the batch with expected upload count for persistent tracking
       const response = await fetch('/api/bulk/create-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1278,6 +1278,8 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses, defa
             criteria: customRubric.criteria,
             totalPoints: customRubric.totalPoints,
           } : undefined,
+          // Store expected file count in batch for consistent progress tracking
+          expectedUploadCount: files.length,
         }),
       });
 

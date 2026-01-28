@@ -6,16 +6,19 @@ import { kv } from '@vercel/kv';
 
 // ============================================
 // GRADING STATUS: Single Source of Truth
-// Status is computed from actual submission data, not stored counts
+// Grading is fully automated - no instructor action required.
+// Status is computed from actual submission data, not stored counts.
 // ============================================
 export type GradingStatus = 
-  | 'not_started'   // No submissions or all queued
-  | 'in_progress'   // Some processing or some graded but not all
+  | 'not_started'   // No submissions or all queued, awaiting automated processing
+  | 'processing'    // Automated grading in progress
+  | 'finalizing'    // Processing complete, awaiting final results
   | 'completed'     // All submissions have grades (overallScore defined)
-  | 'error';        // Mismatch: status says ready but no grade data
+  | 'retrying';     // System is retrying failed automated grading
 
 /**
  * Computes the authoritative grading status from submission data.
+ * Grading is fully automated - these are system states, not user action states.
  * A submission is "graded" only if it has an actual score, not just status='ready'.
  */
 function computeGradingStatus(submissions: Array<{
@@ -25,7 +28,7 @@ function computeGradingStatus(submissions: Array<{
   const totalCount = submissions.length;
   
   if (totalCount === 0) {
-    return { status: 'not_started', gradedCount: 0, totalCount: 0, message: 'No submissions' };
+    return { status: 'not_started', gradedCount: 0, totalCount: 0, message: 'No submissions yet' };
   }
   
   // Count submissions that actually have grade data (score defined)
@@ -44,17 +47,18 @@ function computeGradingStatus(submissions: Array<{
   // All finished (ready or failed)
   const allFinished = (readyCount + failedCount) === totalCount;
   
-  // Check for error state: status says ready but no score
+  // Check for finalizing state: status says ready but score not yet available
+  // This is a system state - the automated grading is finalizing results
   const readyWithoutScore = submissions.filter(s => 
     s.status === 'ready' && (s.overallScore === undefined || s.overallScore === null)
   ).length;
   
   if (allFinished && readyWithoutScore > 0) {
     return { 
-      status: 'error', 
+      status: 'finalizing', 
       gradedCount, 
       totalCount,
-      message: `${readyWithoutScore} submission(s) marked ready but missing grade data`
+      message: 'Finalizing automated grading results'
     };
   }
   
@@ -67,9 +71,19 @@ function computeGradingStatus(submissions: Array<{
     };
   }
   
+  // Some failed - system may retry
+  if (failedCount > 0 && gradedCount + failedCount === totalCount) {
+    return {
+      status: 'retrying',
+      gradedCount,
+      totalCount,
+      message: `${failedCount} submission(s) being retried`
+    };
+  }
+  
   if (processingCount > 0 || gradedCount > 0) {
     return { 
-      status: 'in_progress', 
+      status: 'processing', 
       gradedCount, 
       totalCount,
       message: `${gradedCount} of ${totalCount} completed`
@@ -81,12 +95,12 @@ function computeGradingStatus(submissions: Array<{
       status: 'not_started', 
       gradedCount: 0, 
       totalCount,
-      message: 'Awaiting grading'
+      message: 'Queued for automated grading'
     };
   }
   
   return { 
-    status: 'in_progress', 
+    status: 'processing', 
     gradedCount, 
     totalCount,
     message: `${gradedCount} of ${totalCount} completed`
@@ -187,16 +201,27 @@ export async function GET(request: NextRequest) {
                       : gradingStatusResult.status === 'not_started' ? 'active'
                       : 'processing';
     
+    // ============================================
+    // UPLOAD TRACKING: Clear expectedUploadCount when all files are uploaded
+    // This ensures the UI stops showing upload progress once complete
+    // ============================================
+    const uploadsComplete = batch.expectedUploadCount !== undefined && 
+                           batch.expectedUploadCount > 0 && 
+                           submissions.length >= batch.expectedUploadCount;
+    
     if (batch.totalSubmissions !== submissions.length || 
         batch.processedCount !== processedCount || 
         batch.failedCount !== failedCount ||
-        batch.status !== batchStatus) {
-      console.log(`[Status] Syncing batch stats: total ${batch.totalSubmissions}->${submissions.length}, processed ${batch.processedCount}->${processedCount}, status ${batch.status}->${batchStatus}`);
+        batch.status !== batchStatus ||
+        uploadsComplete) {
+      console.log(`[Status] Syncing batch stats: total ${batch.totalSubmissions}->${submissions.length}, processed ${batch.processedCount}->${processedCount}, status ${batch.status}->${batchStatus}, uploadsComplete=${uploadsComplete}`);
       batch = await updateBatch(batchId, {
         totalSubmissions: submissions.length,
         processedCount,
         failedCount,
         status: batchStatus,
+        // Clear expected count once all files are uploaded
+        ...(uploadsComplete ? { expectedUploadCount: undefined } : {}),
       }) || batch;
     }
 
