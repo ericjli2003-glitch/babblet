@@ -274,6 +274,21 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
         console.error(`[ProcessNow] Questions generation FAILED for ${submissionId}:`, questionsResult.reason);
       }
 
+      // ============================================
+      // GRADING COMPLETENESS: Only mark 'ready' if we have a valid score
+      // If rubric evaluation failed, mark as 'failed' so we don't get stuck in 'finalizing'
+      // ============================================
+      if (!rubricEvaluation || rubricEvaluation.overallScore === undefined) {
+        console.error(`[ProcessNow] No valid grade for ${submissionId}, marking as failed`);
+        await updateSubmission(submissionId, {
+          status: 'failed',
+          errorMessage: 'Rubric evaluation did not produce a valid score',
+          completedAt: Date.now(),
+        });
+        await updateBatchStats(submission.batchId);
+        return { success: false, error: 'No valid grade produced' };
+      }
+
       await updateSubmission(submissionId, {
         // Store the bundleVersionId used for grading
         bundleVersionId: bundleVersionId,
@@ -342,7 +357,15 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
         completedAt: Date.now(),
       });
     } else {
-      await updateSubmission(submissionId, { status: 'ready', completedAt: Date.now() });
+      // Claude not configured - cannot grade, mark as failed
+      console.error(`[ProcessNow] Claude not configured, cannot grade ${submissionId}`);
+      await updateSubmission(submissionId, { 
+        status: 'failed', 
+        errorMessage: 'AI grading service not configured',
+        completedAt: Date.now() 
+      });
+      await updateBatchStats(submission.batchId);
+      return { success: false, error: 'AI grading service not configured' };
     }
 
     console.log(`[ProcessNow] COMPLETE submissionId=${submissionId} duration=${Date.now() - startTime}ms`);
