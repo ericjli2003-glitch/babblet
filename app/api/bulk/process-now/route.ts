@@ -366,28 +366,26 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
-    // Check for batchId param to re-queue stuck submissions
+    // Check for batchId param
     const { searchParams } = new URL(request.url);
     const batchId = searchParams.get('batchId');
 
     let queueLength = await getQueueLength();
-    console.log(`[ProcessNow] Initial queue length: ${queueLength}`);
+    console.log(`[ProcessNow] Initial queue length: ${queueLength}, batchId: ${batchId || 'none'}`);
 
-    // If queue is empty but batchId provided, re-queue stuck submissions
+    // If queue is empty but batchId provided, re-queue any stuck submissions from that batch
     if (queueLength === 0 && batchId) {
       console.log(`[ProcessNow] Queue empty, checking for stuck submissions in batch ${batchId}`);
       const submissions = await getBatchSubmissions(batchId);
       const stuckSubmissions = submissions.filter(s => s.status === 'queued');
 
-      console.log(`[ProcessNow] Found ${stuckSubmissions.length} stuck submissions`);
-
-      for (const sub of stuckSubmissions) {
-        await requeue(sub.id);
-        console.log(`[ProcessNow] Re-queued submission ${sub.id}`);
+      if (stuckSubmissions.length > 0) {
+        console.log(`[ProcessNow] Found ${stuckSubmissions.length} stuck submissions, re-queuing`);
+        for (const sub of stuckSubmissions) {
+          await requeue(sub.id);
+        }
+        queueLength = stuckSubmissions.length;
       }
-
-      queueLength = await getQueueLength();
-      console.log(`[ProcessNow] Queue length after re-queue: ${queueLength}`);
     }
 
     if (queueLength === 0) {
@@ -413,22 +411,45 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Get next queued submission - prefer from specified batch if provided
+    // Get next queued submission atomically from the queue
+    // This ensures no two workers grab the same submission
     let submissionId: string | null = null;
+    let attempts = 0;
+    const maxAttempts = 10;
     
-    if (batchId) {
-      // Get submissions from this specific batch
-      const batchSubmissions = await getBatchSubmissions(batchId);
-      const queuedSubmission = batchSubmissions.find(s => s.status === 'queued');
-      if (queuedSubmission) {
-        submissionId = queuedSubmission.id;
-        console.log(`[ProcessNow] Found queued submission in batch ${batchId}: ${submissionId}`);
+    while (!submissionId && attempts < maxAttempts) {
+      attempts++;
+      
+      // Pop from queue atomically
+      const candidateId = await getNextQueuedSubmission();
+      if (!candidateId) {
+        console.log(`[ProcessNow] Queue empty after ${attempts} attempts`);
+        break;
       }
-    }
-    
-    // Fall back to global queue if no batch-specific submission found
-    if (!submissionId) {
-      submissionId = await getNextQueuedSubmission();
+      
+      // Get the submission to check its status and batch
+      const candidate = await getSubmission(candidateId);
+      if (!candidate) {
+        console.log(`[ProcessNow] Submission ${candidateId} not found, skipping`);
+        continue;
+      }
+      
+      // Skip if already processed (shouldn't happen but safety check)
+      if (candidate.status !== 'queued') {
+        console.log(`[ProcessNow] Submission ${candidateId} already ${candidate.status}, skipping`);
+        continue;
+      }
+      
+      // If batchId specified, only process submissions from that batch
+      if (batchId && candidate.batchId !== batchId) {
+        // Re-queue for another worker to pick up
+        await requeue(candidateId);
+        console.log(`[ProcessNow] Submission ${candidateId} belongs to different batch, re-queued`);
+        continue;
+      }
+      
+      submissionId = candidateId;
+      console.log(`[ProcessNow] Claimed submission ${submissionId} from batch ${candidate.batchId}`);
     }
     
     if (!submissionId) {
