@@ -142,8 +142,9 @@ export default function AssignmentDashboardPage() {
   const [gradedHighWaterMark, setGradedHighWaterMark] = useState(0);
   // ============================================
   // STATUS LOCK: Once completed, don't regress to processing
+  // Using a ref to avoid stale closure issues in setGradingStatus
   // ============================================
-  const [statusLocked, setStatusLocked] = useState<'completed' | null>(null);
+  const statusLockedRef = useRef<'completed' | null>(null);
   // GRADING STATUS: Single source of truth from API
   const [gradingStatus, setGradingStatus] = useState<GradingStatus>({
     status: 'not_started',
@@ -219,7 +220,7 @@ export default function AssignmentDashboardPage() {
           
           // Lock status if completed
           if (newStatus.status === 'completed') {
-            setStatusLocked('completed');
+            statusLockedRef.current = 'completed';
           }
         }
 
@@ -459,38 +460,43 @@ export default function AssignmentDashboardPage() {
           // GRADING STATUS: Update with high water mark and status lock
           // - Never let graded count go backwards
           // - Once completed, don't regress to processing
+          // - Use ref to avoid stale closure issues
           // ============================================
           if (data.gradingStatus) {
             const newStatus = data.gradingStatus;
+            const currentLock = statusLockedRef.current;
             
-            setGradingStatus(prev => {
-              // If status is locked to completed, only allow staying completed
-              // unless new uploads have been added (gradedCount < totalCount)
-              const isNewUploadsAdded = newStatus.gradedCount < newStatus.totalCount && statusLocked === 'completed';
-              
-              // Apply high water mark to graded count
-              const adjustedGradedCount = Math.max(newStatus.gradedCount, gradedHighWaterMark);
-              
-              // Determine final status
-              let finalStatus = newStatus.status;
-              if (statusLocked === 'completed' && !isNewUploadsAdded) {
-                // Keep completed status if locked and no new uploads
-                finalStatus = 'completed';
-              }
-              
-              return {
-                ...newStatus,
-                status: finalStatus,
-                gradedCount: adjustedGradedCount,
-              };
-            });
+            // Check if new uploads were added (unlocks the completed status)
+            const isNewUploadsAdded = newStatus.gradedCount < newStatus.totalCount && currentLock === 'completed';
+            
+            // Determine final status - use ref for current lock value
+            let finalStatus = newStatus.status;
+            if (currentLock === 'completed' && !isNewUploadsAdded) {
+              // Keep completed status if locked and no new uploads
+              finalStatus = 'completed';
+            }
+            
+            // Also check locally: if ALL submissions have grades, force completed
+            const allSubmissionsGraded = data.submissions?.length > 0 && 
+              data.submissions.every((s: any) => s.hasGradeData && s.overallScore != null);
+            if (allSubmissionsGraded) {
+              finalStatus = 'completed';
+              statusLockedRef.current = 'completed';
+            }
+            
+            setGradingStatus(prev => ({
+              ...newStatus,
+              status: finalStatus,
+              // Apply high water mark - never let graded count go backwards
+              gradedCount: Math.max(newStatus.gradedCount, prev.gradedCount),
+            }));
             
             // Update high water mark
             setGradedHighWaterMark(prev => Math.max(prev, newStatus.gradedCount));
             
             // Lock status if completed
-            if (newStatus.status === 'completed') {
-              setStatusLocked('completed');
+            if (newStatus.status === 'completed' || allSubmissionsGraded) {
+              statusLockedRef.current = 'completed';
             }
           }
           
@@ -591,6 +597,31 @@ export default function AssignmentDashboardPage() {
     
     return { graded, pending, flagged, avgScore, total: submissions.length };
   }, [submissions]);
+
+  // ============================================
+  // DISPLAY STATUS: Computed from actual submissions data
+  // This is the source of truth for UI - if all have grades, show completed
+  // ============================================
+  const displayGradingStatus = useMemo(() => {
+    // If all submissions have grades, we're complete regardless of API status
+    const allGraded = stats.total > 0 && stats.graded === stats.total;
+    
+    if (allGraded) {
+      return {
+        ...gradingStatus,
+        status: 'completed' as const,
+        gradedCount: stats.graded,
+        totalCount: stats.total,
+      };
+    }
+    
+    // Otherwise use the API status but ensure count never goes backwards
+    return {
+      ...gradingStatus,
+      gradedCount: Math.max(gradingStatus.gradedCount, stats.graded),
+      totalCount: Math.max(gradingStatus.totalCount, stats.total),
+    };
+  }, [gradingStatus, stats]);
 
   // Pagination
   const totalPages = Math.ceil(submissions.length / itemsPerPage);
@@ -857,7 +888,7 @@ export default function AssignmentDashboardPage() {
           console.log(`[AddMore] Auto-starting grading for ${newQueuedCount} new submissions`);
           
           // Unlock status to allow showing processing for new uploads
-          setStatusLocked(null);
+          statusLockedRef.current = null;
           setGradingStarted(true);
           setGradingStartTime(Date.now());
           
@@ -980,18 +1011,18 @@ export default function AssignmentDashboardPage() {
                 );
               }
               
-              // Show progress during active grading or finalizing
-              if ((isGradingActive && !allProcessed) || gradingStatus.status === 'processing') {
+              // Show progress during active grading - but NOT if all are already graded
+              if ((isGradingActive && !allProcessed) || (displayGradingStatus.status === 'processing' && stats.graded < stats.total)) {
                 return (
                   <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Grading... ({gradingStatus.gradedCount}/{gradingStatus.totalCount})
+                    Grading... ({displayGradingStatus.gradedCount}/{displayGradingStatus.totalCount})
                   </div>
                 );
               }
               
-              // Finalizing state - all processed but scores being written
-              if (gradingStatus.status === 'finalizing') {
+              // Finalizing state - but NOT if all are already graded
+              if (displayGradingStatus.status === 'finalizing' && stats.graded < stats.total) {
                 return (
                   <div className="flex items-center gap-2 px-4 py-2 bg-primary-100 text-primary-700 rounded-lg text-sm font-medium">
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -1012,8 +1043,8 @@ export default function AssignmentDashboardPage() {
                 );
               }
               
-              // Only show Re-grade when grading is truly complete
-              if (submissions.length > 0 && gradingStatus.status === 'completed') {
+              // Only show Re-grade when grading is truly complete (use display status)
+              if (submissions.length > 0 && displayGradingStatus.status === 'completed') {
                 // If in regrade mode with selections, show "Re-grade Selected" button
                 if (regradeMode && selectedForRegrade.size > 0) {
                   return (
@@ -1129,9 +1160,9 @@ export default function AssignmentDashboardPage() {
           </div>
         )}
 
-        {/* Grading Progress Banner - uses gradingStatus from API */}
-        {/* Grading is fully automated - these are system states */}
-        {gradingStatus.status === 'processing' && (
+        {/* Grading Progress Banner - uses displayGradingStatus (computed from actual data) */}
+        {/* Only show if not all submissions are graded yet */}
+        {displayGradingStatus.status === 'processing' && stats.graded < stats.total && (
           <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-3">
@@ -1141,7 +1172,7 @@ export default function AssignmentDashboardPage() {
                 <div>
                   <h3 className="font-semibold text-surface-900">Automated grading in progress</h3>
                   <p className="text-sm text-surface-600">
-                    {gradingStatus.gradedCount} of {gradingStatus.totalCount} completed
+                    {displayGradingStatus.gradedCount} of {displayGradingStatus.totalCount} completed
                     {activeWorkers > 0 && ` • ${activeWorkers} active worker${activeWorkers > 1 ? 's' : ''}`}
                   </p>
                 </div>
@@ -1160,15 +1191,15 @@ export default function AssignmentDashboardPage() {
               <div 
                 className="h-full bg-amber-500 rounded-full transition-all duration-500"
                 style={{ 
-                  width: `${Math.round((gradingStatus.gradedCount / Math.max(gradingStatus.totalCount, 1)) * 100)}%` 
+                  width: `${Math.round((displayGradingStatus.gradedCount / Math.max(displayGradingStatus.totalCount, 1)) * 100)}%` 
                 }}
               />
             </div>
           </div>
         )}
 
-        {/* Finalizing Banner - system is completing automated grading */}
-        {gradingStatus.status === 'finalizing' && (
+        {/* Finalizing Banner - only show if not all submissions are graded yet */}
+        {displayGradingStatus.status === 'finalizing' && stats.graded < stats.total && (
           <div className="mb-6 bg-primary-50 border border-primary-200 rounded-xl p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1187,8 +1218,8 @@ export default function AssignmentDashboardPage() {
           </div>
         )}
 
-        {/* Retrying Banner - system is retrying failed automated grading */}
-        {gradingStatus.status === 'retrying' && (
+        {/* Retrying Banner - only show if not all submissions are graded yet */}
+        {displayGradingStatus.status === 'retrying' && stats.graded < stats.total && (
           <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1198,7 +1229,7 @@ export default function AssignmentDashboardPage() {
                 <div>
                   <h3 className="font-semibold text-surface-900">Automated grading retrying</h3>
                   <p className="text-sm text-surface-600">
-                    {gradingStatus.message}
+                    {displayGradingStatus.message}
                   </p>
                 </div>
               </div>
@@ -1207,8 +1238,8 @@ export default function AssignmentDashboardPage() {
           </div>
         )}
 
-        {/* Grading Complete Banner - only shows when gradingStatus is 'completed' */}
-        {gradingStatus.status === 'completed' && submissions.length > 0 && (
+        {/* Grading Complete Banner - shows when all submissions are graded OR displayGradingStatus is completed */}
+        {(displayGradingStatus.status === 'completed' || (stats.total > 0 && stats.graded === stats.total)) && submissions.length > 0 && (
           <div className="mb-6 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
@@ -1217,7 +1248,7 @@ export default function AssignmentDashboardPage() {
               <div>
                 <h3 className="font-semibold text-surface-900">Grading complete</h3>
                 <p className="text-sm text-surface-600">
-                  {gradingStatus.message}
+                  All {stats.total} submissions graded
                   {stats.avgScore !== undefined && ` • Average score: ${stats.avgScore}%`}
                 </p>
               </div>
