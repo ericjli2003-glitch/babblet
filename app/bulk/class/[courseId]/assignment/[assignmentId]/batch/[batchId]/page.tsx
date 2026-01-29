@@ -782,81 +782,102 @@ export default function AssignmentDashboardPage() {
     setUploadingFiles(uploadingList);
 
     try {
-      // Upload each file
-      for (let i = 0; i < validFiles.length; i++) {
-        const file = validFiles[i];
+      // ============================================
+      // PARALLEL UPLOADS: Upload all files simultaneously
+      // Each file gets its own presign URL and uploads independently
+      // ============================================
+      const uploadPromises = validFiles.map(async (file, i) => {
         const studentName = inferStudentName(file.name);
+        const uploadId = uploadingList[i].id;
 
-        // Update progress
-        setUploadingFiles(prev => prev.map((uf, idx) => 
-          idx === i ? { ...uf, progress: 10 } : uf
-        ));
+        try {
+          // Update progress - getting presigned URL
+          setUploadingFiles(prev => prev.map(uf => 
+            uf.id === uploadId ? { ...uf, progress: 10 } : uf
+          ));
 
-        // Get presigned URL
-        const presignRes = await fetch('/api/bulk/presign', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            batchId,
-            filename: file.name,
-            contentType: file.type,
-          }),
-        });
-        const presignData = await presignRes.json();
+          // Get presigned URL
+          const presignRes = await fetch('/api/bulk/presign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              batchId,
+              filename: file.name,
+              contentType: file.type,
+            }),
+          });
+          const presignData = await presignRes.json();
 
-        if (!presignData.success) {
-          console.error('Failed to get presign URL:', presignData.error);
-          continue;
+          if (!presignData.success) {
+            console.error('Failed to get presign URL:', presignData.error);
+            setUploadingFiles(prev => prev.map(uf => 
+              uf.id === uploadId ? { ...uf, progress: -1 } : uf // -1 indicates error
+            ));
+            return null;
+          }
+
+          setUploadingFiles(prev => prev.map(uf => 
+            uf.id === uploadId ? { ...uf, progress: 20 } : uf
+          ));
+
+          // Upload to R2
+          await new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.upload.addEventListener('progress', (e) => {
+              if (e.lengthComputable) {
+                const progress = 20 + Math.round((e.loaded / e.total) * 70);
+                setUploadingFiles(prev => prev.map(uf => 
+                  uf.id === uploadId ? { ...uf, progress } : uf
+                ));
+              }
+            });
+            xhr.addEventListener('load', () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                resolve();
+              } else {
+                reject(new Error(`Upload failed: ${xhr.status}`));
+              }
+            });
+            xhr.addEventListener('error', () => reject(new Error('Upload failed')));
+            xhr.open('PUT', presignData.uploadUrl);
+            xhr.setRequestHeader('Content-Type', file.type);
+            xhr.send(file);
+          });
+
+          setUploadingFiles(prev => prev.map(uf => 
+            uf.id === uploadId ? { ...uf, progress: 95 } : uf
+          ));
+
+          // Enqueue for processing
+          await fetch('/api/bulk/enqueue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              batchId,
+              submissionId: presignData.submissionId,
+              studentName,
+              originalFilename: file.name,
+            }),
+          });
+
+          setUploadingFiles(prev => prev.map(uf => 
+            uf.id === uploadId ? { ...uf, progress: 100 } : uf
+          ));
+
+          return presignData.submissionId;
+        } catch (err) {
+          console.error(`[AddMore] Upload failed for ${file.name}:`, err);
+          setUploadingFiles(prev => prev.map(uf => 
+            uf.id === uploadId ? { ...uf, progress: -1 } : uf
+          ));
+          return null;
         }
+      });
 
-        setUploadingFiles(prev => prev.map((uf, idx) => 
-          idx === i ? { ...uf, progress: 20 } : uf
-        ));
-
-        // Upload to R2
-        await new Promise<void>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.upload.addEventListener('progress', (e) => {
-            if (e.lengthComputable) {
-              const progress = 20 + Math.round((e.loaded / e.total) * 70);
-              setUploadingFiles(prev => prev.map((uf, idx) => 
-                idx === i ? { ...uf, progress } : uf
-              ));
-            }
-          });
-          xhr.addEventListener('load', () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              resolve();
-            } else {
-              reject(new Error(`Upload failed: ${xhr.status}`));
-            }
-          });
-          xhr.addEventListener('error', () => reject(new Error('Upload failed')));
-          xhr.open('PUT', presignData.uploadUrl);
-          xhr.setRequestHeader('Content-Type', file.type);
-          xhr.send(file);
-        });
-
-        setUploadingFiles(prev => prev.map((uf, idx) => 
-          idx === i ? { ...uf, progress: 95 } : uf
-        ));
-
-        // Enqueue for processing
-        await fetch('/api/bulk/enqueue', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            batchId,
-            submissionId: presignData.submissionId,
-            studentName,
-            originalFilename: file.name,
-          }),
-        });
-
-        setUploadingFiles(prev => prev.map((uf, idx) => 
-          idx === i ? { ...uf, progress: 100 } : uf
-        ));
-      }
+      // Wait for all uploads to complete in parallel
+      console.log(`[AddMore] Starting ${uploadPromises.length} parallel uploads...`);
+      await Promise.all(uploadPromises);
+      console.log(`[AddMore] All uploads complete`);
 
       // Refresh data after uploads complete
       const res = await fetch(`/api/bulk/status?batchId=${batchId}`);
