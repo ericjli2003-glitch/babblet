@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getPresignedUploadUrl, getPresignedDownloadUrl, generateFileKey, isR2Configured } from '@/lib/r2';
+import { getBatch } from '@/lib/batch-store';
 import { v4 as uuidv4 } from 'uuid';
 
 // GET - Get presigned download URL for a file
@@ -67,6 +68,18 @@ export async function POST(request: NextRequest) {
         { error: 'batchId, filename, and contentType are required' },
         { status: 400 }
       );
+    }
+
+    // Verify batch exists (with retry for eventual consistency)
+    let batch = await getBatch(batchId);
+    if (!batch) {
+      console.log(`[Presign] Batch not found on first try: ${batchId}, retrying...`);
+      await new Promise(r => setTimeout(r, 500));
+      batch = await getBatch(batchId);
+    }
+    if (!batch) {
+      console.error(`[Presign] Batch not found: ${batchId}`);
+      return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
     }
 
     // Validate content type

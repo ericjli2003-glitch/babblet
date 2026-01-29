@@ -18,10 +18,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify batch exists
-    const batch = await getBatch(batchId);
+    // Verify batch exists with retry (handles eventual consistency)
+    let batch = await getBatch(batchId);
     if (!batch) {
-      console.error(`[Enqueue] Batch not found: ${batchId}`);
+      console.log(`[Enqueue] Batch not found on first try, retrying in 500ms...`);
+      await new Promise(r => setTimeout(r, 500));
+      batch = await getBatch(batchId);
+    }
+    if (!batch) {
+      console.log(`[Enqueue] Batch not found on second try, retrying in 1000ms...`);
+      await new Promise(r => setTimeout(r, 1000));
+      batch = await getBatch(batchId);
+    }
+    if (!batch) {
+      console.error(`[Enqueue] Batch not found after retries: ${batchId}`);
       return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
     }
 
