@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   Download, RefreshCw, ChevronLeft, ChevronRight, Filter,
   Loader2, AlertTriangle, TrendingUp, Clock, Flag, Eye,
-  Play, AlertCircle, CheckCircle, ArrowLeft, Trash2, MoreVertical, Upload
+  Play, AlertCircle, CheckCircle, ArrowLeft, Trash2, MoreVertical, Upload, Plus
 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
@@ -151,6 +151,13 @@ export default function AssignmentDashboardPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+
+  // ============================================
+  // ADD MORE UPLOADS: State for uploading additional files
+  // ============================================
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState<{id: string; name: string; progress: number}[]>([]);
 
   // Load batch and submissions
   useEffect(() => {
@@ -558,6 +565,155 @@ export default function AssignmentDashboardPage() {
     }
   };
 
+  // ============================================
+  // ADD MORE UPLOADS: Handle additional file uploads
+  // ============================================
+  const inferStudentName = useCallback((filename: string): string => {
+    // Remove extension
+    const nameWithoutExt = filename.replace(/\.(mp4|mov|webm|mp3|wav)$/i, '');
+    // Try to extract student name from common patterns
+    const patterns = [
+      /^(.+?)[-_]\d+$/,  // "John Smith-001" or "John_Smith_001"
+      /^(.+?)[-_]video$/i, // "John Smith-video"
+      /^(.+?)[-_]presentation$/i, // "John Smith-presentation"
+    ];
+    for (const pattern of patterns) {
+      const match = nameWithoutExt.match(pattern);
+      if (match) return match[1].replace(/[-_]/g, ' ').trim();
+    }
+    return nameWithoutExt.replace(/[-_]/g, ' ').trim();
+  }, []);
+
+  const handleFilesSelected = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0 || !batchId) return;
+
+    const validTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'audio/mpeg', 'audio/wav', 'audio/webm'];
+    const validFiles = Array.from(files).filter(file => 
+      validTypes.some(t => file.type.startsWith(t.split('/')[0]))
+    );
+
+    if (validFiles.length === 0) return;
+
+    setIsUploading(true);
+    
+    // Update expected upload count in batch
+    const newExpectedCount = (batch?.expectedUploadCount || submissions.length) + validFiles.length;
+    setBatch(prev => prev ? { ...prev, expectedUploadCount: newExpectedCount } : null);
+
+    // Track uploading files
+    const uploadingList = validFiles.map((f, i) => ({
+      id: `upload-${Date.now()}-${i}`,
+      name: f.name,
+      progress: 0
+    }));
+    setUploadingFiles(uploadingList);
+
+    try {
+      // Upload each file
+      for (let i = 0; i < validFiles.length; i++) {
+        const file = validFiles[i];
+        const studentName = inferStudentName(file.name);
+
+        // Update progress
+        setUploadingFiles(prev => prev.map((uf, idx) => 
+          idx === i ? { ...uf, progress: 10 } : uf
+        ));
+
+        // Get presigned URL
+        const presignRes = await fetch('/api/bulk/presign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            batchId,
+            filename: file.name,
+            contentType: file.type,
+          }),
+        });
+        const presignData = await presignRes.json();
+
+        if (!presignData.success) {
+          console.error('Failed to get presign URL:', presignData.error);
+          continue;
+        }
+
+        setUploadingFiles(prev => prev.map((uf, idx) => 
+          idx === i ? { ...uf, progress: 20 } : uf
+        ));
+
+        // Upload to R2
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+              const progress = 20 + Math.round((e.loaded / e.total) * 70);
+              setUploadingFiles(prev => prev.map((uf, idx) => 
+                idx === i ? { ...uf, progress } : uf
+              ));
+            }
+          });
+          xhr.addEventListener('load', () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve();
+            } else {
+              reject(new Error(`Upload failed: ${xhr.status}`));
+            }
+          });
+          xhr.addEventListener('error', () => reject(new Error('Upload failed')));
+          xhr.open('PUT', presignData.uploadUrl);
+          xhr.setRequestHeader('Content-Type', file.type);
+          xhr.send(file);
+        });
+
+        setUploadingFiles(prev => prev.map((uf, idx) => 
+          idx === i ? { ...uf, progress: 95 } : uf
+        ));
+
+        // Enqueue for processing
+        await fetch('/api/bulk/enqueue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            batchId,
+            submissionId: presignData.submissionId,
+            studentName,
+            originalFilename: file.name,
+          }),
+        });
+
+        setUploadingFiles(prev => prev.map((uf, idx) => 
+          idx === i ? { ...uf, progress: 100 } : uf
+        ));
+      }
+
+      // Refresh data after uploads complete
+      const res = await fetch(`/api/bulk/status?batchId=${batchId}`);
+      const data = await res.json();
+      if (data.submissions) {
+        const subs = data.submissions.map((sub: any) => ({
+          id: sub.id,
+          studentName: sub.studentName || 'Unknown Student',
+          originalFilename: sub.originalFilename || 'Unknown',
+          status: sub.status,
+          createdAt: sub.createdAt || Date.now(),
+          completedAt: sub.completedAt,
+          overallScore: sub.overallScore,
+          hasGradeData: sub.hasGradeData ?? false,
+          videoLength: undefined,
+          aiSentiment: sub.analysis?.sentiment,
+          flagged: sub.flagged,
+          flagReason: sub.flagReason,
+        }));
+        setSubmissions(subs);
+        setSubmissionHighWaterMark(prev => Math.max(prev, subs.length));
+      }
+    } catch (err) {
+      console.error('[AssignmentDashboard] Upload error:', err);
+    } finally {
+      setIsUploading(false);
+      setUploadingFiles([]);
+    }
+  }, [batchId, batch, submissions.length, inferStudentName]);
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -615,6 +771,27 @@ export default function AssignmentDashboardPage() {
             </p>
             </div>
             <div className="flex items-center gap-3">
+            {/* Hidden file input for adding more submissions */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="video/*,audio/*"
+              className="hidden"
+              onChange={(e) => handleFilesSelected(e.target.files)}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-surface-200 rounded-lg hover:bg-surface-50 text-sm font-medium text-surface-700 disabled:opacity-50"
+            >
+              {isUploading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Plus className="w-4 h-4" />
+              )}
+              Add More
+            </button>
             <button
               onClick={handleExport}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-surface-200 rounded-lg hover:bg-surface-50 text-sm font-medium text-surface-700"
@@ -721,6 +898,37 @@ export default function AssignmentDashboardPage() {
                 className="h-full bg-primary-500 rounded-full transition-all duration-500"
                 style={{ width: `${uploadProgress}%` }}
               />
+            </div>
+          </div>
+        )}
+
+        {/* Additional Uploads Progress Banner */}
+        {isUploading && uploadingFiles.length > 0 && (
+          <div className="mb-6 bg-primary-50 border border-primary-200 rounded-xl p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
+                <Plus className="w-5 h-5 text-primary-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-surface-900">Adding Submissions</h3>
+                <p className="text-sm text-surface-600">
+                  Uploading {uploadingFiles.filter(f => f.progress < 100).length} of {uploadingFiles.length} files
+                </p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {uploadingFiles.map(file => (
+                <div key={file.id} className="flex items-center gap-3">
+                  <span className="text-sm text-surface-700 truncate flex-1 max-w-xs">{file.name}</span>
+                  <div className="flex-1 h-2 bg-primary-100 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-primary-500 rounded-full transition-all duration-300"
+                      style={{ width: `${file.progress}%` }}
+                    />
+                  </div>
+                  <span className="text-xs text-surface-500 w-10 text-right">{file.progress}%</span>
+                </div>
+              ))}
             </div>
           </div>
         )}
