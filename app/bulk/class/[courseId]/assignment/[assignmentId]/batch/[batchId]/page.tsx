@@ -849,16 +849,25 @@ export default function AssignmentDashboardPage() {
           ));
 
           // Enqueue for processing
-          await fetch('/api/bulk/enqueue', {
+          const enqueueRes = await fetch('/api/bulk/enqueue', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               batchId,
               submissionId: presignData.submissionId,
+              fileKey: presignData.fileKey, // Required field!
               studentName,
               originalFilename: file.name,
+              fileSize: file.size,
+              mimeType: file.type,
             }),
           });
+          
+          if (!enqueueRes.ok) {
+            const errData = await enqueueRes.json();
+            console.error(`[AddMore] Enqueue failed for ${file.name}:`, errData);
+            throw new Error(errData.error || 'Enqueue failed');
+          }
 
           setUploadingFiles(prev => prev.map(uf => 
             uf.id === uploadId ? { ...uf, progress: 100 } : uf
