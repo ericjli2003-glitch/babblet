@@ -142,9 +142,8 @@ export default function AssignmentDashboardPage() {
   const [gradedHighWaterMark, setGradedHighWaterMark] = useState(0);
   // ============================================
   // STATUS LOCK: Once completed, don't regress to processing
-  // Using a ref to avoid stale closure issues in setGradingStatus
   // ============================================
-  const statusLockedRef = useRef<'completed' | null>(null);
+  const [statusLocked, setStatusLocked] = useState<'completed' | null>(null);
   // GRADING STATUS: Single source of truth from API
   const [gradingStatus, setGradingStatus] = useState<GradingStatus>({
     status: 'not_started',
@@ -220,7 +219,7 @@ export default function AssignmentDashboardPage() {
           
           // Lock status if completed
           if (newStatus.status === 'completed') {
-            statusLockedRef.current = 'completed';
+            setStatusLocked('completed');
           }
         }
 
@@ -460,43 +459,38 @@ export default function AssignmentDashboardPage() {
           // GRADING STATUS: Update with high water mark and status lock
           // - Never let graded count go backwards
           // - Once completed, don't regress to processing
-          // - Use ref to avoid stale closure issues
           // ============================================
           if (data.gradingStatus) {
             const newStatus = data.gradingStatus;
-            const currentLock = statusLockedRef.current;
             
-            // Check if new uploads were added (unlocks the completed status)
-            const isNewUploadsAdded = newStatus.gradedCount < newStatus.totalCount && currentLock === 'completed';
-            
-            // Determine final status - use ref for current lock value
-            let finalStatus = newStatus.status;
-            if (currentLock === 'completed' && !isNewUploadsAdded) {
-              // Keep completed status if locked and no new uploads
-              finalStatus = 'completed';
-            }
-            
-            // Also check locally: if ALL submissions have grades, force completed
-            const allSubmissionsGraded = data.submissions?.length > 0 && 
-              data.submissions.every((s: any) => s.hasGradeData && s.overallScore != null);
-            if (allSubmissionsGraded) {
-              finalStatus = 'completed';
-              statusLockedRef.current = 'completed';
-            }
-            
-            setGradingStatus(prev => ({
-              ...newStatus,
-              status: finalStatus,
-              // Apply high water mark - never let graded count go backwards
-              gradedCount: Math.max(newStatus.gradedCount, prev.gradedCount),
-            }));
+            setGradingStatus(prev => {
+              // If status is locked to completed, only allow staying completed
+              // unless new uploads have been added (gradedCount < totalCount)
+              const isNewUploadsAdded = newStatus.gradedCount < newStatus.totalCount && statusLocked === 'completed';
+              
+              // Apply high water mark to graded count
+              const adjustedGradedCount = Math.max(newStatus.gradedCount, gradedHighWaterMark);
+              
+              // Determine final status
+              let finalStatus = newStatus.status;
+              if (statusLocked === 'completed' && !isNewUploadsAdded) {
+                // Keep completed status if locked and no new uploads
+                finalStatus = 'completed';
+              }
+              
+              return {
+                ...newStatus,
+                status: finalStatus,
+                gradedCount: adjustedGradedCount,
+              };
+            });
             
             // Update high water mark
             setGradedHighWaterMark(prev => Math.max(prev, newStatus.gradedCount));
             
             // Lock status if completed
-            if (newStatus.status === 'completed' || allSubmissionsGraded) {
-              statusLockedRef.current = 'completed';
+            if (newStatus.status === 'completed') {
+              setStatusLocked('completed');
             }
           }
           
@@ -863,7 +857,7 @@ export default function AssignmentDashboardPage() {
           console.log(`[AddMore] Auto-starting grading for ${newQueuedCount} new submissions`);
           
           // Unlock status to allow showing processing for new uploads
-          statusLockedRef.current = null;
+          setStatusLocked(null);
           setGradingStarted(true);
           setGradingStartTime(Date.now());
           
