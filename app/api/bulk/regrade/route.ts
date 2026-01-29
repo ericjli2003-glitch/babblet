@@ -11,27 +11,34 @@ import {
 } from '@/lib/batch-store';
 import { getBundleVersions, getBundleVersion } from '@/lib/context-store';
 
-// POST /api/bulk/regrade - Re-grade submission(s) with a different bundle version
+// POST /api/bulk/regrade - Re-grade submission(s), optionally with a different bundle version
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { submissionId, submissionIds, bundleVersionId } = body;
+    const { batchId, submissionId, submissionIds, bundleVersionId } = body;
 
-    if (!bundleVersionId) {
-      return NextResponse.json({ error: 'bundleVersionId is required' }, { status: 400 });
-    }
-
-    // Validate bundle version exists
-    const bundleVersion = await getBundleVersion(bundleVersionId);
-    if (!bundleVersion) {
-      return NextResponse.json({ error: 'Bundle version not found' }, { status: 404 });
+    // If bundleVersionId provided, validate it exists
+    let bundleVersion = null;
+    if (bundleVersionId) {
+      bundleVersion = await getBundleVersion(bundleVersionId);
+      if (!bundleVersion) {
+        return NextResponse.json({ error: 'Bundle version not found' }, { status: 404 });
+      }
     }
 
     // Handle single or multiple submissions
-    const idsToRegrade = submissionIds || (submissionId ? [submissionId] : []);
+    let idsToRegrade = submissionIds || (submissionId ? [submissionId] : []);
+
+    // If batchId provided but no specific IDs, re-grade all submissions in batch
+    if (batchId && idsToRegrade.length === 0) {
+      const batch = await getBatch(batchId);
+      if (batch?.submissionIds) {
+        idsToRegrade = batch.submissionIds;
+      }
+    }
 
     if (idsToRegrade.length === 0) {
-      return NextResponse.json({ error: 'submissionId or submissionIds required' }, { status: 400 });
+      return NextResponse.json({ error: 'batchId, submissionId, or submissionIds required' }, { status: 400 });
     }
 
     const results: Array<{ submissionId: string; success: boolean; error?: string }> = [];
@@ -43,9 +50,8 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Reset submission to queued state with new bundle version
-      await updateSubmission(id, {
-        bundleVersionId: bundleVersionId,
+      // Reset submission to queued state, optionally with new bundle version
+      const updateData: Record<string, unknown> = {
         status: 'queued',
         // Clear previous results
         analysis: undefined,
@@ -56,7 +62,13 @@ export async function POST(request: NextRequest) {
         errorMessage: undefined,
         startedAt: undefined,
         completedAt: undefined,
-      });
+      };
+      
+      if (bundleVersionId) {
+        updateData.bundleVersionId = bundleVersionId;
+      }
+
+      await updateSubmission(id, updateData);
 
       // Re-add to queue
       await requeue(id);
@@ -69,11 +81,15 @@ export async function POST(request: NextRequest) {
 
     const successCount = results.filter(r => r.success).length;
 
-    console.log(`[Regrade] Queued ${successCount}/${idsToRegrade.length} submissions with bundleVersion ${bundleVersion.version}`);
+    const message = bundleVersion 
+      ? `${successCount} submission(s) queued for re-grading with context v${bundleVersion.version}`
+      : `${successCount} submission(s) queued for re-grading`;
+
+    console.log(`[Regrade] ${message}`);
 
     return NextResponse.json({
       success: true,
-      message: `${successCount} submission(s) queued for re-grading with context v${bundleVersion.version}`,
+      message,
       results,
     });
   } catch (error) {

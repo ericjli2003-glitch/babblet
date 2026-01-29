@@ -139,6 +139,11 @@ export default function AssignmentDashboardPage() {
   // This prevents UI flickering due to eventual consistency
   // ============================================
   const [submissionHighWaterMark, setSubmissionHighWaterMark] = useState(0);
+  const [gradedHighWaterMark, setGradedHighWaterMark] = useState(0);
+  // ============================================
+  // STATUS LOCK: Once completed, don't regress to processing
+  // ============================================
+  const [statusLocked, setStatusLocked] = useState<'completed' | null>(null);
   // GRADING STATUS: Single source of truth from API
   const [gradingStatus, setGradingStatus] = useState<GradingStatus>({
     status: 'not_started',
@@ -151,6 +156,12 @@ export default function AssignmentDashboardPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+
+  // ============================================
+  // SELECTIVE RE-GRADE: Allow users to pick which submissions to re-grade
+  // ============================================
+  const [regradeMode, setRegradeMode] = useState(false);
+  const [selectedForRegrade, setSelectedForRegrade] = useState<Set<string>>(new Set());
 
   // ============================================
   // ADD MORE UPLOADS: State for uploading additional files
@@ -196,9 +207,20 @@ export default function AssignmentDashboardPage() {
           expectedUploadCount: batchData.batch.expectedUploadCount,
         });
 
-        // GRADING STATUS: Set from API response (single source of truth)
+        // GRADING STATUS: Set from API response with high water mark protection
         if (batchData.gradingStatus) {
-          setGradingStatus(batchData.gradingStatus);
+          const newStatus = batchData.gradingStatus;
+          setGradingStatus(prev => ({
+            ...newStatus,
+            // Never let graded count go backwards
+            gradedCount: Math.max(newStatus.gradedCount, prev.gradedCount),
+          }));
+          setGradedHighWaterMark(prev => Math.max(prev, newStatus.gradedCount));
+          
+          // Lock status if completed
+          if (newStatus.status === 'completed') {
+            setStatusLocked('completed');
+          }
         }
 
         // Map submissions - use hasGradeData from API
@@ -433,9 +455,43 @@ export default function AssignmentDashboardPage() {
             data.submissions.map((s: any) => ({ id: s.id.slice(-6), status: s.status, score: s.overallScore, hasGrade: s.hasGradeData }))
           );
           
-          // GRADING STATUS: Update from API (single source of truth)
+          // ============================================
+          // GRADING STATUS: Update with high water mark and status lock
+          // - Never let graded count go backwards
+          // - Once completed, don't regress to processing
+          // ============================================
           if (data.gradingStatus) {
-            setGradingStatus(data.gradingStatus);
+            const newStatus = data.gradingStatus;
+            
+            setGradingStatus(prev => {
+              // If status is locked to completed, only allow staying completed
+              // unless new uploads have been added (gradedCount < totalCount)
+              const isNewUploadsAdded = newStatus.gradedCount < newStatus.totalCount && statusLocked === 'completed';
+              
+              // Apply high water mark to graded count
+              const adjustedGradedCount = Math.max(newStatus.gradedCount, gradedHighWaterMark);
+              
+              // Determine final status
+              let finalStatus = newStatus.status;
+              if (statusLocked === 'completed' && !isNewUploadsAdded) {
+                // Keep completed status if locked and no new uploads
+                finalStatus = 'completed';
+              }
+              
+              return {
+                ...newStatus,
+                status: finalStatus,
+                gradedCount: adjustedGradedCount,
+              };
+            });
+            
+            // Update high water mark
+            setGradedHighWaterMark(prev => Math.max(prev, newStatus.gradedCount));
+            
+            // Lock status if completed
+            if (newStatus.status === 'completed') {
+              setStatusLocked('completed');
+            }
           }
           
           // Map fresh data from server
@@ -455,19 +511,45 @@ export default function AssignmentDashboardPage() {
           }));
           
           // ============================================
-          // HIGH WATER MARK: Only update if count >= high water mark
-          // Prevents UI from showing count going backwards
+          // HIGH WATER MARK + GRADE PROTECTION: 
+          // - Never show fewer submissions than we've seen
+          // - Never regress a graded submission to ungraded
           // ============================================
           setSubmissions(prev => {
-            if (updatedSubs.length >= prev.length) {
-              // New data has same or more submissions - use it
-              setSubmissionHighWaterMark(mark => Math.max(mark, updatedSubs.length));
-              return updatedSubs;
+            const prevMap = new Map(prev.map(s => [s.id, s]));
+            
+            // Merge submissions, preserving grade data
+            const mergedSubs = updatedSubs.map(newSub => {
+              const existingSub = prevMap.get(newSub.id);
+              
+              // If existing submission has grade data, preserve it
+              if (existingSub?.hasGradeData && existingSub.overallScore != null) {
+                // Only update if new data also has a grade (to allow re-grading)
+                if (newSub.hasGradeData && newSub.overallScore != null) {
+                  return newSub;
+                }
+                // Otherwise keep the existing graded data
+                return existingSub;
+              }
+              
+              return newSub;
+            });
+            
+            if (mergedSubs.length >= prev.length) {
+              setSubmissionHighWaterMark(mark => Math.max(mark, mergedSubs.length));
+              return mergedSubs;
             } else {
-              // Fewer submissions than before - likely stale data, keep existing
-              // But update the status of matching submissions
-              const updatedMap = new Map(updatedSubs.map(s => [s.id, s]));
-              return prev.map(s => updatedMap.get(s.id) || s);
+              // Fewer submissions - merge into existing
+              const mergedMap = new Map(mergedSubs.map(s => [s.id, s]));
+              return prev.map(s => {
+                const updated = mergedMap.get(s.id);
+                if (!updated) return s;
+                // Preserve grade if existing has it
+                if (s.hasGradeData && s.overallScore != null && (!updated.hasGradeData || updated.overallScore == null)) {
+                  return s;
+                }
+                return updated;
+              });
             }
           });
           
@@ -493,18 +575,21 @@ export default function AssignmentDashboardPage() {
 
   // Derived stats
   const stats = useMemo(() => {
+    const graded = submissions.filter(s => 
+      s.hasGradeData && s.overallScore != null
+    ).length;
     const pending = submissions.filter(s => 
       ['queued', 'transcribing', 'analyzing'].includes(s.status)
     ).length;
     const flagged = submissions.filter(s => s.flagged).length;
     const scores = submissions
-      .filter(s => s.overallScore !== undefined)
+      .filter(s => s.overallScore !== undefined && s.overallScore !== null)
       .map(s => s.overallScore!);
     const avgScore = scores.length > 0 
       ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
       : undefined;
     
-    return { pending, flagged, avgScore };
+    return { graded, pending, flagged, avgScore, total: submissions.length };
   }, [submissions]);
 
   // Pagination
@@ -514,11 +599,59 @@ export default function AssignmentDashboardPage() {
     currentPage * itemsPerPage
   );
 
-  // Handlers
-  const handleRegrade = async () => {
+  // ============================================
+  // SELECTIVE RE-GRADE: Handlers
+  // ============================================
+  const toggleRegradeMode = () => {
+    if (regradeMode) {
+      // Exiting regrade mode - clear selections
+      setRegradeMode(false);
+      setSelectedForRegrade(new Set());
+    } else {
+      // Entering regrade mode
+      setRegradeMode(true);
+    }
+  };
+
+  const toggleSubmissionForRegrade = (id: string) => {
+    setSelectedForRegrade(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleRegradeSelected = async () => {
+    if (selectedForRegrade.size === 0) return;
+    
     setIsRegrading(true);
     try {
-      await fetch(`/api/bulk/regrade?batchId=${batchId}`, { method: 'POST' });
+      // Re-grade only selected submissions
+      const submissionIds = Array.from(selectedForRegrade);
+      await fetch(`/api/bulk/regrade`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batchId, submissionIds })
+      });
+      
+      // Exit regrade mode and clear selections
+      setRegradeMode(false);
+      setSelectedForRegrade(new Set());
+      
+      // Start grading workers for the re-queued submissions
+      setGradingStarted(true);
+      setGradingStartTime(Date.now());
+      
+      const MAX_WORKERS = 10;
+      const numWorkers = Math.min(submissionIds.length, MAX_WORKERS);
+      for (let i = 0; i < numWorkers; i++) {
+        runWorker(i + 1);
+      }
+      
       // Refetch data
       const res = await fetch(`/api/bulk/status?batchId=${batchId}`);
       const data = await res.json();
@@ -531,6 +664,7 @@ export default function AssignmentDashboardPage() {
           createdAt: sub.createdAt || Date.now(),
           completedAt: sub.completedAt,
           overallScore: sub.rubricEvaluation?.overallScore,
+          hasGradeData: sub.hasGradeData ?? false,
           videoLength: sub.duration ? formatDuration(sub.duration) : undefined,
           aiSentiment: sub.analysis?.sentiment,
           flagged: sub.flagged,
@@ -713,6 +847,26 @@ export default function AssignmentDashboardPage() {
         }));
         setSubmissions(subs);
         setSubmissionHighWaterMark(prev => Math.max(prev, subs.length));
+
+        // ============================================
+        // AUTO-GRADE NEW UPLOADS: Start grading only for newly queued submissions
+        // This does NOT re-grade already graded submissions
+        // ============================================
+        const newQueuedCount = subs.filter((s: Submission) => s.status === 'queued').length;
+        if (newQueuedCount > 0) {
+          console.log(`[AddMore] Auto-starting grading for ${newQueuedCount} new submissions`);
+          
+          // Unlock status to allow showing processing for new uploads
+          setStatusLocked(null);
+          setGradingStarted(true);
+          setGradingStartTime(Date.now());
+          
+          const MAX_WORKERS = 10;
+          const numWorkers = Math.min(newQueuedCount, MAX_WORKERS);
+          for (let i = 0; i < numWorkers; i++) {
+            runWorker(i + 1);
+          }
+        }
       }
     } catch (err) {
       console.error('[AssignmentDashboard] Upload error:', err);
@@ -858,20 +1012,54 @@ export default function AssignmentDashboardPage() {
                 );
               }
               
-              // Only show Re-grade All when grading is truly complete
+              // Only show Re-grade when grading is truly complete
               if (submissions.length > 0 && gradingStatus.status === 'completed') {
+                // If in regrade mode with selections, show "Re-grade Selected" button
+                if (regradeMode && selectedForRegrade.size > 0) {
+                  return (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={toggleRegradeMode}
+                        className="flex items-center gap-2 px-3 py-2 bg-surface-100 text-surface-700 rounded-lg hover:bg-surface-200 text-sm font-medium"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleRegradeSelected}
+                        disabled={isRegrading}
+                        className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-sm font-medium disabled:opacity-50"
+                      >
+                        {isRegrading ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-4 h-4" />
+                        )}
+                        Re-grade ({selectedForRegrade.size})
+                      </button>
+                    </div>
+                  );
+                }
+                
+                // If in regrade mode but no selections yet
+                if (regradeMode) {
+                  return (
+                    <button
+                      onClick={toggleRegradeMode}
+                      className="flex items-center gap-2 px-4 py-2 bg-surface-200 text-surface-700 rounded-lg hover:bg-surface-300 text-sm font-medium"
+                    >
+                      Cancel Selection
+                    </button>
+                  );
+                }
+                
+                // Default: show button to enter regrade mode
                 return (
                   <button
-                    onClick={handleRegrade}
-                    disabled={isRegrading}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium disabled:opacity-50"
+                    onClick={toggleRegradeMode}
+                    className="flex items-center gap-2 px-4 py-2 bg-white border border-surface-200 text-surface-700 rounded-lg hover:bg-surface-50 text-sm font-medium"
                   >
-                    {isRegrading ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4" />
-                    )}
-                    Re-grade All
+                    <RefreshCw className="w-4 h-4" />
+                    Re-grade
                   </button>
                 );
               }
@@ -1039,18 +1227,18 @@ export default function AssignmentDashboardPage() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-4 gap-4 mb-8">
-          {/* Total Submissions */}
+          {/* Graded / Total */}
           <div className="bg-white rounded-xl border border-surface-200 p-5">
-            <p className="text-xs text-surface-500 uppercase tracking-wide mb-1">Total Submissions</p>
+            <p className="text-xs text-surface-500 uppercase tracking-wide mb-1">Graded</p>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-surface-900">{batch.totalSubmissions}</span>
-              <span className="text-xs text-emerald-600 flex items-center gap-0.5">
-                <TrendingUp className="w-3 h-3" />
-                +12% vs LY
-              </span>
+              <span className="text-3xl font-bold text-surface-900">{stats.graded}</span>
+              <span className="text-xs text-surface-500">of {stats.total} submissions</span>
             </div>
-            <div className="mt-3 h-1.5 bg-primary-100 rounded-full overflow-hidden">
-              <div className="h-full bg-primary-500 rounded-full" style={{ width: '100%' }} />
+            <div className="mt-3 h-1.5 bg-emerald-100 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-emerald-500 rounded-full transition-all duration-500" 
+                style={{ width: `${stats.total > 0 ? (stats.graded / stats.total) * 100 : 0}%` }} 
+              />
             </div>
           </div>
 
@@ -1061,27 +1249,29 @@ export default function AssignmentDashboardPage() {
               <span className="text-3xl font-bold text-surface-900">
                 {stats.avgScore !== undefined ? `${stats.avgScore}%` : '--'}
               </span>
-              {stats.avgScore !== undefined && (
-                <span className="text-xs text-emerald-600">+3.2 pts</span>
-                )}
-              </div>
-            <div className="mt-3 h-1.5 bg-emerald-100 rounded-full overflow-hidden">
-                  <div
-                className="h-full bg-emerald-500 rounded-full" 
+              {stats.avgScore !== undefined && stats.avgScore >= 70 && (
+                <span className="text-xs text-emerald-600">Passing</span>
+              )}
+            </div>
+            <div className="mt-3 h-1.5 bg-surface-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  stats.avgScore && stats.avgScore >= 70 ? 'bg-emerald-500' : 'bg-amber-500'
+                }`}
                 style={{ width: `${stats.avgScore || 0}%` }} 
-                  />
-                </div>
-                </div>
+              />
+            </div>
+          </div>
 
-          {/* Pending Review */}
+          {/* Processing */}
           <div className="bg-white rounded-xl border border-surface-200 p-5">
-            <p className="text-xs text-surface-500 uppercase tracking-wide mb-1">Pending Review</p>
+            <p className="text-xs text-surface-500 uppercase tracking-wide mb-1">Processing</p>
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-bold text-surface-900">{stats.pending}</span>
-              <span className="text-xs text-surface-500">Needs manual check</span>
-              </div>
+              <span className="text-xs text-surface-500">{stats.pending > 0 ? 'In queue' : 'Complete'}</span>
+            </div>
             <div className="mt-3 flex items-center gap-1.5 text-amber-600">
-              <Clock className="w-4 h-4" />
+              {stats.pending > 0 ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4 text-emerald-500" />}
               <span className="text-xs">Processing</span>
             </div>
           </div>
@@ -1103,17 +1293,46 @@ export default function AssignmentDashboardPage() {
         {/* Submissions Table */}
         <div className="bg-white rounded-xl border border-surface-200">
           <div className="flex items-center justify-between px-6 py-4 border-b border-surface-200">
-            <h2 className="font-semibold text-surface-900">Student Submissions</h2>
-            <button className="flex items-center gap-2 px-3 py-1.5 text-surface-500 hover:text-surface-700 text-sm">
-              <Filter className="w-4 h-4" />
-              Filter
-                    </button>
+            <div className="flex items-center gap-3">
+              <h2 className="font-semibold text-surface-900">Student Submissions</h2>
+              {regradeMode && (
+                <span className="px-2 py-1 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">
+                  Select submissions to re-grade
+                </span>
+              )}
             </div>
+            <div className="flex items-center gap-2">
+              {regradeMode && (
+                <button
+                  onClick={() => {
+                    if (selectedForRegrade.size === submissions.length) {
+                      setSelectedForRegrade(new Set());
+                    } else {
+                      setSelectedForRegrade(new Set(submissions.map(s => s.id)));
+                    }
+                  }}
+                  className="flex items-center gap-1 px-3 py-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded text-sm font-medium"
+                >
+                  {selectedForRegrade.size === submissions.length ? 'Deselect All' : 'Select All'}
+                </button>
+              )}
+              <button className="flex items-center gap-2 px-3 py-1.5 text-surface-500 hover:text-surface-700 text-sm">
+                <Filter className="w-4 h-4" />
+                Filter
+              </button>
+            </div>
+          </div>
 
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-surface-100">
+                  {/* Checkbox column for selective re-grade */}
+                  {regradeMode && (
+                    <th className="w-12 px-4 py-3">
+                      <span className="sr-only">Select</span>
+                    </th>
+                  )}
                   <th className="text-left px-6 py-3 text-xs font-medium text-surface-500 uppercase tracking-wide">
                     Student Name
                   </th>
@@ -1133,7 +1352,29 @@ export default function AssignmentDashboardPage() {
               </thead>
               <tbody>
                 {paginatedSubmissions.map((submission) => (
-                  <tr key={submission.id} className="border-b border-surface-100 hover:bg-surface-50">
+                  <tr 
+                    key={submission.id} 
+                    className={`border-b border-surface-100 hover:bg-surface-50 transition-colors ${
+                      regradeMode && selectedForRegrade.has(submission.id) ? 'bg-amber-50' : ''
+                    }`}
+                  >
+                    {/* Checkbox for selective re-grade */}
+                    {regradeMode && (
+                      <td className="w-12 px-4 py-4">
+                        <button
+                          onClick={() => toggleSubmissionForRegrade(submission.id)}
+                          className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                            selectedForRegrade.has(submission.id)
+                              ? 'bg-amber-500 border-amber-500 text-white'
+                              : 'border-surface-300 hover:border-amber-400'
+                          }`}
+                        >
+                          {selectedForRegrade.has(submission.id) && (
+                            <CheckCircle className="w-3 h-3" />
+                          )}
+                        </button>
+                      </td>
+                    )}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-sm font-medium">
