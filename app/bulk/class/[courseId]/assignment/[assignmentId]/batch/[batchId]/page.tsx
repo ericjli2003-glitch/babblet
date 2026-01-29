@@ -783,10 +783,13 @@ export default function AssignmentDashboardPage() {
 
     try {
       // ============================================
-      // PARALLEL UPLOADS: Upload all files simultaneously
-      // Each file gets its own presign URL and uploads independently
+      // CHUNKED PARALLEL UPLOADS: Upload N files at a time
+      // This handles 100+ files efficiently without overwhelming browser
+      // Browser limits to ~6 connections per domain, so 10 concurrent is optimal
       // ============================================
-      const uploadPromises = validFiles.map(async (file, i) => {
+      const UPLOAD_CONCURRENCY = 10; // Upload 10 files at a time
+      
+      const uploadSingleFile = async (file: File, i: number): Promise<string | null> => {
         const studentName = inferStudentName(file.name);
         const uploadId = uploadingList[i].id;
 
@@ -811,7 +814,7 @@ export default function AssignmentDashboardPage() {
           if (!presignData.success) {
             console.error('Failed to get presign URL:', presignData.error);
             setUploadingFiles(prev => prev.map(uf => 
-              uf.id === uploadId ? { ...uf, progress: -1 } : uf // -1 indicates error
+              uf.id === uploadId ? { ...uf, progress: -1 } : uf
             ));
             return null;
           }
@@ -855,7 +858,7 @@ export default function AssignmentDashboardPage() {
             body: JSON.stringify({
               batchId,
               submissionId: presignData.submissionId,
-              fileKey: presignData.fileKey, // Required field!
+              fileKey: presignData.fileKey,
               studentName,
               originalFilename: file.name,
               fileSize: file.size,
@@ -881,12 +884,26 @@ export default function AssignmentDashboardPage() {
           ));
           return null;
         }
-      });
+      };
 
-      // Wait for all uploads to complete in parallel
-      console.log(`[AddMore] Starting ${uploadPromises.length} parallel uploads...`);
-      await Promise.all(uploadPromises);
-      console.log(`[AddMore] All uploads complete`);
+      // Process files in chunks with controlled concurrency
+      console.log(`[AddMore] Starting upload of ${validFiles.length} files (${UPLOAD_CONCURRENCY} concurrent)...`);
+      
+      const results: (string | null)[] = [];
+      for (let i = 0; i < validFiles.length; i += UPLOAD_CONCURRENCY) {
+        const chunk = validFiles.slice(i, i + UPLOAD_CONCURRENCY);
+        const chunkIndices = chunk.map((_, idx) => i + idx);
+        
+        console.log(`[AddMore] Uploading chunk ${Math.floor(i / UPLOAD_CONCURRENCY) + 1} of ${Math.ceil(validFiles.length / UPLOAD_CONCURRENCY)} (files ${i + 1}-${Math.min(i + UPLOAD_CONCURRENCY, validFiles.length)})`);
+        
+        const chunkResults = await Promise.all(
+          chunk.map((file, idx) => uploadSingleFile(file, chunkIndices[idx]))
+        );
+        results.push(...chunkResults);
+      }
+      
+      const successCount = results.filter(r => r !== null).length;
+      console.log(`[AddMore] All uploads complete: ${successCount}/${validFiles.length} successful`);
 
       // Refresh data after uploads complete
       const res = await fetch(`/api/bulk/status?batchId=${batchId}`);
