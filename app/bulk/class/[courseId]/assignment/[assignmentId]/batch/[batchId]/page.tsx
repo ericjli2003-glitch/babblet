@@ -312,8 +312,14 @@ export default function AssignmentDashboardPage() {
     setCompletedDuringSession(0);
     console.log(`[AssignmentDashboard] Starting grading for ${queuedCount} submissions`);
 
-    // Start 3 parallel workers that each continuously process until queue is empty
-    const numWorkers = Math.min(queuedCount, 3);
+    // ============================================
+    // PARALLEL WORKERS: Scale to match uploads, cap at 10
+    // Each worker continuously processes until queue is empty
+    // 10 is a safe limit to avoid API rate limits (Claude, Deepgram)
+    // ============================================
+    const MAX_WORKERS = 10;
+    const numWorkers = Math.min(queuedCount, MAX_WORKERS);
+    console.log(`[AssignmentDashboard] Launching ${numWorkers} parallel workers`);
     
     // Don't await - let workers run in background
     for (let i = 0; i < numWorkers; i++) {
@@ -371,8 +377,10 @@ export default function AssignmentDashboardPage() {
       setGradingStarted(true);
       setGradingStartTime(Date.now());
       
-      // Start workers
-      const numWorkers = Math.min(queuedCount + stuckCount, 3);
+      // Start workers - scale to match queued items, cap at 10
+      const MAX_WORKERS = 10;
+      const numWorkers = Math.min(queuedCount + stuckCount, MAX_WORKERS);
+      console.log(`[AutoResume] Launching ${numWorkers} workers for ${queuedCount} queued + ${stuckCount} stuck`);
       for (let i = 0; i < numWorkers; i++) {
         runWorker(i + 1);
       }

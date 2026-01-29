@@ -1046,8 +1046,12 @@ function BulkUploadPageContent() {
         f.stage === 'queued' || f.stage === 'transcribing' || f.stage === 'analyzing'
       ).length;
 
-      // Fire parallel requests for ALL queued files (max 5 at a time for safety)
-      const PARALLEL_REQUESTS = Math.min(Math.max(queuedCount, 3), 5);
+      // ============================================
+      // PARALLEL WORKERS: Scale to match uploads, cap at 10
+      // 10 is a safe limit to avoid API rate limits (Claude, Deepgram)
+      // ============================================
+      const MAX_WORKERS = 10;
+      const PARALLEL_REQUESTS = Math.min(queuedCount, MAX_WORKERS);
 
       console.log(`[Bulk] Firing ${PARALLEL_REQUESTS} parallel processing requests for ${queuedCount} queued files...`);
 
