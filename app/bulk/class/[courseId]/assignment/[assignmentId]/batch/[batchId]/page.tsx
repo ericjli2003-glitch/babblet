@@ -133,6 +133,12 @@ export default function AssignmentDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [batch, setBatch] = useState<BatchInfo | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  // ============================================
+  // HIGH WATER MARK: Prevent counts from going backwards
+  // Once we've seen N submissions, never show fewer than N
+  // This prevents UI flickering due to eventual consistency
+  // ============================================
+  const [submissionHighWaterMark, setSubmissionHighWaterMark] = useState(0);
   // GRADING STATUS: Single source of truth from API
   const [gradingStatus, setGradingStatus] = useState<GradingStatus>({
     status: 'not_started',
@@ -204,7 +210,9 @@ export default function AssignmentDashboardPage() {
           flagReason: sub.flagReason,
         }));
 
+        // Update submissions and high water mark
         setSubmissions(subs);
+        setSubmissionHighWaterMark(prev => Math.max(prev, subs.length));
       } catch (err) {
         console.error('[AssignmentDashboard] Error:', err);
         setError('Failed to load data');
@@ -415,7 +423,7 @@ export default function AssignmentDashboardPage() {
             setGradingStatus(data.gradingStatus);
           }
           
-          // Always replace with fresh data from server to ensure we get all updates
+          // Map fresh data from server
           const updatedSubs: Submission[] = data.submissions.map((sub: any) => ({
             id: sub.id,
             studentName: sub.studentName || 'Unknown Student',
@@ -431,7 +439,22 @@ export default function AssignmentDashboardPage() {
             flagReason: sub.flagReason,
           }));
           
-          setSubmissions(updatedSubs);
+          // ============================================
+          // HIGH WATER MARK: Only update if count >= high water mark
+          // Prevents UI from showing count going backwards
+          // ============================================
+          setSubmissions(prev => {
+            if (updatedSubs.length >= prev.length) {
+              // New data has same or more submissions - use it
+              setSubmissionHighWaterMark(mark => Math.max(mark, updatedSubs.length));
+              return updatedSubs;
+            } else {
+              // Fewer submissions than before - likely stale data, keep existing
+              // But update the status of matching submissions
+              const updatedMap = new Map(updatedSubs.map(s => [s.id, s]));
+              return prev.map(s => updatedMap.get(s.id) || s);
+            }
+          });
           
           if (data.batch) {
             setBatch(prev => prev ? {
@@ -518,8 +541,12 @@ export default function AssignmentDashboardPage() {
       });
       
       if (res.ok) {
-        // Remove from local state
-        setSubmissions(prev => prev.filter(s => s.id !== submissionId));
+        // Remove from local state and update high water mark
+        setSubmissions(prev => {
+          const filtered = prev.filter(s => s.id !== submissionId);
+          setSubmissionHighWaterMark(filtered.length); // Allow decrease for explicit delete
+          return filtered;
+        });
         setShowDeleteConfirm(null);
       } else {
         console.error('Failed to delete submission');
