@@ -17,7 +17,8 @@ import BatchWizard from '@/components/BatchWizard';
 // Configuration
 // ============================================
 
-const MAX_UPLOAD_CONCURRENCY = 10; // Upload up to 10 files in parallel
+// Uploads are fully parallel (no limit) - browser handles connection pooling
+// Grading is limited to 10 concurrent workers to avoid API rate limits
 const POLL_INTERVAL_MS = 2000; // Poll every 2s for faster updates
 const ESTIMATED_TRANSCRIPTION_TIME_MS = 45000; // ~45s per file
 const ESTIMATED_ANALYSIS_TIME_MS = 30000; // ~30s per file
@@ -1001,29 +1002,22 @@ function BulkUploadPageContent() {
     setIsProcessing(true);
     abortAllRef.current = false;
 
-    // Upload files with concurrency limit
-    const executing: Promise<void>[] = [];
+    // ============================================
+    // PARALLEL UPLOADS: Upload ALL files simultaneously
+    // No concurrency limit - browser handles connection pooling
+    // Grading has rate limits (10 max), but uploads are just I/O
+    // ============================================
+    console.log(`[Bulk] Starting ${pendingFiles.length} parallel uploads...`);
+    
+    const uploadPromises = pendingFiles.map(file => 
+      uploadSingleFile(file).catch(err => {
+        console.error(`[Bulk] Upload failed for ${file.filename}:`, err);
+        return false;
+      })
+    );
 
-    for (const file of pendingFiles) {
-      if (abortAllRef.current) break;
-
-      const p = uploadSingleFile(file).then(() => { });
-      executing.push(p);
-
-      if (executing.length >= MAX_UPLOAD_CONCURRENCY) {
-        await Promise.race(executing);
-        // Clean up settled promises
-        for (let i = executing.length - 1; i >= 0; i--) {
-          const settled = await Promise.race([
-            executing[i].then(() => true).catch(() => true),
-            Promise.resolve(false)
-          ]);
-          if (settled) executing.splice(i, 1);
-        }
-      }
-    }
-
-    await Promise.allSettled(executing);
+    await Promise.allSettled(uploadPromises);
+    console.log(`[Bulk] All uploads complete`);
 
     // Trigger server-side processing
     await triggerProcessing();
