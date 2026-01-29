@@ -17,7 +17,7 @@ import BatchWizard from '@/components/BatchWizard';
 // Configuration
 // ============================================
 
-const MAX_UPLOAD_CONCURRENCY = 3;
+const MAX_UPLOAD_CONCURRENCY = 10; // Upload up to 10 files in parallel
 const POLL_INTERVAL_MS = 2000; // Poll every 2s for faster updates
 const ESTIMATED_TRANSCRIPTION_TIME_MS = 45000; // ~45s per file
 const ESTIMATED_ANALYSIS_TIME_MS = 30000; // ~30s per file
