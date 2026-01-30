@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { ChevronDown, BookOpen, Lightbulb, ExternalLink, PlayCircle, CheckCircle, AlertTriangle, Target, Loader2, Sparkles, ChevronRight } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { ChevronDown, BookOpen, Lightbulb, ExternalLink, PlayCircle, CheckCircle, AlertTriangle, Target, Loader2, Sparkles, ChevronRight, List, AlignLeft, MessageSquarePlus, X, Send, GitBranch } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface ClassInsightCardProps {
@@ -68,6 +68,14 @@ const statusConfig = {
   },
 };
 
+// Branch insight type for user-created follow-ups
+interface BranchInsight {
+  id: string;
+  query: string;
+  response: string | null;
+  isLoading: boolean;
+}
+
 export default function ClassInsightCard({
   title,
   score,
@@ -85,8 +93,22 @@ export default function ClassInsightCard({
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
   const [additionalInsights, setAdditionalInsights] = useState<string | null>(null);
+  const [insightFormat, setInsightFormat] = useState<'bullets' | 'paragraphs'>('bullets');
+  const [branches, setBranches] = useState<BranchInsight[]>([]);
+  const [showBranchInput, setShowBranchInput] = useState(false);
+  const [branchQuery, setBranchQuery] = useState('');
   const config = statusConfig[status];
   const StatusIcon = config.icon;
+
+  // Build citations from evidence
+  const citations = useMemo(() => {
+    if (!evidence) return [];
+    return evidence.map((e, i) => ({
+      id: i + 1,
+      timestamp: e.timestamp,
+      text: e.text.slice(0, 50) + (e.text.length > 50 ? '...' : ''),
+    }));
+  }, [evidence]);
   
   const handleRequestInsights = useCallback(async () => {
     if (!onRequestMoreInsights || isLoadingInsights) return;
@@ -102,6 +124,119 @@ export default function ClassInsightCard({
       setIsLoadingInsights(false);
     }
   }, [title, onRequestMoreInsights, isLoadingInsights]);
+
+  // Handle creating a new branch insight
+  const handleCreateBranch = useCallback(async () => {
+    if (!branchQuery.trim() || !onRequestMoreInsights) return;
+    
+    const newBranch: BranchInsight = {
+      id: `branch-${Date.now()}`,
+      query: branchQuery,
+      response: null,
+      isLoading: true,
+    };
+    
+    setBranches(prev => [...prev, newBranch]);
+    setBranchQuery('');
+    setShowBranchInput(false);
+    
+    try {
+      const response = await onRequestMoreInsights(`${title} - specifically about: ${branchQuery}`);
+      setBranches(prev => prev.map(b => 
+        b.id === newBranch.id ? { ...b, response, isLoading: false } : b
+      ));
+    } catch (err) {
+      setBranches(prev => prev.map(b => 
+        b.id === newBranch.id ? { ...b, response: 'Failed to generate insight. Please try again.', isLoading: false } : b
+      ));
+    }
+  }, [branchQuery, title, onRequestMoreInsights]);
+
+  // Remove a branch
+  const removeBranch = useCallback((branchId: string) => {
+    setBranches(prev => prev.filter(b => b.id !== branchId));
+  }, []);
+
+  // Render insight content with citations and format toggle
+  const renderInsightContent = useCallback((content: string) => {
+    const lines = content.split('\n').filter(l => l.trim());
+    
+    // Parse citations in text like [1], [2]
+    const renderTextWithCitations = (text: string) => {
+      const parts = text.split(/(\[\d+\])/g);
+      return parts.map((part, i) => {
+        const match = part.match(/\[(\d+)\]/);
+        if (match) {
+          const citationNum = parseInt(match[1]);
+          const citation = citations[citationNum - 1];
+          if (citation) {
+            return (
+              <button
+                key={i}
+                onClick={() => onSeekToTime?.(parseTimestamp(citation.timestamp))}
+                className="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold text-primary-700 bg-primary-100 rounded-full hover:bg-primary-200 transition-colors mx-0.5"
+                title={`Jump to ${citation.timestamp}: "${citation.text}"`}
+              >
+                {citationNum}
+              </button>
+            );
+          }
+        }
+        // Handle bold text
+        if (part.includes('**')) {
+          const boldParts = part.split(/\*\*(.*?)\*\*/g);
+          return boldParts.map((bp, j) => 
+            j % 2 === 1 ? <strong key={`${i}-${j}`} className="font-semibold text-surface-900">{bp}</strong> : bp
+          );
+        }
+        return part;
+      });
+    };
+
+    if (insightFormat === 'bullets') {
+      return (
+        <ul className="space-y-2">
+          {lines.map((line, i) => {
+            // Skip headers in bullet mode, integrate into list
+            const cleanLine = line.replace(/^#+\s*/, '').replace(/^[-*]\s*/, '');
+            if (!cleanLine.trim()) return null;
+            
+            const isHeader = line.startsWith('#');
+            return (
+              <li key={i} className={`flex items-start gap-2 ${isHeader ? 'mt-3' : ''}`}>
+                {isHeader ? (
+                  <span className="font-semibold text-surface-900">{renderTextWithCitations(cleanLine)}</span>
+                ) : (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary-400 mt-2 flex-shrink-0" />
+                    <span className="text-surface-700">{renderTextWithCitations(cleanLine)}</span>
+                  </>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      );
+    }
+
+    // Paragraph format
+    return (
+      <div className="space-y-3">
+        {lines.map((line, i) => {
+          if (line.startsWith('## ')) {
+            return <h3 key={i} className="text-base font-semibold text-surface-900 mt-3 mb-1">{renderTextWithCitations(line.replace('## ', ''))}</h3>;
+          }
+          if (line.startsWith('# ')) {
+            return <h2 key={i} className="text-lg font-semibold text-surface-900 mt-3 mb-1">{renderTextWithCitations(line.replace('# ', ''))}</h2>;
+          }
+          if (line.startsWith('- ') || line.startsWith('* ')) {
+            return <p key={i} className="text-surface-700 pl-4">• {renderTextWithCitations(line.slice(2))}</p>;
+          }
+          return <p key={i} className="text-surface-700">{renderTextWithCitations(line)}</p>;
+        })}
+      </div>
+    );
+  }, [insightFormat, citations, onSeekToTime]);
 
   return (
     <div className={`bg-white rounded-2xl border ${config.borderColor} overflow-hidden`}>
@@ -238,39 +373,147 @@ export default function ClassInsightCard({
                         className="overflow-hidden"
                       >
                         <div className="mt-3 p-4 bg-gradient-to-r from-primary-50 to-blue-50 border border-primary-100 rounded-xl">
-                          <div className="flex items-center gap-1.5 mb-3">
-                            <Sparkles className="w-4 h-4 text-primary-600" />
-                            <span className="text-xs font-semibold text-primary-700 uppercase tracking-wide">Babblet Insights</span>
+                          {/* Header with format toggle */}
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-1.5">
+                              <Sparkles className="w-4 h-4 text-primary-600" />
+                              <span className="text-xs font-semibold text-primary-700 uppercase tracking-wide">Babblet Insights</span>
+                            </div>
+                            <div className="flex items-center gap-1 bg-white/60 rounded-lg p-0.5">
+                              <button
+                                onClick={() => setInsightFormat('bullets')}
+                                className={`p-1.5 rounded-md transition-colors ${
+                                  insightFormat === 'bullets' 
+                                    ? 'bg-white text-primary-600 shadow-sm' 
+                                    : 'text-surface-400 hover:text-surface-600'
+                                }`}
+                                title="Bullet format"
+                              >
+                                <List className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setInsightFormat('paragraphs')}
+                                className={`p-1.5 rounded-md transition-colors ${
+                                  insightFormat === 'paragraphs' 
+                                    ? 'bg-white text-primary-600 shadow-sm' 
+                                    : 'text-surface-400 hover:text-surface-600'
+                                }`}
+                                title="Paragraph format"
+                              >
+                                <AlignLeft className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
-                          <div className="text-sm text-surface-800 leading-relaxed prose prose-sm max-w-none prose-headings:text-surface-900 prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-2 prose-p:my-2 prose-strong:text-surface-900 prose-ul:my-2 prose-li:my-0.5">
-                            {additionalInsights.split('\n').map((line, i) => {
-                              // Handle headers
-                              if (line.startsWith('## ')) {
-                                return <h3 key={i} className="text-base font-semibold text-surface-900 mt-3 mb-2">{line.replace('## ', '')}</h3>;
-                              }
-                              if (line.startsWith('# ')) {
-                                return <h2 key={i} className="text-lg font-semibold text-surface-900 mt-3 mb-2">{line.replace('# ', '')}</h2>;
-                              }
-                              // Handle bold text with **
-                              if (line.includes('**')) {
-                                const parts = line.split(/\*\*(.*?)\*\*/g);
-                                return (
-                                  <p key={i} className="my-1.5">
-                                    {parts.map((part, j) => j % 2 === 1 ? <strong key={j} className="font-semibold text-surface-900">{part}</strong> : part)}
-                                  </p>
-                                );
-                              }
-                              // Handle list items
-                              if (line.startsWith('- ') || line.startsWith('* ')) {
-                                return <li key={i} className="ml-4 list-disc my-0.5">{line.slice(2)}</li>;
-                              }
-                              // Empty lines
-                              if (line.trim() === '') {
-                                return <div key={i} className="h-2" />;
-                              }
-                              // Regular paragraphs
-                              return <p key={i} className="my-1.5">{line}</p>;
-                            })}
+
+                          {/* Citations legend */}
+                          {citations.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mb-3 pb-3 border-b border-primary-100">
+                              <span className="text-xs text-primary-600 font-medium">References:</span>
+                              {citations.map((c) => (
+                                <button
+                                  key={c.id}
+                                  onClick={() => onSeekToTime?.(parseTimestamp(c.timestamp))}
+                                  className="inline-flex items-center gap-1 text-xs text-primary-700 hover:text-primary-800 hover:underline"
+                                >
+                                  <span className="w-4 h-4 flex items-center justify-center bg-primary-100 rounded-full text-[10px] font-semibold">{c.id}</span>
+                                  <span className="font-mono">{c.timestamp}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Insight content */}
+                          <div className="text-sm leading-relaxed">
+                            {renderInsightContent(additionalInsights)}
+                          </div>
+
+                          {/* Branch insights */}
+                          <AnimatePresence>
+                            {branches.map((branch) => (
+                              <motion.div
+                                key={branch.id}
+                                initial={{ opacity: 0, y: -10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                className="mt-4 ml-4 pl-4 border-l-2 border-primary-200"
+                              >
+                                <div className="flex items-start justify-between gap-2 mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <GitBranch className="w-3.5 h-3.5 text-primary-500" />
+                                    <span className="text-xs font-medium text-primary-700">{branch.query}</span>
+                                  </div>
+                                  <button
+                                    onClick={() => removeBranch(branch.id)}
+                                    className="p-1 text-surface-400 hover:text-surface-600 rounded-full hover:bg-white/50"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                                {branch.isLoading ? (
+                                  <div className="flex items-center gap-2 text-xs text-primary-600">
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    Generating insight...
+                                  </div>
+                                ) : branch.response && (
+                                  <div className="text-sm text-surface-700 bg-white/40 rounded-lg p-3">
+                                    {renderInsightContent(branch.response)}
+                                  </div>
+                                )}
+                              </motion.div>
+                            ))}
+                          </AnimatePresence>
+
+                          {/* Add branch button/input */}
+                          <div className="mt-4 pt-3 border-t border-primary-100">
+                            <AnimatePresence mode="wait">
+                              {showBranchInput ? (
+                                <motion.div
+                                  key="input"
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  className="flex items-center gap-2"
+                                >
+                                  <input
+                                    type="text"
+                                    value={branchQuery}
+                                    onChange={(e) => setBranchQuery(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleCreateBranch()}
+                                    placeholder="Ask a follow-up question..."
+                                    className="flex-1 px-3 py-2 text-sm bg-white border border-primary-200 rounded-lg focus:ring-2 focus:ring-primary-300 focus:border-primary-300 outline-none"
+                                    autoFocus
+                                  />
+                                  <button
+                                    onClick={handleCreateBranch}
+                                    disabled={!branchQuery.trim()}
+                                    className="p-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                  >
+                                    <Send className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setShowBranchInput(false);
+                                      setBranchQuery('');
+                                    }}
+                                    className="p-2 text-surface-500 hover:text-surface-700 transition-colors"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </motion.div>
+                              ) : (
+                                <motion.button
+                                  key="button"
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  exit={{ opacity: 0 }}
+                                  onClick={() => setShowBranchInput(true)}
+                                  className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
+                                >
+                                  <MessageSquarePlus className="w-4 h-4" />
+                                  Ask a follow-up
+                                </motion.button>
+                              )}
+                            </AnimatePresence>
                           </div>
                         </div>
                       </motion.div>

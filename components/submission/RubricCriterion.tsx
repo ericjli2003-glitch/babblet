@@ -1,8 +1,16 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { ChevronDown, Sparkles, FileText, Loader2, ChevronRight, Lightbulb } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { ChevronDown, Sparkles, FileText, Loader2, ChevronRight, Lightbulb, List, AlignLeft, MessageSquarePlus, X, Send, GitBranch } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// Branch insight type
+interface BranchInsight {
+  id: string;
+  query: string;
+  response: string | null;
+  isLoading: boolean;
+}
 
 interface EvidenceItem {
   timestamp?: string;
@@ -39,7 +47,118 @@ export default function RubricCriterion({
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
   const [additionalInsights, setAdditionalInsights] = useState<string | null>(null);
   const [showInsights, setShowInsights] = useState(false);
+  const [insightFormat, setInsightFormat] = useState<'bullets' | 'paragraphs'>('bullets');
+  const [branches, setBranches] = useState<BranchInsight[]>([]);
+  const [showBranchInput, setShowBranchInput] = useState(false);
+  const [branchQuery, setBranchQuery] = useState('');
   const percentage = (score / maxScore) * 100;
+
+  // Build citations from evidence
+  const citations = useMemo(() => {
+    return evidence.map((e, i) => ({
+      id: i + 1,
+      timestamp: e.timestamp || '',
+      text: e.quote.slice(0, 40) + (e.quote.length > 40 ? '...' : ''),
+    }));
+  }, [evidence]);
+
+  // Render insight content with format toggle
+  const renderInsightContent = useCallback((content: string) => {
+    const lines = content.split('\n').filter(l => l.trim());
+    
+    // Parse citations and bold
+    const renderLine = (text: string) => {
+      // Handle citations like [1], [2]
+      const parts = text.split(/(\[\d+\])/g);
+      return parts.map((part, i) => {
+        const match = part.match(/\[(\d+)\]/);
+        if (match) {
+          const citationNum = parseInt(match[1]);
+          const citation = citations[citationNum - 1];
+          if (citation && citation.timestamp) {
+            return (
+              <span key={i} className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-semibold text-amber-700 bg-amber-200 rounded-full mx-0.5" title={`${citation.timestamp}: ${citation.text}`}>
+                {citationNum}
+              </span>
+            );
+          }
+        }
+        // Handle bold
+        if (part.includes('**')) {
+          const boldParts = part.split(/\*\*(.*?)\*\*/g);
+          return boldParts.map((bp, j) => 
+            j % 2 === 1 ? <strong key={`${i}-${j}`} className="font-semibold">{bp}</strong> : bp
+          );
+        }
+        return part;
+      });
+    };
+
+    if (insightFormat === 'bullets') {
+      return (
+        <ul className="space-y-1.5">
+          {lines.map((line, i) => {
+            const cleanLine = line.replace(/^#+\s*/, '').replace(/^[-*]\s*/, '');
+            if (!cleanLine.trim()) return null;
+            const isHeader = line.startsWith('#');
+            return (
+              <li key={i} className={`flex items-start gap-2 ${isHeader ? 'mt-2' : ''}`}>
+                {isHeader ? (
+                  <span className="font-semibold">{renderLine(cleanLine)}</span>
+                ) : (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 flex-shrink-0" />
+                    <span>{renderLine(cleanLine)}</span>
+                  </>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      );
+    }
+
+    return (
+      <div className="space-y-2">
+        {lines.map((line, i) => {
+          if (line.startsWith('## ')) return <h3 key={i} className="font-semibold mt-2">{renderLine(line.replace('## ', ''))}</h3>;
+          if (line.startsWith('- ') || line.startsWith('* ')) return <p key={i} className="pl-3">• {renderLine(line.slice(2))}</p>;
+          return <p key={i}>{renderLine(line)}</p>;
+        })}
+      </div>
+    );
+  }, [insightFormat, citations]);
+
+  // Handle branch creation
+  const handleCreateBranch = useCallback(async () => {
+    if (!branchQuery.trim() || !onRequestInsights) return;
+    
+    const newBranch: BranchInsight = {
+      id: `branch-${Date.now()}`,
+      query: branchQuery,
+      response: null,
+      isLoading: true,
+    };
+    
+    setBranches(prev => [...prev, newBranch]);
+    setBranchQuery('');
+    setShowBranchInput(false);
+    
+    try {
+      const response = await onRequestInsights(`${name} - specifically about: ${branchQuery}`);
+      setBranches(prev => prev.map(b => 
+        b.id === newBranch.id ? { ...b, response, isLoading: false } : b
+      ));
+    } catch {
+      setBranches(prev => prev.map(b => 
+        b.id === newBranch.id ? { ...b, response: 'Failed to generate insight.', isLoading: false } : b
+      ));
+    }
+  }, [branchQuery, name, onRequestInsights]);
+
+  const removeBranch = useCallback((branchId: string) => {
+    setBranches(prev => prev.filter(b => b.id !== branchId));
+  }, []);
   
   const handleRequestInsights = useCallback(async () => {
     if (!onRequestInsights || isLoadingInsights) return;
@@ -187,31 +306,109 @@ export default function RubricCriterion({
                         className="overflow-hidden"
                       >
                         <div className="mt-3 p-3 bg-amber-50 border border-amber-100 rounded-lg">
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <Lightbulb className="w-4 h-4 text-amber-600" />
-                            <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Babblet Insights</span>
+                          {/* Header with format toggle */}
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-1.5">
+                              <Lightbulb className="w-4 h-4 text-amber-600" />
+                              <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Babblet Insights</span>
+                            </div>
+                            <div className="flex items-center gap-0.5 bg-amber-100/50 rounded p-0.5">
+                              <button
+                                onClick={() => setInsightFormat('bullets')}
+                                className={`p-1 rounded transition-colors ${insightFormat === 'bullets' ? 'bg-white text-amber-700 shadow-sm' : 'text-amber-500 hover:text-amber-600'}`}
+                                title="Bullet format"
+                              >
+                                <List className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => setInsightFormat('paragraphs')}
+                                className={`p-1 rounded transition-colors ${insightFormat === 'paragraphs' ? 'bg-white text-amber-700 shadow-sm' : 'text-amber-500 hover:text-amber-600'}`}
+                                title="Paragraph format"
+                              >
+                                <AlignLeft className="w-3 h-3" />
+                              </button>
+                            </div>
                           </div>
+
+                          {/* Citations legend */}
+                          {citations.length > 0 && citations.some(c => c.timestamp) && (
+                            <div className="flex flex-wrap gap-1.5 mb-2 pb-2 border-b border-amber-200 text-xs">
+                              <span className="text-amber-600">Refs:</span>
+                              {citations.filter(c => c.timestamp).map(c => (
+                                <span key={c.id} className="text-amber-700">
+                                  <span className="w-4 h-4 inline-flex items-center justify-center bg-amber-200 rounded-full text-[10px] font-semibold">{c.id}</span>
+                                  <span className="font-mono ml-0.5">{c.timestamp}</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Content */}
                           <div className="text-sm text-amber-900 leading-relaxed">
-                            {additionalInsights.split('\n').map((line, i) => {
-                              if (line.startsWith('## ')) {
-                                return <h3 key={i} className="text-base font-semibold mt-2 mb-1">{line.replace('## ', '')}</h3>;
-                              }
-                              if (line.includes('**')) {
-                                const parts = line.split(/\*\*(.*?)\*\*/g);
-                                return (
-                                  <p key={i} className="my-1">
-                                    {parts.map((part, j) => j % 2 === 1 ? <strong key={j} className="font-semibold">{part}</strong> : part)}
-                                  </p>
-                                );
-                              }
-                              if (line.startsWith('- ') || line.startsWith('* ')) {
-                                return <li key={i} className="ml-4 list-disc my-0.5">{line.slice(2)}</li>;
-                              }
-                              if (line.trim() === '') {
-                                return <div key={i} className="h-1.5" />;
-                              }
-                              return <p key={i} className="my-1">{line}</p>;
-                            })}
+                            {renderInsightContent(additionalInsights)}
+                          </div>
+
+                          {/* Branch insights */}
+                          <AnimatePresence>
+                            {branches.map((branch) => (
+                              <motion.div
+                                key={branch.id}
+                                initial={{ opacity: 0, y: -10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                className="mt-3 ml-3 pl-3 border-l-2 border-amber-300"
+                              >
+                                <div className="flex items-start justify-between gap-2 mb-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <GitBranch className="w-3 h-3 text-amber-500" />
+                                    <span className="text-xs font-medium text-amber-700">{branch.query}</span>
+                                  </div>
+                                  <button onClick={() => removeBranch(branch.id)} className="p-0.5 text-amber-400 hover:text-amber-600">
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                                {branch.isLoading ? (
+                                  <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    Generating...
+                                  </div>
+                                ) : branch.response && (
+                                  <div className="text-sm text-amber-800 bg-amber-100/50 rounded p-2">
+                                    {renderInsightContent(branch.response)}
+                                  </div>
+                                )}
+                              </motion.div>
+                            ))}
+                          </AnimatePresence>
+
+                          {/* Add branch */}
+                          <div className="mt-3 pt-2 border-t border-amber-200">
+                            <AnimatePresence mode="wait">
+                              {showBranchInput ? (
+                                <motion.div key="input" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={branchQuery}
+                                    onChange={(e) => setBranchQuery(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleCreateBranch()}
+                                    placeholder="Ask a follow-up..."
+                                    className="flex-1 px-2 py-1.5 text-sm bg-white border border-amber-200 rounded focus:ring-1 focus:ring-amber-300 outline-none"
+                                    autoFocus
+                                  />
+                                  <button onClick={handleCreateBranch} disabled={!branchQuery.trim()} className="p-1.5 bg-amber-500 text-white rounded hover:bg-amber-600 disabled:opacity-50">
+                                    <Send className="w-3 h-3" />
+                                  </button>
+                                  <button onClick={() => { setShowBranchInput(false); setBranchQuery(''); }} className="p-1.5 text-amber-500 hover:text-amber-700">
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </motion.div>
+                              ) : (
+                                <motion.button key="btn" initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => setShowBranchInput(true)} className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 font-medium">
+                                  <MessageSquarePlus className="w-3.5 h-3.5" />
+                                  Ask follow-up
+                                </motion.button>
+                              )}
+                            </AnimatePresence>
                           </div>
                         </div>
                       </motion.div>
