@@ -517,24 +517,31 @@ export default function AssignmentDashboardPage() {
           }));
           
           // ============================================
-          // HIGH WATER MARK + GRADE PROTECTION: 
+          // SUBMISSION UPDATE: Merge server data with local state
+          // - If submission was explicitly regraded (status='queued'), use new data
+          // - Otherwise preserve grade data to prevent flicker
           // - Never show fewer submissions than we've seen
-          // - Never regress a graded submission to ungraded
           // ============================================
           setSubmissions(prev => {
             const prevMap = new Map(prev.map(s => [s.id, s]));
             
-            // Merge submissions, preserving grade data
+            // Merge submissions
             const mergedSubs = updatedSubs.map(newSub => {
               const existingSub = prevMap.get(newSub.id);
               
-              // If existing submission has grade data, preserve it
+              // If submission is now queued/processing, it's being regraded - use server data
+              // This allows regrades to show proper status even if previously graded
+              if (['queued', 'transcribing', 'analyzing'].includes(newSub.status)) {
+                return newSub;
+              }
+              
+              // If existing submission has grade data and new doesn't, preserve existing
+              // (protects against transient API inconsistencies during normal grading)
               if (existingSub?.hasGradeData && existingSub.overallScore != null) {
-                // Only update if new data also has a grade (to allow re-grading)
                 if (newSub.hasGradeData && newSub.overallScore != null) {
-                  return newSub;
+                  return newSub; // New grade available, use it
                 }
-                // Otherwise keep the existing graded data
+                // Keep existing graded data (prevents flicker)
                 return existingSub;
               }
               
@@ -545,12 +552,16 @@ export default function AssignmentDashboardPage() {
               setSubmissionHighWaterMark(mark => Math.max(mark, mergedSubs.length));
               return mergedSubs;
             } else {
-              // Fewer submissions - merge into existing
+              // Fewer submissions from server - merge into existing to prevent count drop
               const mergedMap = new Map(mergedSubs.map(s => [s.id, s]));
               return prev.map(s => {
                 const updated = mergedMap.get(s.id);
                 if (!updated) return s;
-                // Preserve grade if existing has it
+                // If regrading (queued status), use server data
+                if (['queued', 'transcribing', 'analyzing'].includes(updated.status)) {
+                  return updated;
+                }
+                // Preserve grade if existing has it and new doesn't
                 if (s.hasGradeData && s.overallScore != null && (!updated.hasGradeData || updated.overallScore == null)) {
                   return s;
                 }
@@ -604,13 +615,16 @@ export default function AssignmentDashboardPage() {
 
   // ============================================
   // DISPLAY STATUS: Computed from actual submissions data
-  // This is the source of truth for UI - if all have grades, show completed
+  // This is the source of truth for UI - always reflects real state
   // ============================================
   const displayGradingStatus = useMemo(() => {
-    // If all submissions have grades, we're complete regardless of API status
+    // If all submissions have grades, we're complete
     const allGraded = stats.total > 0 && stats.graded === stats.total;
     
-    if (allGraded) {
+    // Check if any submissions are being regraded (queued/processing)
+    const hasRegrading = stats.pending > 0;
+    
+    if (allGraded && !hasRegrading) {
       return {
         ...gradingStatus,
         status: 'completed' as const,
@@ -619,11 +633,23 @@ export default function AssignmentDashboardPage() {
       };
     }
     
-    // Otherwise use the API status but ensure count never goes backwards
+    // If regrading in progress, use actual counts (don't apply high water mark)
+    if (hasRegrading) {
+      const status = stats.graded === 0 ? 'processing' : 
+                     stats.graded < stats.total ? 'processing' : 'completed';
+      return {
+        ...gradingStatus,
+        status: status as 'processing' | 'completed',
+        gradedCount: stats.graded,
+        totalCount: stats.total,
+      };
+    }
+    
+    // Otherwise use actual stats
     return {
       ...gradingStatus,
-      gradedCount: Math.max(gradingStatus.gradedCount, stats.graded),
-      totalCount: Math.max(gradingStatus.totalCount, stats.total),
+      gradedCount: stats.graded,
+      totalCount: stats.total,
     };
   }, [gradingStatus, stats]);
 
@@ -666,46 +692,85 @@ export default function AssignmentDashboardPage() {
     setIsRegrading(true);
     try {
       // Re-grade only selected submissions
-      const submissionIds = Array.from(selectedForRegrade);
-      await fetch(`/api/bulk/regrade`, { 
+      const submissionIdsToRegrade = Array.from(selectedForRegrade);
+      console.log(`[Regrade] Starting regrade for ${submissionIdsToRegrade.length} submissions`);
+      
+      const regradeRes = await fetch(`/api/bulk/regrade`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batchId, submissionIds })
+        body: JSON.stringify({ batchId, submissionIds: submissionIdsToRegrade })
       });
+      const regradeData = await regradeRes.json();
+      console.log(`[Regrade] API response:`, regradeData);
       
       // Exit regrade mode and clear selections
       setRegradeMode(false);
       setSelectedForRegrade(new Set());
       
-      // Start grading workers for the re-queued submissions
+      // Unlock status to allow showing processing
+      statusLockedRef.current = null;
       setGradingStarted(true);
       setGradingStartTime(Date.now());
       
-      const MAX_WORKERS = 10;
-      const numWorkers = Math.min(submissionIds.length, MAX_WORKERS);
-      for (let i = 0; i < numWorkers; i++) {
-        runWorker(i + 1);
-      }
-      
-      // Refetch data
+      // Refetch data immediately
       const res = await fetch(`/api/bulk/status?batchId=${batchId}`);
       const data = await res.json();
       if (data.submissions) {
-        setSubmissions(data.submissions.map((sub: any) => ({
+        const subs = data.submissions.map((sub: any) => ({
           id: sub.id,
           studentName: sub.studentName || 'Unknown Student',
           originalFilename: sub.originalFilename || 'Unknown',
           status: sub.status,
           createdAt: sub.createdAt || Date.now(),
           completedAt: sub.completedAt,
-          overallScore: sub.rubricEvaluation?.overallScore,
+          overallScore: sub.overallScore,
           hasGradeData: sub.hasGradeData ?? false,
           videoLength: sub.duration ? formatDuration(sub.duration) : undefined,
           aiSentiment: sub.analysis?.sentiment,
           flagged: sub.flagged,
           flagReason: sub.flagReason,
-        })));
+        }));
+        setSubmissions(subs);
+        
+        // Update grading status
+        if (data.gradingStatus) {
+          setGradingStatus(data.gradingStatus);
+        }
       }
+      
+      // Start workers directly (avoid runWorker closure issues)
+      const MAX_WORKERS = 10;
+      const numWorkers = Math.min(submissionIdsToRegrade.length, MAX_WORKERS);
+      
+      const workerPromises = Array.from({ length: numWorkers }, async (_, i) => {
+        const workerId = i + 1;
+        let keepProcessing = true;
+        
+        while (keepProcessing) {
+          try {
+            console.log(`[Regrade] Worker ${workerId} processing...`);
+            const workerRes = await fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST' });
+            const workerData = await workerRes.json();
+            console.log(`[Regrade] Worker ${workerId} result:`, workerData);
+            
+            if (workerData.processed > 0) {
+              await new Promise(r => setTimeout(r, 500));
+            } else {
+              keepProcessing = false;
+            }
+          } catch (err) {
+            console.error(`[Regrade] Worker ${workerId} error:`, err);
+            keepProcessing = false;
+          }
+        }
+        console.log(`[Regrade] Worker ${workerId} finished`);
+      });
+      
+      // Run workers in background
+      Promise.all(workerPromises).then(() => {
+        console.log(`[Regrade] All workers finished`);
+      });
+      
     } catch (err) {
       console.error('[AssignmentDashboard] Regrade error:', err);
     } finally {
