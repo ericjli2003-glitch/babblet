@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { ChevronDown, Sparkles, FileText, Loader2, ChevronRight, Lightbulb, List, AlignLeft, MessageSquarePlus, X, Send, GitBranch } from 'lucide-react';
+import { ChevronDown, Sparkles, FileText, Loader2, ChevronRight, Lightbulb, MessageSquarePlus, X, Send, GitBranch, EyeOff, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Branch insight type
@@ -47,7 +47,7 @@ export default function RubricCriterion({
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
   const [additionalInsights, setAdditionalInsights] = useState<string | null>(null);
   const [showInsights, setShowInsights] = useState(false);
-  const [insightFormat, setInsightFormat] = useState<'bullets' | 'paragraphs'>('bullets');
+  const [isInsightsHidden, setIsInsightsHidden] = useState(false);
   const [branches, setBranches] = useState<BranchInsight[]>([]);
   const [showBranchInput, setShowBranchInput] = useState(false);
   const [branchQuery, setBranchQuery] = useState('');
@@ -62,13 +62,12 @@ export default function RubricCriterion({
     }));
   }, [evidence]);
 
-  // Render insight content with format toggle
+  // Render insight content (paragraph format with citations)
   const renderInsightContent = useCallback((content: string) => {
     const lines = content.split('\n').filter(l => l.trim());
     
     // Parse citations and bold
     const renderLine = (text: string) => {
-      // Handle citations like [1], [2]
       const parts = text.split(/(\[\d+\])/g);
       return parts.map((part, i) => {
         const match = part.match(/\[(\d+)\]/);
@@ -83,7 +82,6 @@ export default function RubricCriterion({
             );
           }
         }
-        // Handle bold
         if (part.includes('**')) {
           const boldParts = part.split(/\*\*(.*?)\*\*/g);
           return boldParts.map((bp, j) => 
@@ -94,30 +92,6 @@ export default function RubricCriterion({
       });
     };
 
-    if (insightFormat === 'bullets') {
-      return (
-        <ul className="space-y-1.5">
-          {lines.map((line, i) => {
-            const cleanLine = line.replace(/^#+\s*/, '').replace(/^[-*]\s*/, '');
-            if (!cleanLine.trim()) return null;
-            const isHeader = line.startsWith('#');
-            return (
-              <li key={i} className={`flex items-start gap-2 ${isHeader ? 'mt-2' : ''}`}>
-                {isHeader ? (
-                  <span className="font-semibold">{renderLine(cleanLine)}</span>
-                ) : (
-                  <>
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 flex-shrink-0" />
-                    <span>{renderLine(cleanLine)}</span>
-                  </>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      );
-    }
-
     return (
       <div className="space-y-2">
         {lines.map((line, i) => {
@@ -127,7 +101,7 @@ export default function RubricCriterion({
         })}
       </div>
     );
-  }, [insightFormat, citations]);
+  }, [citations]);
 
   // Handle branch creation
   const handleCreateBranch = useCallback(async () => {
@@ -295,7 +269,7 @@ export default function RubricCriterion({
                     {!isLoadingInsights && !showInsights && <ChevronRight className="w-3 h-3" />}
                   </button>
                   
-                  {/* Additional Insights Panel */}
+                  {/* Additional Insights Panel - persists once generated */}
                   <AnimatePresence>
                     {showInsights && additionalInsights && (
                       <motion.div
@@ -306,110 +280,137 @@ export default function RubricCriterion({
                         className="overflow-hidden"
                       >
                         <div className="mt-3 p-3 bg-amber-50 border border-amber-100 rounded-lg">
-                          {/* Header with format toggle */}
+                          {/* Header with hide/delete controls */}
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-1.5">
                               <Lightbulb className="w-4 h-4 text-amber-600" />
                               <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Babblet Insights</span>
                             </div>
-                            <div className="flex items-center gap-0.5 bg-amber-100/50 rounded p-0.5">
+                            <div className="flex items-center gap-0.5">
                               <button
-                                onClick={() => setInsightFormat('bullets')}
-                                className={`p-1 rounded transition-colors ${insightFormat === 'bullets' ? 'bg-white text-amber-700 shadow-sm' : 'text-amber-500 hover:text-amber-600'}`}
-                                title="Bullet format"
+                                onClick={() => setIsInsightsHidden(!isInsightsHidden)}
+                                className="p-1 text-amber-500 hover:text-amber-700 rounded transition-colors"
+                                title={isInsightsHidden ? 'Show insights' : 'Hide insights'}
                               >
-                                <List className="w-3 h-3" />
+                                {isInsightsHidden ? <ChevronDown className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                               </button>
                               <button
-                                onClick={() => setInsightFormat('paragraphs')}
-                                className={`p-1 rounded transition-colors ${insightFormat === 'paragraphs' ? 'bg-white text-amber-700 shadow-sm' : 'text-amber-500 hover:text-amber-600'}`}
-                                title="Paragraph format"
+                                onClick={() => {
+                                  setAdditionalInsights(null);
+                                  setShowInsights(false);
+                                  setBranches([]);
+                                }}
+                                className="p-1 text-amber-500 hover:text-red-500 rounded transition-colors"
+                                title="Delete insights"
                               >
-                                <AlignLeft className="w-3 h-3" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           </div>
 
-                          {/* Citations legend */}
-                          {citations.length > 0 && citations.some(c => c.timestamp) && (
-                            <div className="flex flex-wrap gap-1.5 mb-2 pb-2 border-b border-amber-200 text-xs">
-                              <span className="text-amber-600">Refs:</span>
-                              {citations.filter(c => c.timestamp).map(c => (
-                                <span key={c.id} className="text-amber-700">
-                                  <span className="w-4 h-4 inline-flex items-center justify-center bg-amber-200 rounded-full text-[10px] font-semibold">{c.id}</span>
-                                  <span className="font-mono ml-0.5">{c.timestamp}</span>
-                                </span>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Content */}
-                          <div className="text-sm text-amber-900 leading-relaxed">
-                            {renderInsightContent(additionalInsights)}
-                          </div>
-
-                          {/* Branch insights */}
+                          {/* Collapsible content */}
                           <AnimatePresence>
-                            {branches.map((branch) => (
+                            {!isInsightsHidden && (
                               <motion.div
-                                key={branch.id}
-                                initial={{ opacity: 0, y: -10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -10 }}
-                                className="mt-3 ml-3 pl-3 border-l-2 border-amber-300"
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.15 }}
                               >
-                                <div className="flex items-start justify-between gap-2 mb-1">
-                                  <div className="flex items-center gap-1.5">
-                                    <GitBranch className="w-3 h-3 text-amber-500" />
-                                    <span className="text-xs font-medium text-amber-700">{branch.query}</span>
-                                  </div>
-                                  <button onClick={() => removeBranch(branch.id)} className="p-0.5 text-amber-400 hover:text-amber-600">
-                                    <X className="w-3 h-3" />
-                                  </button>
-                                </div>
-                                {branch.isLoading ? (
-                                  <div className="flex items-center gap-1.5 text-xs text-amber-600">
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                    Generating...
-                                  </div>
-                                ) : branch.response && (
-                                  <div className="text-sm text-amber-800 bg-amber-100/50 rounded p-2">
-                                    {renderInsightContent(branch.response)}
+                                {/* Citations legend */}
+                                {citations.length > 0 && citations.some(c => c.timestamp) && (
+                                  <div className="flex flex-wrap gap-1.5 mb-2 pb-2 border-b border-amber-200 text-xs">
+                                    <span className="text-amber-600">Refs:</span>
+                                    {citations.filter(c => c.timestamp).map(c => (
+                                      <span key={c.id} className="text-amber-700">
+                                        <span className="w-4 h-4 inline-flex items-center justify-center bg-amber-200 rounded-full text-[10px] font-semibold">{c.id}</span>
+                                        <span className="font-mono ml-0.5">{c.timestamp}</span>
+                                      </span>
+                                    ))}
                                   </div>
                                 )}
+
+                                {/* Content */}
+                                <div className="text-sm text-amber-900 leading-relaxed">
+                                  {renderInsightContent(additionalInsights)}
+                                </div>
+
+                                {/* Branch insights */}
+                                <AnimatePresence>
+                                  {branches.map((branch) => (
+                                    <motion.div
+                                      key={branch.id}
+                                      initial={{ opacity: 0, y: -10 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      exit={{ opacity: 0, y: -10 }}
+                                      className="mt-3 ml-3 pl-3 border-l-2 border-amber-300"
+                                    >
+                                      <div className="flex items-start justify-between gap-2 mb-1">
+                                        <div className="flex items-center gap-1.5">
+                                          <GitBranch className="w-3 h-3 text-amber-500" />
+                                          <span className="text-xs font-medium text-amber-700">{branch.query}</span>
+                                        </div>
+                                        <button onClick={() => removeBranch(branch.id)} className="p-0.5 text-amber-400 hover:text-red-500" title="Delete branch">
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                      {branch.isLoading ? (
+                                        <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                          Generating...
+                                        </div>
+                                      ) : branch.response && (
+                                        <div className="text-sm text-amber-800 bg-amber-100/50 rounded p-2">
+                                          {renderInsightContent(branch.response)}
+                                        </div>
+                                      )}
+                                    </motion.div>
+                                  ))}
+                                </AnimatePresence>
+
+                                {/* Add branch */}
+                                <div className="mt-3 pt-2 border-t border-amber-200">
+                                  <AnimatePresence mode="wait">
+                                    {showBranchInput ? (
+                                      <motion.div key="input" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2">
+                                        <input
+                                          type="text"
+                                          value={branchQuery}
+                                          onChange={(e) => setBranchQuery(e.target.value)}
+                                          onKeyDown={(e) => e.key === 'Enter' && handleCreateBranch()}
+                                          placeholder="Ask a follow-up..."
+                                          className="flex-1 px-2 py-1.5 text-sm bg-white border border-amber-200 rounded focus:ring-1 focus:ring-amber-300 outline-none"
+                                          autoFocus
+                                        />
+                                        <button onClick={handleCreateBranch} disabled={!branchQuery.trim()} className="p-1.5 bg-amber-500 text-white rounded hover:bg-amber-600 disabled:opacity-50">
+                                          <Send className="w-3 h-3" />
+                                        </button>
+                                        <button onClick={() => { setShowBranchInput(false); setBranchQuery(''); }} className="p-1.5 text-amber-500 hover:text-amber-700">
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </motion.div>
+                                    ) : (
+                                      <motion.button key="btn" initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => setShowBranchInput(true)} className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 font-medium">
+                                        <MessageSquarePlus className="w-3.5 h-3.5" />
+                                        Ask follow-up
+                                      </motion.button>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
                               </motion.div>
-                            ))}
+                            )}
                           </AnimatePresence>
 
-                          {/* Add branch */}
-                          <div className="mt-3 pt-2 border-t border-amber-200">
-                            <AnimatePresence mode="wait">
-                              {showBranchInput ? (
-                                <motion.div key="input" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2">
-                                  <input
-                                    type="text"
-                                    value={branchQuery}
-                                    onChange={(e) => setBranchQuery(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleCreateBranch()}
-                                    placeholder="Ask a follow-up..."
-                                    className="flex-1 px-2 py-1.5 text-sm bg-white border border-amber-200 rounded focus:ring-1 focus:ring-amber-300 outline-none"
-                                    autoFocus
-                                  />
-                                  <button onClick={handleCreateBranch} disabled={!branchQuery.trim()} className="p-1.5 bg-amber-500 text-white rounded hover:bg-amber-600 disabled:opacity-50">
-                                    <Send className="w-3 h-3" />
-                                  </button>
-                                  <button onClick={() => { setShowBranchInput(false); setBranchQuery(''); }} className="p-1.5 text-amber-500 hover:text-amber-700">
-                                    <X className="w-3 h-3" />
-                                  </button>
-                                </motion.div>
-                              ) : (
-                                <motion.button key="btn" initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => setShowBranchInput(true)} className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 font-medium">
-                                  <MessageSquarePlus className="w-3.5 h-3.5" />
-                                  Ask follow-up
-                                </motion.button>
-                              )}
-                            </AnimatePresence>
-                          </div>
+                          {/* Collapsed state indicator */}
+                          {isInsightsHidden && (
+                            <button
+                              onClick={() => setIsInsightsHidden(false)}
+                              className="text-xs text-amber-600 hover:text-amber-700 flex items-center gap-1"
+                            >
+                              <ChevronDown className="w-3 h-3" />
+                              Show insights
+                            </button>
+                          )}
                         </div>
                       </motion.div>
                     )}
