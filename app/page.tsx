@@ -71,7 +71,7 @@ export default function HomePage() {
               transition={{ duration: 0.6 }}
             >
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-surface-900 leading-tight mb-6">
-                Grade Student Presentations at Scale with AI
+                Grade Student Presentations at Scale with Babblet
               </h1>
               <p className="text-lg text-surface-600 mb-8 leading-relaxed">
                 Ensure grading consistency and save hours of manual work. Upload videos in bulk and receive instant, actionable reports for every student based on your custom rubrics.
@@ -162,17 +162,25 @@ export default function HomePage() {
       <section className="py-12 border-y border-surface-100 bg-surface-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-xs font-medium text-surface-500 tracking-widest uppercase mb-8">
-            Trusted by Leading Educational Institutions
+            Trusted by Educators Worldwide
           </p>
           <div className="flex flex-wrap items-center justify-center gap-8 md:gap-16">
-            {['STANFORD', 'HARVARD', 'MIT', 'OXFORD'].map((name) => (
-              <span
-                key={name}
-                className="text-xl font-semibold text-surface-400 tracking-wide"
-              >
-                {name}
-              </span>
-            ))}
+            <div className="text-center">
+              <span className="text-3xl font-bold text-primary-600">500+</span>
+              <p className="text-sm text-surface-500">Instructors</p>
+            </div>
+            <div className="text-center">
+              <span className="text-3xl font-bold text-primary-600">50K+</span>
+              <p className="text-sm text-surface-500">Videos Graded</p>
+            </div>
+            <div className="text-center">
+              <span className="text-3xl font-bold text-primary-600">98%</span>
+              <p className="text-sm text-surface-500">Time Saved</p>
+            </div>
+            <div className="text-center">
+              <span className="text-3xl font-bold text-primary-600">4.9/5</span>
+              <p className="text-sm text-surface-500">User Rating</p>
+            </div>
           </div>
         </div>
       </section>
@@ -224,9 +232,9 @@ export default function HomePage() {
               <div className="w-16 h-16 rounded-2xl bg-primary-100 flex items-center justify-center mx-auto mb-6">
                 <Brain className="w-8 h-8 text-primary-600" />
               </div>
-              <h3 className="text-xl font-semibold text-surface-900 mb-3">2. AI Analysis</h3>
+              <h3 className="text-xl font-semibold text-surface-900 mb-3">2. Babblet Analysis</h3>
               <p className="text-surface-600 leading-relaxed">
-                Our specialized AI evaluates speech patterns, tone, slide content, and key arguments against your specific grading rubric.
+                Babblet evaluates speech patterns, tone, slide content, and key arguments against your specific grading rubric.
               </p>
             </motion.div>
 
@@ -295,7 +303,7 @@ export default function HomePage() {
                 <span className="text-xl font-semibold text-surface-900">Babblet</span>
               </div>
               <p className="text-sm text-surface-600 leading-relaxed">
-                Modern grading solutions for modern educators. Enabling feedback through artificial intelligence.
+                Modern grading solutions for modern educators. Enabling faster, more consistent feedback.
               </p>
             </div>
 

@@ -916,7 +916,7 @@ function CourseContextPageContent() {
             >
               <div className="flex items-center justify-between mb-6">
                 <p className="text-surface-600">
-                  Manage rubrics, assignments, and course materials for AI grading
+                  Manage rubrics, assignments, and course materials for grading
                 </p>
                 <button
                   onClick={() => setShowCreateCourse(true)}
@@ -1435,7 +1435,7 @@ Presentation within time limits"
                           {parsingRubric ? (
                             <>
                               <Loader2 className="w-4 h-4 animate-spin" />
-                              Parsing with AI...
+                              Parsing...
                             </>
                           ) : (
                             <>
@@ -1917,7 +1917,7 @@ Presentation within time limits"
                   </div>
                 ) : (
                   <div className="text-center py-6 text-surface-500 text-sm">
-                    No documents added yet. Add lecture notes or readings to improve AI grading.
+                    No documents added yet. Add lecture notes or readings to improve grading accuracy.
                   </div>
                 )}
               </div>

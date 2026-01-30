@@ -1011,7 +1011,7 @@ export default function ClassWorkspace({
                   Are you sure you want to delete <strong>&quot;{documentToDelete.name}&quot;</strong>?
                 </p>
                 <p className="text-sm text-surface-500 mt-2">
-                  This will also remove all associated text chunks and embeddings used for AI grading context.
+                  This will also remove all associated text chunks and embeddings used for grading context.
                 </p>
               </div>
               

@@ -575,7 +575,7 @@ export default function ContextLibraryPage() {
                 <p className="text-surface-500 mb-6">
                   {searchQuery
                     ? 'Try adjusting your search or filters'
-                    : 'Upload slides, readings, and other materials to improve AI grading accuracy'}
+                    : 'Upload slides, readings, and other materials to improve grading accuracy'}
                 </p>
                 {!searchQuery && (
                   <button
@@ -692,7 +692,7 @@ export default function ContextLibraryPage() {
                     {uploadType === 'auto' && (
                       <span className="text-xs text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full flex items-center gap-1">
                         <Sparkles className="w-3 h-3" />
-                        AI Auto-detect
+                        Auto-detect
                       </span>
                     )}
                   </div>
@@ -701,7 +701,7 @@ export default function ContextLibraryPage() {
                     onChange={(e) => setUploadType(e.target.value as Document['type'] | 'auto')}
                     className="w-full px-4 py-2.5 rounded-xl border border-surface-300 text-surface-900 bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   >
-                    <option value="auto">🤖 AI Auto-detect (Recommended)</option>
+                    <option value="auto">✨ Auto-detect (Recommended)</option>
                     <option value="slides">Slides</option>
                     <option value="reading">Readings</option>
                     <option value="lecture_notes">Lecture Notes</option>
@@ -712,8 +712,8 @@ export default function ContextLibraryPage() {
                   </select>
                   <p className="text-xs text-surface-500 mt-1">
                     {uploadType === 'auto' 
-                      ? 'AI will analyze content and classify each file automatically.'
-                      : 'You can also let AI auto-detect the type.'}
+                      ? 'Babblet will analyze content and classify each file automatically.'
+                      : 'You can also let Babblet auto-detect the type.'}
                   </p>
                 </div>
 

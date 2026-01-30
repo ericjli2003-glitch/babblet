@@ -110,7 +110,7 @@ export default function ResourcesPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-surface-900">Resources</h1>
-              <p className="text-surface-500">Manage course materials to improve AI grading accuracy</p>
+              <p className="text-surface-500">Manage course materials to improve grading accuracy</p>
             </div>
           </div>
         </div>
@@ -126,7 +126,7 @@ export default function ResourcesPage() {
               <p className="text-primary-700 text-sm leading-relaxed">
                 Upload your course materials — slides, readings, lecture notes, and recordings — so Babblet can provide 
                 feedback that&apos;s specific to what you&apos;ve taught. The more context you provide, the more accurate and 
-                relevant the AI grading becomes.
+                relevant the grading becomes.
               </p>
             </div>
           </div>

@@ -189,9 +189,30 @@ export default function RubricCriterion({
                         <div className="mt-3 p-3 bg-amber-50 border border-amber-100 rounded-lg">
                           <div className="flex items-center gap-1.5 mb-2">
                             <Lightbulb className="w-4 h-4 text-amber-600" />
-                            <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">AI Insights</span>
+                            <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Babblet Insights</span>
                           </div>
-                          <p className="text-sm text-amber-900 whitespace-pre-wrap">{additionalInsights}</p>
+                          <div className="text-sm text-amber-900 leading-relaxed">
+                            {additionalInsights.split('\n').map((line, i) => {
+                              if (line.startsWith('## ')) {
+                                return <h3 key={i} className="text-base font-semibold mt-2 mb-1">{line.replace('## ', '')}</h3>;
+                              }
+                              if (line.includes('**')) {
+                                const parts = line.split(/\*\*(.*?)\*\*/g);
+                                return (
+                                  <p key={i} className="my-1">
+                                    {parts.map((part, j) => j % 2 === 1 ? <strong key={j} className="font-semibold">{part}</strong> : part)}
+                                  </p>
+                                );
+                              }
+                              if (line.startsWith('- ') || line.startsWith('* ')) {
+                                return <li key={i} className="ml-4 list-disc my-0.5">{line.slice(2)}</li>;
+                              }
+                              if (line.trim() === '') {
+                                return <div key={i} className="h-1.5" />;
+                              }
+                              return <p key={i} className="my-1">{line}</p>;
+                            })}
+                          </div>
                         </div>
                       </motion.div>
                     )}

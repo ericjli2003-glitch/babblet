@@ -32,7 +32,7 @@ type PipelineStage =
   | 'uploading'     // Currently uploading to R2
   | 'queued'        // Uploaded, waiting in queue
   | 'transcribing'  // Being transcribed by Deepgram
-  | 'analyzing'     // Being analyzed by Babblet AI
+  | 'analyzing'     // Being analyzed by Babblet
   | 'complete'      // Fully processed
   | 'failed';       // Error at any stage
 
@@ -1527,7 +1527,7 @@ function BulkUploadPageContent() {
                         ))}
                       </select>
                       <p className="text-xs text-violet-600 mt-2">
-                        Using class context improves AI grading accuracy
+                        Using class context improves grading accuracy
                       </p>
                     </div>
                   ) : (
@@ -1537,7 +1537,7 @@ function BulkUploadPageContent() {
                         <div className="flex-1">
                           <p className="font-medium text-amber-900">No Class Context Set Up</p>
                           <p className="text-sm text-amber-700">
-                            Set up rubrics and course materials for better AI grading
+                            Set up rubrics and course materials for better grading
                           </p>
                         </div>
                         <Link

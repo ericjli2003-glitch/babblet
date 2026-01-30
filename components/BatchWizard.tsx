@@ -498,7 +498,7 @@ function Step2ContextRubric({
       <div className="flex-1 overflow-auto p-8">
         <h1 className="text-2xl font-bold text-surface-900 mb-2">Step 2: Context & Rubric</h1>
         <p className="text-surface-500 mb-8">
-          Provide the necessary context for the AI and select the rubric you&apos;d like to use for this batch of presentations.
+          Provide the necessary context and select the rubric you&apos;d like to use for this batch of presentations.
         </p>
 
         {/* Class Context */}
@@ -512,7 +512,7 @@ function Step2ContextRubric({
                 Class Context <span className="text-surface-400 font-normal text-sm">(optional)</span>
               </h3>
               <p className="text-sm text-surface-500">
-                Optionally provide lecture notes, specific instructions, or grading constraints that the AI should consider. You can skip this if you don&apos;t have any specific context.
+                Optionally provide lecture notes, specific instructions, or grading constraints that Babblet should consider. You can skip this if you don&apos;t have any specific context.
               </p>
             </div>
           </div>
@@ -633,7 +633,7 @@ Organization (30 points)
               />
               <div className="flex items-center justify-between mt-3">
                 <p className="text-xs text-surface-500">
-                  AI will automatically parse criteria, points, and levels from your text
+                  Babblet will automatically parse criteria, points, and levels from your text
                 </p>
                 <button
                   onClick={handleRubricTextParse}

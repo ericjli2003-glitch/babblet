@@ -8,7 +8,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Babblet - Real-Time Teacher Questioning AI',
+  title: 'Babblet - Real-Time Presentation Grading',
   description: 'Listen to student presentations and generate insightful questions in real-time using Gemini and GPT-4.',
   icons: {
     icon: '/icon.svg',

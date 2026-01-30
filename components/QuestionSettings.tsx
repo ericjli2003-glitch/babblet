@@ -143,7 +143,7 @@ export default function QuestionSettings({
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-surface-900">Question Settings</h2>
-                  <p className="text-sm text-surface-500">Customize AI question generation</p>
+                  <p className="text-sm text-surface-500">Customize question generation</p>
                 </div>
               </div>
               <button

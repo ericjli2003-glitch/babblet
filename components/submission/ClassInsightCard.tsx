@@ -238,11 +238,40 @@ export default function ClassInsightCard({
                         className="overflow-hidden"
                       >
                         <div className="mt-3 p-4 bg-gradient-to-r from-primary-50 to-blue-50 border border-primary-100 rounded-xl">
-                          <div className="flex items-center gap-1.5 mb-2">
+                          <div className="flex items-center gap-1.5 mb-3">
                             <Sparkles className="w-4 h-4 text-primary-600" />
-                            <span className="text-xs font-semibold text-primary-700 uppercase tracking-wide">AI-Generated Insights</span>
+                            <span className="text-xs font-semibold text-primary-700 uppercase tracking-wide">Babblet Insights</span>
                           </div>
-                          <p className="text-sm text-surface-800 whitespace-pre-wrap leading-relaxed">{additionalInsights}</p>
+                          <div className="text-sm text-surface-800 leading-relaxed prose prose-sm max-w-none prose-headings:text-surface-900 prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-2 prose-p:my-2 prose-strong:text-surface-900 prose-ul:my-2 prose-li:my-0.5">
+                            {additionalInsights.split('\n').map((line, i) => {
+                              // Handle headers
+                              if (line.startsWith('## ')) {
+                                return <h3 key={i} className="text-base font-semibold text-surface-900 mt-3 mb-2">{line.replace('## ', '')}</h3>;
+                              }
+                              if (line.startsWith('# ')) {
+                                return <h2 key={i} className="text-lg font-semibold text-surface-900 mt-3 mb-2">{line.replace('# ', '')}</h2>;
+                              }
+                              // Handle bold text with **
+                              if (line.includes('**')) {
+                                const parts = line.split(/\*\*(.*?)\*\*/g);
+                                return (
+                                  <p key={i} className="my-1.5">
+                                    {parts.map((part, j) => j % 2 === 1 ? <strong key={j} className="font-semibold text-surface-900">{part}</strong> : part)}
+                                  </p>
+                                );
+                              }
+                              // Handle list items
+                              if (line.startsWith('- ') || line.startsWith('* ')) {
+                                return <li key={i} className="ml-4 list-disc my-0.5">{line.slice(2)}</li>;
+                              }
+                              // Empty lines
+                              if (line.trim() === '') {
+                                return <div key={i} className="h-2" />;
+                              }
+                              // Regular paragraphs
+                              return <p key={i} className="my-1.5">{line}</p>;
+                            })}
+                          </div>
                         </div>
                       </motion.div>
                     )}

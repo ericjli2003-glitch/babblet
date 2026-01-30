@@ -118,7 +118,7 @@ export default function SlideUpload({
             />
             <FileImage className="w-10 h-10 text-surface-400 mx-auto mb-2" />
             <p className="text-surface-600 text-sm">
-              Upload slides for enhanced AI analysis
+              Upload slides for enhanced analysis
             </p>
             <p className="text-xs text-surface-400 mt-1">
               PDF, PPT, PPTX, or images

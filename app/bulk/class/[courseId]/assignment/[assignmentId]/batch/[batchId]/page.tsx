@@ -1458,9 +1458,9 @@ export default function AssignmentDashboardPage() {
             </div>
           </div>
 
-          {/* Flagged for AI Check */}
+          {/* Flagged for Review */}
           <div className="bg-white rounded-xl border border-surface-200 p-5">
-            <p className="text-xs text-surface-500 uppercase tracking-wide mb-1">Flagged for AI Check</p>
+            <p className="text-xs text-surface-500 uppercase tracking-wide mb-1">Flagged for Review</p>
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-bold text-surface-900">{stats.flagged}</span>
               <span className="text-xs text-red-500">Suspicious activity</span>
@@ -1525,7 +1525,7 @@ export default function AssignmentDashboardPage() {
                     Auto-Grade
                   </th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-surface-500 uppercase tracking-wide">
-                    AI Sentiment
+                    Confidence
                   </th>
                   <th className="text-right px-6 py-3 text-xs font-medium text-surface-500 uppercase tracking-wide">
                     Actions
@@ -1610,7 +1610,7 @@ export default function AssignmentDashboardPage() {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      {/* AI Sentiment - only shown when grade data is available */}
+                      {/* Confidence - only shown when grade data is available */}
                       {submission.hasGradeData ? (
                         <div className="flex items-center gap-2">
                           {getSentimentIcon(submission.aiSentiment)}
