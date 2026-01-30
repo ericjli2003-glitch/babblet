@@ -566,8 +566,12 @@ export default function AssignmentDashboardPage() {
               failedCount: data.batch.failedCount || 0,
               averageScore: data.batch.averageScore,
               totalSubmissions: data.batch.totalSubmissions || prev.totalSubmissions,
-              // Update expectedUploadCount (cleared when uploads complete)
-              expectedUploadCount: data.batch.expectedUploadCount,
+              // Preserve higher expectedUploadCount to avoid overwrites during active uploads
+              // If local is higher than server, keep local (we're adding more files)
+              expectedUploadCount: Math.max(
+                prev.expectedUploadCount || 0, 
+                data.batch.expectedUploadCount || 0
+              ) || undefined,
             } : null);
           }
         }
@@ -769,9 +773,13 @@ export default function AssignmentDashboardPage() {
 
     setIsUploading(true);
     
-    // Update expected upload count in batch
+    // Update expected upload count in batch (client + server)
     const newExpectedCount = (batch?.expectedUploadCount || submissions.length) + validFiles.length;
     setBatch(prev => prev ? { ...prev, expectedUploadCount: newExpectedCount } : null);
+    
+    // Persist to server so polling doesn't overwrite
+    fetch(`/api/bulk/update-expected?batchId=${batchId}&count=${newExpectedCount}`, { method: 'POST' })
+      .catch(err => console.error('[AddMore] Failed to update expected count:', err));
 
     // Track uploading files
     const uploadingList = validFiles.map((f, i) => ({
