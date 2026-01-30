@@ -929,6 +929,7 @@ export default function AssignmentDashboardPage() {
         // ============================================
         // AUTO-GRADE NEW UPLOADS: Start grading only for newly queued submissions
         // This does NOT re-grade already graded submissions
+        // Fire processing requests directly to avoid closure issues
         // ============================================
         const newQueuedCount = subs.filter((s: Submission) => s.status === 'queued').length;
         if (newQueuedCount > 0) {
@@ -939,11 +940,41 @@ export default function AssignmentDashboardPage() {
           setGradingStarted(true);
           setGradingStartTime(Date.now());
           
+          // Fire parallel processing requests directly (not via runWorker to avoid closure issues)
           const MAX_WORKERS = 10;
           const numWorkers = Math.min(newQueuedCount, MAX_WORKERS);
-          for (let i = 0; i < numWorkers; i++) {
-            runWorker(i + 1);
-          }
+          
+          // Start workers that keep processing until queue is empty
+          const workerPromises = Array.from({ length: numWorkers }, async (_, i) => {
+            const workerId = i + 1;
+            let keepProcessing = true;
+            
+            while (keepProcessing) {
+              try {
+                console.log(`[AddMore] Worker ${workerId} processing...`);
+                const workerRes = await fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST' });
+                const workerData = await workerRes.json();
+                console.log(`[AddMore] Worker ${workerId} result:`, workerData);
+                
+                if (workerData.processed > 0) {
+                  // Successfully processed one, continue
+                  await new Promise(r => setTimeout(r, 500)); // Small delay
+                } else {
+                  // Queue is empty for this worker
+                  keepProcessing = false;
+                }
+              } catch (err) {
+                console.error(`[AddMore] Worker ${workerId} error:`, err);
+                keepProcessing = false;
+              }
+            }
+            console.log(`[AddMore] Worker ${workerId} finished`);
+          });
+          
+          // Don't await - let workers run in background
+          Promise.all(workerPromises).then(() => {
+            console.log(`[AddMore] All workers finished`);
+          });
         }
       }
     } catch (err) {
