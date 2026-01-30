@@ -12,10 +12,12 @@ export async function GET() {
     const hydrated = await Promise.all(
       batches.map(async (batch) => {
         // ============================================
-        // SUBMISSION IDS: Use batch.submissionIds as source of truth
-        // This is stored atomically with the batch, avoiding eventual consistency issues
+        // SUBMISSION IDS: Merge from batch record AND Redis SET
+        // Ensures we never lose submissions during parallel upload race conditions
         // ============================================
-        const submissionIds = batch.submissionIds || [];
+        const batchIds = batch.submissionIds || [];
+        const setIds = await kv.smembers(`batch_submissions:${batch.id}`) as string[];
+        const submissionIds = Array.from(new Set([...batchIds, ...setIds]));
         
         // Fetch all submissions (regardless of status)
         const submissions = (await Promise.all(submissionIds.map(id => getSubmission(id)))).filter(Boolean);

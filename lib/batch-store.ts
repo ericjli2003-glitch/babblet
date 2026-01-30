@@ -361,27 +361,57 @@ export async function createSubmission(params: {
     createdAt: Date.now(),
   };
 
-  // Save submission
+  // Save submission first (this is idempotent)
   await kv.set(`${SUBMISSION_PREFIX}${submission.id}`, submission);
 
   // ============================================
-  // SUBMISSION IDS: Store in batch record for atomic reads
-  // This avoids eventual consistency issues with separate Redis sets
-  // Also keep the set for backward compatibility
+  // SUBMISSION IDS: Use atomic Redis SET as source of truth
+  // The SET operation (sadd) is atomic and handles concurrent adds correctly
+  // We'll rebuild batch.submissionIds from the SET when needed
   // ============================================
-  const batch = await getBatch(params.batchId);
-  if (batch) {
+  
+  // Add to the atomic Redis SET first (this never loses data)
+  await kv.sadd(`${BATCH_SUBMISSIONS_PREFIX}${params.batchId}`, submission.id);
+  
+  // ============================================
+  // BATCH UPDATE: Retry loop to handle concurrent updates
+  // If another process updated the batch between our read and write,
+  // we re-read and retry to ensure our submission ID is included
+  // ============================================
+  const MAX_RETRIES = 5;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const batch = await getBatch(params.batchId);
+    if (!batch) {
+      console.error(`[BatchStore] Batch ${params.batchId} not found on attempt ${attempt + 1}`);
+      break;
+    }
+    
     const currentIds = batch.submissionIds || [];
-    if (!currentIds.includes(submission.id)) {
+    
+    // Already includes our submission - we're done
+    if (currentIds.includes(submission.id)) {
+      break;
+    }
+    
+    // Get all IDs from the atomic SET to ensure we don't lose any
+    const setIds = await kv.smembers(`${BATCH_SUBMISSIONS_PREFIX}${params.batchId}`) as string[];
+    
+    // Merge: include all IDs from both sources
+    const mergedIds = Array.from(new Set([...currentIds, ...setIds, submission.id]));
+    
+    try {
       await updateBatch(params.batchId, {
-        submissionIds: [...currentIds, submission.id],
-        totalSubmissions: currentIds.length + 1,
+        submissionIds: mergedIds,
+        totalSubmissions: mergedIds.length,
       });
+      console.log(`[BatchStore] Updated batch ${params.batchId} with ${mergedIds.length} submissions (attempt ${attempt + 1})`);
+      break;
+    } catch (err) {
+      console.warn(`[BatchStore] Retry ${attempt + 1}/${MAX_RETRIES} updating batch ${params.batchId}:`, err);
+      // Small delay before retry with exponential backoff
+      await new Promise(r => setTimeout(r, 50 * Math.pow(2, attempt)));
     }
   }
-  
-  // Keep the set for backward compatibility (but batch.submissionIds is source of truth)
-  await kv.sadd(`${BATCH_SUBMISSIONS_PREFIX}${params.batchId}`, submission.id);
 
   // Add to processing queue
   await kv.rpush(QUEUE_KEY, submission.id);

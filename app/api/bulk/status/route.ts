@@ -122,11 +122,27 @@ export async function GET(request: NextRequest) {
     }
 
     // ============================================
-    // SUBMISSION IDS: Use batch.submissionIds as source of truth
-    // This is stored atomically with the batch, avoiding eventual consistency issues
+    // SUBMISSION IDS: Merge from batch record AND Redis SET
+    // The SET is atomic and never loses data during parallel uploads
+    // The batch array is faster to read but may be stale during race conditions
+    // Merging ensures we never show fewer submissions than actually exist
     // ============================================
-    const submissionIds = batch.submissionIds || [];
-    console.log(`[Status] BatchId=${batchId} Found ${submissionIds.length} submission IDs in batch`);
+    const batchIds = batch.submissionIds || [];
+    const setIds = await kv.smembers(`batch_submissions:${batchId}`) as string[];
+    
+    // Merge both sources - use Set to dedupe
+    const submissionIds = Array.from(new Set([...batchIds, ...setIds]));
+    
+    // If SET has more IDs than batch, sync the batch record
+    if (submissionIds.length > batchIds.length) {
+      console.log(`[Status] Syncing batch ${batchId}: batch had ${batchIds.length}, SET has ${setIds.length}, merged to ${submissionIds.length}`);
+      await updateBatch(batchId, {
+        submissionIds: submissionIds,
+        totalSubmissions: submissionIds.length,
+      });
+    }
+    
+    console.log(`[Status] BatchId=${batchId} Found ${submissionIds.length} submission IDs (batch: ${batchIds.length}, set: ${setIds.length})`);
     
     // Fetch all submissions
     const submissionResults = await Promise.all(submissionIds.map(id => getSubmission(id)));
