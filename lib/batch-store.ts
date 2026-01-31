@@ -442,9 +442,17 @@ export async function updateSubmission(
 }
 
 export async function getBatchSubmissions(batchId: string): Promise<Submission[]> {
-  // Use batch.submissionIds as source of truth (atomic with batch record)
+  // ============================================
+  // SUBMISSION IDS: Merge from batch record AND Redis SET
+  // The SET is atomic and never loses data during parallel uploads
+  // This ensures we find all submissions even if batch array is stale
+  // ============================================
   const batch = await getBatch(batchId);
-  const submissionIds = batch?.submissionIds || [];
+  const batchIds = batch?.submissionIds || [];
+  const setIds = await kv.smembers(`${BATCH_SUBMISSIONS_PREFIX}${batchId}`) as string[];
+  
+  // Merge both sources
+  const submissionIds = Array.from(new Set([...batchIds, ...setIds]));
   
   if (submissionIds.length === 0) return [];
 

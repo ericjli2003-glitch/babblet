@@ -122,24 +122,28 @@ export async function GET(request: NextRequest) {
     }
 
     // ============================================
-    // SUBMISSION IDS: Merge from batch record AND Redis SET
-    // The SET is atomic and never loses data during parallel uploads
-    // The batch array is faster to read but may be stale during race conditions
-    // Merging ensures we never show fewer submissions than actually exist
+    // SUBMISSION IDS: Redis SET is the ONLY source of truth
+    // The batch array is a cache that can get out of sync during race conditions
+    // ALWAYS rebuild from the SET to ensure we never lose submissions
     // ============================================
-    const batchIds = batch.submissionIds || [];
     const setIds = await kv.smembers(`batch_submissions:${batchId}`) as string[];
+    const batchIds = batch.submissionIds || [];
     
-    // Merge both sources - use Set to dedupe
-    const submissionIds = Array.from(new Set([...batchIds, ...setIds]));
+    // Merge both sources - use Set to dedupe, but SET is authoritative
+    const submissionIds = Array.from(new Set([...setIds, ...batchIds]));
     
-    // If SET has more IDs than batch, sync the batch record
-    if (submissionIds.length > batchIds.length) {
-      console.log(`[Status] Syncing batch ${batchId}: batch had ${batchIds.length}, SET has ${setIds.length}, merged to ${submissionIds.length}`);
+    // ALWAYS sync batch record if there's ANY mismatch (count or IDs)
+    const batchNeedsSync = submissionIds.length !== batchIds.length || 
+      !submissionIds.every(id => batchIds.includes(id));
+    
+    if (batchNeedsSync) {
+      console.log(`[Status] Syncing batch ${batchId}: batch had ${batchIds.length} IDs, SET has ${setIds.length}, merged to ${submissionIds.length}`);
       await updateBatch(batchId, {
         submissionIds: submissionIds,
         totalSubmissions: submissionIds.length,
       });
+      // Refresh batch after sync
+      batch = await getBatch(batchId) || batch;
     }
     
     console.log(`[Status] BatchId=${batchId} Found ${submissionIds.length} submission IDs (batch: ${batchIds.length}, set: ${setIds.length})`);
