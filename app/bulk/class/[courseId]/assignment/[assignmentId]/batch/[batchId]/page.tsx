@@ -218,8 +218,12 @@ export default function AssignmentDashboardPage() {
           }));
           setGradedHighWaterMark(prev => Math.max(prev, newStatus.gradedCount));
           
-          // Lock status if completed
-          if (newStatus.status === 'completed') {
+          // Lock status if completed OR if all submissions have grades
+          // This handles the case where we're navigating back to a completed batch
+          const allHaveGrades = batchData.submissions?.every(
+            (s: any) => s.hasGradeData && s.overallScore != null
+          );
+          if (newStatus.status === 'completed' || (batchData.submissions?.length > 0 && allHaveGrades)) {
             statusLockedRef.current = 'completed';
           }
         }
@@ -309,9 +313,10 @@ export default function AssignmentDashboardPage() {
     while (processed) {
       processed = await processOneSubmission(workerId);
       
-      // Small delay to avoid hammering the server
+      // Minimal delay to allow other workers to coordinate
+      // Reduced from 500ms to 100ms for faster grading
       if (processed) {
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 100));
       }
     }
     
@@ -614,42 +619,64 @@ export default function AssignmentDashboardPage() {
   }, [submissions]);
 
   // ============================================
-  // DISPLAY STATUS: Computed from actual submissions data
-  // This is the source of truth for UI - always reflects real state
+  // DISPLAY STATUS: Computed purely from actual submissions data
+  // This is the SINGLE SOURCE OF TRUTH for UI - ignores stale API state
   // ============================================
   const displayGradingStatus = useMemo(() => {
-    // If all submissions have grades, we're complete
-    const allGraded = stats.total > 0 && stats.graded === stats.total;
-    
-    // Check if any submissions are being regraded (queued/processing)
-    const hasRegrading = stats.pending > 0;
-    
-    if (allGraded && !hasRegrading) {
+    // No submissions yet - show not_started
+    if (stats.total === 0) {
       return {
-        ...gradingStatus,
+        status: 'not_started' as const,
+        gradedCount: 0,
+        totalCount: 0,
+        message: 'No submissions yet',
+      };
+    }
+    
+    // If all submissions have grades, we're ALWAYS complete
+    // This takes precedence over any API state
+    const allGraded = stats.graded === stats.total;
+    
+    // Check if any submissions are pending (queued/processing)
+    const hasPending = stats.pending > 0;
+    
+    if (allGraded && !hasPending) {
+      // All done - lock this state
+      statusLockedRef.current = 'completed';
+      return {
         status: 'completed' as const,
         gradedCount: stats.graded,
         totalCount: stats.total,
+        message: 'All submissions successfully evaluated',
       };
     }
     
-    // If regrading in progress, use actual counts (don't apply high water mark)
-    if (hasRegrading) {
-      const status = stats.graded === 0 ? 'processing' : 
-                     stats.graded < stats.total ? 'processing' : 'completed';
+    // Some are still processing
+    if (hasPending) {
       return {
-        ...gradingStatus,
-        status: status as 'processing' | 'completed',
+        status: 'processing' as const,
         gradedCount: stats.graded,
         totalCount: stats.total,
+        message: `${stats.graded} of ${stats.total} completed`,
       };
     }
     
-    // Otherwise use actual stats
+    // Edge case: some graded, some failed, none pending
+    if (stats.graded > 0 && stats.graded < stats.total) {
+      return {
+        status: 'processing' as const,
+        gradedCount: stats.graded,
+        totalCount: stats.total,
+        message: `${stats.graded} of ${stats.total} completed`,
+      };
+    }
+    
+    // Default - use API status with actual counts
     return {
-      ...gradingStatus,
+      status: gradingStatus.status,
       gradedCount: stats.graded,
       totalCount: stats.total,
+      message: gradingStatus.message,
     };
   }, [gradingStatus, stats]);
 
