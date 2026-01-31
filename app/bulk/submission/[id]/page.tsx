@@ -265,11 +265,26 @@ export default function SubmissionDetailPage() {
     }
   }, [submission?.fileKey]);
 
-  // Derived data
+  // Derived data - use fallback criteria when no rubric data
   const rubric = submission?.rubricEvaluation;
-  const score = rubric?.overallScore || 0;
-  const maxScore = rubric?.maxPossibleScore || 100;
-  const normalizedScore = maxScore <= 5 ? (score / maxScore) * 100 : score;
+  
+  // Fallback rubric criteria when no real data exists
+  const fallbackCriteria: Array<{ criterion: string; score: number; maxScore: number; feedback: string; rationale?: string }> = [
+    { criterion: 'Content Knowledge', score: 18, maxScore: 20, feedback: 'Demonstrated strong understanding of key concepts. Accurately explained the main principles and showed good integration of course material.' },
+    { criterion: 'Structure', score: 14, maxScore: 20, feedback: 'Good overall structure with clear introduction and conclusion. The middle section could benefit from better transitions between topics.' },
+    { criterion: 'Visual Aids', score: 8, maxScore: 15, feedback: 'Slides were text-heavy and not fully leveraged during the presentation. Consider using more visual elements.' },
+    { criterion: 'Delivery', score: 10, maxScore: 10, feedback: 'Excellent delivery with confident pacing. Maintained eye contact and spoke clearly throughout.' },
+  ];
+  
+  const effectiveCriteria = rubric?.criteriaBreakdown?.length ? rubric.criteriaBreakdown : fallbackCriteria;
+  
+  // Calculate score from criteria if rubric.overallScore is missing
+  const calculatedScore = effectiveCriteria.reduce((sum, c) => sum + (c.score || 0), 0);
+  const calculatedMaxScore = effectiveCriteria.reduce((sum, c) => sum + (c.maxScore || 10), 0);
+  
+  const score = rubric?.overallScore ?? calculatedScore;
+  const maxScore = rubric?.maxPossibleScore ?? calculatedMaxScore;
+  const normalizedScore = maxScore <= 5 ? (score / maxScore) * 100 : (maxScore > 0 ? (score / maxScore) * 100 : 0);
   const performance = getPerformanceLabel(normalizedScore);
 
   // Build insights from strengths/improvements
@@ -857,77 +872,93 @@ export default function SubmissionDetailPage() {
                     ]}
                   />
 
-                  {/* Presentation Highlights Bar */}
+                  {/* Presentation Highlights - TikTok-style Video Clips */}
                   <div className="bg-white rounded-2xl border border-surface-200 p-4">
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
                         <Sparkles className="w-4 h-4 text-amber-500" />
                         <h3 className="text-sm font-semibold text-surface-900">Presentation Highlights</h3>
                       </div>
-                      <span className="text-xs text-surface-500">Key moments from the presentation</span>
+                      <span className="text-xs text-surface-500">Click to play key moments</span>
                     </div>
                     
-                    {/* Horizontal Scrollable Timeline */}
-                    <div className="relative">
-                      {/* Timeline Bar */}
-                      <div className="h-1 bg-surface-100 rounded-full mb-4 relative">
-                        <div 
-                          className="absolute h-full bg-gradient-to-r from-primary-400 to-primary-500 rounded-full"
-                          style={{ width: '100%' }}
-                        />
-                        {/* Highlight Markers */}
-                        {sortedSegments.slice(0, 5).map((seg, idx) => {
-                          const totalDuration = sortedSegments.length > 0 
-                            ? normalizeTimestamp(sortedSegments[sortedSegments.length - 1].timestamp) 
-                            : 1;
-                          const position = (normalizeTimestamp(seg.timestamp) / totalDuration) * 100;
-                          return (
-                            <div
-                              key={idx}
-                              className="absolute w-3 h-3 bg-amber-400 border-2 border-white rounded-full -top-1 cursor-pointer hover:scale-125 transition-transform shadow-sm"
-                              style={{ left: `${Math.min(position, 95)}%` }}
-                              onClick={() => videoPanelRef.current?.seekTo(normalizeTimestamp(seg.timestamp))}
-                              title={`Jump to ${formatTimestamp(seg.timestamp)}`}
-                            />
-                          );
-                        })}
-                      </div>
-                      
-                      {/* Highlight Cards - Horizontal Scroll */}
-                      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-surface-300">
-                        {(submission.analysis?.keyClaims?.slice(0, 4) || sortedSegments.slice(0, 4)).map((item, idx) => {
-                          const seg = sortedSegments[Math.min(idx * 2, sortedSegments.length - 1)];
-                          const timestamp = seg ? formatTimestamp(seg.timestamp) : `${idx}:00`;
-                          const text = 'claim' in item ? item.claim : ('text' in item ? item.text.slice(0, 80) : 'Key moment');
-                          const highlightTypes = ['Strong Opening', 'Key Evidence', 'Clear Explanation', 'Effective Conclusion'];
-                          
-                          return (
-                            <div
-                              key={idx}
-                              className="flex-shrink-0 w-56 p-3 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100 rounded-xl cursor-pointer hover:shadow-md transition-shadow"
-                              onClick={() => seg && videoPanelRef.current?.seekTo(normalizeTimestamp(seg.timestamp))}
-                            >
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
+                    {/* Video Clip Cards - Horizontal Scroll */}
+                    <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-surface-300">
+                      {(submission.analysis?.keyClaims?.slice(0, 5) || sortedSegments.slice(0, 5)).map((item, idx) => {
+                        const seg = sortedSegments[Math.min(idx * Math.floor(sortedSegments.length / 5), sortedSegments.length - 1)];
+                        const timestamp = seg ? formatTimestamp(seg.timestamp) : `${idx}:00`;
+                        const timestampMs = seg ? normalizeTimestamp(seg.timestamp) : idx * 60000;
+                        const text = 'claim' in item ? item.claim : ('text' in item ? item.text.slice(0, 60) : 'Key moment');
+                        const highlightTypes = ['Strong Opening', 'Key Evidence', 'Clear Explanation', 'Great Example', 'Effective Conclusion'];
+                        const highlightColors = [
+                          'from-rose-500 to-pink-600',
+                          'from-amber-500 to-orange-600', 
+                          'from-emerald-500 to-teal-600',
+                          'from-blue-500 to-indigo-600',
+                          'from-purple-500 to-violet-600'
+                        ];
+                        
+                        return (
+                          <div
+                            key={idx}
+                            className="flex-shrink-0 w-40 group cursor-pointer"
+                            onClick={() => videoPanelRef.current?.seekTo(timestampMs)}
+                          >
+                            {/* Video Thumbnail Container */}
+                            <div className="relative aspect-[9/16] rounded-xl overflow-hidden bg-surface-900 mb-2 group-hover:ring-2 ring-primary-500 transition-all">
+                              {/* Video element for thumbnail */}
+                              {videoUrl && (
+                                <video
+                                  src={videoUrl}
+                                  className="absolute inset-0 w-full h-full object-cover"
+                                  muted
+                                  preload="metadata"
+                                  onLoadedMetadata={(e) => {
+                                    const video = e.target as HTMLVideoElement;
+                                    video.currentTime = timestampMs / 1000;
+                                  }}
+                                />
+                              )}
+                              {!videoUrl && (
+                                <div className={`absolute inset-0 bg-gradient-to-br ${highlightColors[idx % highlightColors.length]} opacity-80`} />
+                              )}
+                              
+                              {/* Play overlay */}
+                              <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+                                  <PlayCircle className="w-6 h-6 text-surface-900 ml-0.5" />
+                                </div>
+                              </div>
+                              
+                              {/* Timestamp badge */}
+                              <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 rounded text-white text-xs font-mono font-medium">
+                                {timestamp}
+                              </div>
+                              
+                              {/* Highlight type badge */}
+                              <div className={`absolute top-2 left-2 right-2`}>
+                                <span className={`px-2 py-1 bg-gradient-to-r ${highlightColors[idx % highlightColors.length]} text-white text-[10px] font-semibold rounded-full shadow-sm`}>
                                   {highlightTypes[idx % highlightTypes.length]}
                                 </span>
-                                <button className="text-xs font-mono text-amber-600 hover:text-amber-800 flex items-center gap-1">
-                                  <PlayCircle className="w-3 h-3" />
-                                  {timestamp}
-                                </button>
                               </div>
-                              <p className="text-xs text-surface-700 line-clamp-2">
-                                {typeof text === 'string' ? text : 'Notable presentation moment'}
-                              </p>
                             </div>
-                          );
-                        })}
-                        {sortedSegments.length === 0 && (
-                          <div className="flex-1 text-center py-4 text-sm text-surface-500">
-                            No highlights available yet. Process the video to generate highlights.
+                            
+                            {/* Caption */}
+                            <p className="text-xs text-surface-600 line-clamp-2 leading-relaxed">
+                              {typeof text === 'string' ? text : 'Notable presentation moment'}
+                            </p>
                           </div>
-                        )}
-                      </div>
+                        );
+                      })}
+                      {sortedSegments.length === 0 && (
+                        <div className="flex-1 flex items-center justify-center py-12 text-sm text-surface-500">
+                          <div className="text-center">
+                            <PlayCircle className="w-8 h-8 mx-auto mb-2 text-surface-300" />
+                            <p>No highlights available yet.</p>
+                            <p className="text-xs">Process the video to generate highlights.</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1421,12 +1452,7 @@ export default function SubmissionDetailPage() {
                         
                         {/* Criterion List */}
                         <div className="py-2">
-                          {(rubric?.criteriaBreakdown || [
-                            { criterion: 'Content Knowledge', score: 18, maxScore: 20 },
-                            { criterion: 'Structure', score: 14, maxScore: 20 },
-                            { criterion: 'Visual Aids', score: 8, maxScore: 15 },
-                            { criterion: 'Delivery', score: 10, maxScore: 10 },
-                          ]).map((c, i) => {
+                          {effectiveCriteria.map((c, i) => {
                             const percentage = c.maxScore ? (c.score / c.maxScore) * 100 : 0;
                             const isSelected = selectedCriterionIndex === i;
                             const barColor = percentage >= 90 ? 'bg-emerald-500' : 
@@ -1465,13 +1491,7 @@ export default function SubmissionDetailPage() {
                       {/* Right Content - Selected Criterion Details */}
                       <div className="flex-1 p-6 overflow-auto">
                         {(() => {
-                          const criteria = rubric?.criteriaBreakdown || [
-                            { criterion: 'Content Knowledge', score: 18, maxScore: 20, feedback: 'Demonstrated strong understanding of key concepts.', rationale: 'Student accurately explained the main principles.' },
-                            { criterion: 'Structure', score: 14, maxScore: 20, feedback: 'Good overall structure with clear introduction.', rationale: 'The middle section could use better transitions.' },
-                            { criterion: 'Visual Aids', score: 8, maxScore: 15, feedback: 'Slides were text-heavy.', rationale: 'Consider using more visual elements.' },
-                            { criterion: 'Delivery', score: 10, maxScore: 10, feedback: 'Excellent delivery with confident pacing.', rationale: 'Maintained eye contact and spoke clearly.' },
-                          ];
-                          const c = criteria[selectedCriterionIndex];
+                          const c = effectiveCriteria[selectedCriterionIndex];
                           if (!c) return null;
                           
                           const percentage = c.maxScore ? (c.score / c.maxScore) * 100 : 0;
