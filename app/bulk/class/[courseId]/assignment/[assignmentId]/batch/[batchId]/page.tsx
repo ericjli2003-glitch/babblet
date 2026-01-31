@@ -312,12 +312,7 @@ export default function AssignmentDashboardPage() {
     
     while (processed) {
       processed = await processOneSubmission(workerId);
-      
-      // Minimal delay to allow other workers to coordinate
-      // Reduced from 500ms to 100ms for faster grading
-      if (processed) {
-        await new Promise(r => setTimeout(r, 100));
-      }
+      // No delay - immediately grab next submission for maximum throughput
     }
     
     setActiveWorkers(prev => prev - 1);
@@ -341,11 +336,11 @@ export default function AssignmentDashboardPage() {
     console.log(`[AssignmentDashboard] Starting grading for ${queuedCount} submissions`);
 
     // ============================================
-    // PARALLEL WORKERS: Scale to match uploads, cap at 10
+    // PARALLEL WORKERS: Scale to match uploads, cap at 20
     // Each worker continuously processes until queue is empty
-    // 10 is a safe limit to avoid API rate limits (Claude, Deepgram)
+    // 20 workers for faster throughput - APIs can handle it
     // ============================================
-    const MAX_WORKERS = 10;
+    const MAX_WORKERS = 20;
     const numWorkers = Math.min(queuedCount, MAX_WORKERS);
     console.log(`[AssignmentDashboard] Launching ${numWorkers} parallel workers`);
     
@@ -405,8 +400,8 @@ export default function AssignmentDashboardPage() {
       setGradingStarted(true);
       setGradingStartTime(Date.now());
       
-      // Start workers - scale to match queued items, cap at 10
-      const MAX_WORKERS = 10;
+      // Start workers - scale to match queued items, cap at 20
+      const MAX_WORKERS = 20;
       const numWorkers = Math.min(queuedCount + stuckCount, MAX_WORKERS);
       console.log(`[AutoResume] Launching ${numWorkers} workers for ${queuedCount} queued + ${stuckCount} stuck`);
       for (let i = 0; i < numWorkers; i++) {
@@ -447,7 +442,8 @@ export default function AssignmentDashboardPage() {
     if (!shouldPoll && submissions.length > 0 && gradingStatus.status === 'completed') return;
 
     // Poll faster when grading or uploads are in progress
-    const pollInterval = (uploadsInProgress || gradingStarted || hasPendingGrades) ? 2000 : 3000;
+    // Reduced to 1s for real-time feedback during active processing
+    const pollInterval = (uploadsInProgress || gradingStarted || hasPendingGrades) ? 1000 : 2000;
     
     console.log(`[AssignmentDashboard] Polling enabled: hasActiveWork=${hasActiveWork}, hasPendingGrades=${hasPendingGrades}, gradingStatus=${gradingStatus.status}, interval=${pollInterval}ms`);
 

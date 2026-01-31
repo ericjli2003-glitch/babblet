@@ -18,8 +18,8 @@ import BatchWizard from '@/components/BatchWizard';
 // ============================================
 
 // Uploads are fully parallel (no limit) - browser handles connection pooling
-// Grading is limited to 10 concurrent workers to avoid API rate limits
-const POLL_INTERVAL_MS = 2000; // Poll every 2s for faster updates
+// Grading is limited to 20 concurrent workers for faster throughput
+const POLL_INTERVAL_MS = 1000; // Poll every 1s for real-time updates
 const ESTIMATED_TRANSCRIPTION_TIME_MS = 45000; // ~45s per file
 const ESTIMATED_ANALYSIS_TIME_MS = 30000; // ~30s per file
 
@@ -1041,10 +1041,10 @@ function BulkUploadPageContent() {
       ).length;
 
       // ============================================
-      // PARALLEL WORKERS: Scale to match uploads, cap at 10
-      // 10 is a safe limit to avoid API rate limits (Claude, Deepgram)
+      // PARALLEL WORKERS: Scale to match uploads, cap at 20
+      // 20 workers for faster throughput - APIs can handle it
       // ============================================
-      const MAX_WORKERS = 10;
+      const MAX_WORKERS = 20;
       const PARALLEL_REQUESTS = Math.min(queuedCount, MAX_WORKERS);
 
       console.log(`[Bulk] Firing ${PARALLEL_REQUESTS} parallel processing requests for ${queuedCount} queued files...`);
