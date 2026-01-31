@@ -157,55 +157,92 @@ export default function ClassInsightCard({
     setBranches(prev => prev.filter(b => b.id !== branchId));
   }, []);
 
-  // Render insight content with citations (paragraph format only)
+  // Render insight content with citations at end of bullet points
   const renderInsightContent = useCallback((content: string) => {
     const lines = content.split('\n').filter(l => l.trim());
     
-    // Parse citations in text like [1], [2]
-    const renderTextWithCitations = (text: string) => {
-      const parts = text.split(/(\[\d+\])/g);
-      return parts.map((part, i) => {
-        const match = part.match(/\[(\d+)\]/);
-        if (match) {
-          const citationNum = parseInt(match[1]);
-          const citation = citations[citationNum - 1];
-          if (citation) {
-            return (
-              <button
-                key={i}
-                onClick={() => onSeekToTime?.(parseTimestamp(citation.timestamp))}
-                className="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold text-primary-700 bg-primary-100 rounded-full hover:bg-primary-200 transition-colors mx-0.5"
-                title={`Jump to ${citation.timestamp}: "${citation.text}"`}
-              >
-                {citationNum}
-              </button>
-            );
-          }
-        }
-        // Handle bold text
-        if (part.includes('**')) {
-          const boldParts = part.split(/\*\*(.*?)\*\*/g);
-          return boldParts.map((bp, j) => 
-            j % 2 === 1 ? <strong key={`${i}-${j}`} className="font-semibold text-surface-900">{bp}</strong> : bp
-          );
-        }
-        return part;
-      });
+    // Parse citations in text like [1], [2] - render as clickable buttons
+    const renderCitationButton = (citationNum: number, key: string) => {
+      const citation = citations[citationNum - 1];
+      if (citation) {
+        return (
+          <button
+            key={key}
+            onClick={() => onSeekToTime?.(parseTimestamp(citation.timestamp))}
+            className="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold text-primary-700 bg-primary-100 rounded-full hover:bg-primary-200 transition-colors mx-0.5"
+            title={`Jump to ${citation.timestamp}: "${citation.text}"`}
+          >
+            {citationNum}
+          </button>
+        );
+      }
+      return null;
+    };
+
+    // Extract citation numbers from text
+    const extractCitations = (text: string): number[] => {
+      const matches = text.match(/\[(\d+)\]/g) || [];
+      return matches.map(m => parseInt(m.replace(/[\[\]]/g, '')));
+    };
+
+    // Remove inline citations from text
+    const stripCitations = (text: string): string => {
+      return text.replace(/\[\d+\]/g, '').trim();
+    };
+
+    // Render text with bold formatting (but without inline citations)
+    const renderText = (text: string) => {
+      const cleanText = stripCitations(text);
+      if (cleanText.includes('**')) {
+        const boldParts = cleanText.split(/\*\*(.*?)\*\*/g);
+        return boldParts.map((bp, j) => 
+          j % 2 === 1 ? <strong key={j} className="font-semibold text-surface-900">{bp}</strong> : bp
+        );
+      }
+      return cleanText;
     };
 
     return (
       <div className="space-y-2">
         {lines.map((line, i) => {
+          const lineCitations = extractCitations(line);
+          
           if (line.startsWith('## ')) {
-            return <h3 key={i} className="text-base font-semibold text-surface-900 mt-3 mb-1">{renderTextWithCitations(line.replace('## ', ''))}</h3>;
+            return (
+              <h3 key={i} className="text-base font-semibold text-surface-900 mt-3 mb-1">
+                {renderText(line.replace('## ', ''))}
+              </h3>
+            );
           }
           if (line.startsWith('# ')) {
-            return <h2 key={i} className="text-lg font-semibold text-surface-900 mt-3 mb-1">{renderTextWithCitations(line.replace('# ', ''))}</h2>;
+            return (
+              <h2 key={i} className="text-lg font-semibold text-surface-900 mt-3 mb-1">
+                {renderText(line.replace('# ', ''))}
+              </h2>
+            );
           }
           if (line.startsWith('- ') || line.startsWith('* ')) {
-            return <p key={i} className="text-surface-700 pl-4">• {renderTextWithCitations(line.slice(2))}</p>;
+            return (
+              <p key={i} className="text-surface-700 pl-4 flex items-start gap-1 flex-wrap">
+                <span>• {renderText(line.slice(2))}</span>
+                {lineCitations.length > 0 && (
+                  <span className="inline-flex items-center gap-0.5 ml-1">
+                    {lineCitations.map((num, idx) => renderCitationButton(num, `${i}-${idx}`))}
+                  </span>
+                )}
+              </p>
+            );
           }
-          return <p key={i} className="text-surface-700">{renderTextWithCitations(line)}</p>;
+          return (
+            <p key={i} className="text-surface-700 flex items-start gap-1 flex-wrap">
+              <span>{renderText(line)}</span>
+              {lineCitations.length > 0 && (
+                <span className="inline-flex items-center gap-0.5 ml-1">
+                  {lineCitations.map((num, idx) => renderCitationButton(num, `${i}-${idx}`))}
+                </span>
+              )}
+            </p>
+          );
         })}
       </div>
     );
@@ -382,24 +419,7 @@ export default function ClassInsightCard({
                                 exit={{ height: 0, opacity: 0 }}
                                 transition={{ duration: 0.15 }}
                               >
-                                {/* Citations legend */}
-                                {citations.length > 0 && (
-                                  <div className="flex flex-wrap gap-2 mb-3 pb-3 border-b border-primary-100">
-                                    <span className="text-xs text-primary-600 font-medium">References:</span>
-                                    {citations.map((c) => (
-                                      <button
-                                        key={c.id}
-                                        onClick={() => onSeekToTime?.(parseTimestamp(c.timestamp))}
-                                        className="inline-flex items-center gap-1 text-xs text-primary-700 hover:text-primary-800 hover:underline"
-                                      >
-                                        <span className="w-4 h-4 flex items-center justify-center bg-primary-100 rounded-full text-[10px] font-semibold">{c.id}</span>
-                                        <span className="font-mono">{c.timestamp}</span>
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-
-                                {/* Insight content */}
+                                {/* Insight content - references are now inline at end of bullet points */}
                                 <div className="text-sm leading-relaxed">
                                   {renderInsightContent(additionalInsights)}
                                 </div>

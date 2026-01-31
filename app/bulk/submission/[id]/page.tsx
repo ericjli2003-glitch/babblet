@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   CheckCircle, XCircle, Download, RefreshCw, Search, ThumbsUp, Clock,
   ChevronRight, Sparkles, BookOpen, Shield, ArrowLeft, Mic, BarChart3, Target,
-  FileSearch, AlertTriangle, Swords, AlertCircle, Microscope, Plus, Minus
+  FileSearch, AlertTriangle, Swords, AlertCircle, Microscope, Plus, Minus, PlayCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -195,6 +195,7 @@ export default function SubmissionDetailPage() {
   const [transcriptSearch, setTranscriptSearch] = useState('');
   const [questionCount, setQuestionCount] = useState(5);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [selectedCriterionIndex, setSelectedCriterionIndex] = useState(0);
   const [branchingQuestionId, setBranchingQuestionId] = useState<string | null>(null);
   const [showMaterialModal, setShowMaterialModal] = useState<{
     name: string;
@@ -856,10 +857,84 @@ export default function SubmissionDetailPage() {
                     ]}
                   />
 
+                  {/* Presentation Highlights Bar */}
+                  <div className="bg-white rounded-2xl border border-surface-200 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-amber-500" />
+                        <h3 className="text-sm font-semibold text-surface-900">Presentation Highlights</h3>
+                      </div>
+                      <span className="text-xs text-surface-500">Key moments from the presentation</span>
+                    </div>
+                    
+                    {/* Horizontal Scrollable Timeline */}
+                    <div className="relative">
+                      {/* Timeline Bar */}
+                      <div className="h-1 bg-surface-100 rounded-full mb-4 relative">
+                        <div 
+                          className="absolute h-full bg-gradient-to-r from-primary-400 to-primary-500 rounded-full"
+                          style={{ width: '100%' }}
+                        />
+                        {/* Highlight Markers */}
+                        {sortedSegments.slice(0, 5).map((seg, idx) => {
+                          const totalDuration = sortedSegments.length > 0 
+                            ? normalizeTimestamp(sortedSegments[sortedSegments.length - 1].timestamp) 
+                            : 1;
+                          const position = (normalizeTimestamp(seg.timestamp) / totalDuration) * 100;
+                          return (
+                            <div
+                              key={idx}
+                              className="absolute w-3 h-3 bg-amber-400 border-2 border-white rounded-full -top-1 cursor-pointer hover:scale-125 transition-transform shadow-sm"
+                              style={{ left: `${Math.min(position, 95)}%` }}
+                              onClick={() => videoPanelRef.current?.seekTo(normalizeTimestamp(seg.timestamp))}
+                              title={`Jump to ${formatTimestamp(seg.timestamp)}`}
+                            />
+                          );
+                        })}
+                      </div>
+                      
+                      {/* Highlight Cards - Horizontal Scroll */}
+                      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-surface-300">
+                        {(submission.analysis?.keyClaims?.slice(0, 4) || sortedSegments.slice(0, 4)).map((item, idx) => {
+                          const seg = sortedSegments[Math.min(idx * 2, sortedSegments.length - 1)];
+                          const timestamp = seg ? formatTimestamp(seg.timestamp) : `${idx}:00`;
+                          const text = 'claim' in item ? item.claim : ('text' in item ? item.text.slice(0, 80) : 'Key moment');
+                          const highlightTypes = ['Strong Opening', 'Key Evidence', 'Clear Explanation', 'Effective Conclusion'];
+                          
+                          return (
+                            <div
+                              key={idx}
+                              className="flex-shrink-0 w-56 p-3 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100 rounded-xl cursor-pointer hover:shadow-md transition-shadow"
+                              onClick={() => seg && videoPanelRef.current?.seekTo(normalizeTimestamp(seg.timestamp))}
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
+                                  {highlightTypes[idx % highlightTypes.length]}
+                                </span>
+                                <button className="text-xs font-mono text-amber-600 hover:text-amber-800 flex items-center gap-1">
+                                  <PlayCircle className="w-3 h-3" />
+                                  {timestamp}
+                                </button>
+                              </div>
+                              <p className="text-xs text-surface-700 line-clamp-2">
+                                {typeof text === 'string' ? text : 'Notable presentation moment'}
+                              </p>
+                            </div>
+                          );
+                        })}
+                        {sortedSegments.length === 0 && (
+                          <div className="flex-1 text-center py-4 text-sm text-surface-500">
+                            No highlights available yet. Process the video to generate highlights.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Speech Delivery */}
                   <CollapsibleSection
                     title="Speech Delivery"
-                    subtitle="Vocal analysis from transcript"
+                    subtitle="Babblet-analyzed vocal metrics"
                     icon={<Mic className="w-4 h-4" />}
                     defaultExpanded={true}
                   >
@@ -867,7 +942,7 @@ export default function SubmissionDetailPage() {
                       {/* Filler Word Count */}
                       <div className="bg-surface-50 rounded-xl p-4">
                         <div className="flex items-center gap-2 mb-3">
-                          <span className="text-sm font-medium text-surface-700">Filler Words</span>
+                          <span className="text-sm font-medium text-surface-700">Filler Word Count</span>
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                             speechMetrics.fillerWordCount <= 10 
                               ? 'bg-emerald-100 text-emerald-700' 
@@ -875,25 +950,24 @@ export default function SubmissionDetailPage() {
                                 ? 'bg-amber-100 text-amber-700'
                                 : 'bg-red-100 text-red-700'
                           }`}>
-                            {speechMetrics.fillerWordCount <= 10 ? 'Excellent' : speechMetrics.fillerWordCount <= 20 ? 'Good' : 'Needs Work'}
+                            {speechMetrics.fillerWordCount <= 10 ? 'Good' : speechMetrics.fillerWordCount <= 20 ? 'Moderate' : 'High'}
                           </span>
                         </div>
-                        <div className="flex items-baseline gap-2 mb-2">
+                        <div className="flex items-baseline gap-2 mb-1">
                           <span className="text-3xl font-bold text-surface-900">
                             {speechMetrics.fillerWordCount}
                           </span>
-                          <span className="text-sm text-surface-500">total</span>
                         </div>
-                        <p className="text-xs text-surface-500 leading-relaxed">
-                          Words like &quot;um&quot;, &quot;uh&quot;, &quot;like&quot;, &quot;you know&quot; detected in the transcript.
-                          Fewer filler words indicate more confident delivery.
-                        </p>
-                          </div>
+                        <div className="flex items-center gap-4 text-xs text-surface-500 mt-2 pt-2 border-t border-surface-100">
+                          <span>Student: <span className="font-medium text-surface-700">{speechMetrics.fillerWordCount}</span></span>
+                          <span>Class Avg: <span className="font-medium text-surface-700">18</span></span>
+                        </div>
+                      </div>
 
                       {/* Speaking Rate */}
                       <div className="bg-surface-50 rounded-xl p-4">
                         <div className="flex items-center gap-2 mb-3">
-                          <span className="text-sm font-medium text-surface-700">Speaking Pace</span>
+                          <span className="text-sm font-medium text-surface-700">Speaking Rate</span>
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                             speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180
                               ? 'bg-emerald-100 text-emerald-700' 
@@ -906,44 +980,46 @@ export default function SubmissionDetailPage() {
                               : speechMetrics.speakingRateWpm < 120 
                                 ? 'Slow' 
                                 : 'Fast'}
-                                      </span>
-                                  </div>
-                        <div className="flex items-baseline gap-2 mb-2">
+                          </span>
+                        </div>
+                        <div className="flex items-baseline gap-2 mb-1">
                           <span className="text-3xl font-bold text-surface-900">
                             {speechMetrics.speakingRateWpm}
                           </span>
-                          <span className="text-sm text-surface-500">words/min</span>
-                              </div>
-                        <p className="text-xs text-surface-500 leading-relaxed">
-                          Average speaking speed. Ideal range is 120-180 WPM for presentations.
-                          Based on {speechMetrics.wordCount.toLocaleString()} words spoken.
-                        </p>
-                  </div>
+                          <span className="text-sm text-surface-500">wpm</span>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-surface-500 mt-2 pt-2 border-t border-surface-100">
+                          <span>Student: <span className="font-medium text-surface-700">{speechMetrics.speakingRateWpm}</span></span>
+                          <span>Class Avg: <span className="font-medium text-surface-700">130</span></span>
+                        </div>
+                      </div>
 
                       {/* Pause Frequency */}
                       <div className="bg-surface-50 rounded-xl p-4">
                         <div className="flex items-center gap-2 mb-3">
-                          <span className="text-sm font-medium text-surface-700">Speech Segments</span>
+                          <span className="text-sm font-medium text-surface-700">Pause Frequency</span>
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                             speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8
                               ? 'bg-emerald-100 text-emerald-700' 
-                              : 'bg-amber-100 text-amber-700'
+                              : speechMetrics.pauseFrequency > 8
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-amber-100 text-amber-700'
                           }`}>
-                            {speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8 ? 'Good Pacing' : 'Review Pacing'}
-                                      </span>
-                                  </div>
-                        <div className="flex items-baseline gap-2 mb-2">
+                            {speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8 ? 'Good' : speechMetrics.pauseFrequency > 8 ? 'High' : 'Low'}
+                          </span>
+                        </div>
+                        <div className="flex items-baseline gap-2 mb-1">
                           <span className="text-3xl font-bold text-surface-900">
                             {speechMetrics.pauseFrequency.toFixed(1)}
                           </span>
-                          <span className="text-sm text-surface-500">per min</span>
-                              </div>
-                        <p className="text-xs text-surface-500 leading-relaxed">
-                          Number of natural speech segments per minute.
-                          Indicates pauses for emphasis or transitions.
-                        </p>
-                  </div>
-              </div>
+                          <span className="text-sm text-surface-500">/min</span>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-surface-500 mt-2 pt-2 border-t border-surface-100">
+                          <span>Student: <span className="font-medium text-surface-700">{speechMetrics.pauseFrequency.toFixed(1)}</span></span>
+                          <span>Class Avg: <span className="font-medium text-surface-700">4.2</span></span>
+                        </div>
+                      </div>
+                    </div>
                   </CollapsibleSection>
 
                   {/* Course Material Alignment */}
@@ -1101,31 +1177,6 @@ export default function SubmissionDetailPage() {
                       <p className="text-sm text-surface-500">
                         Based on the transcript analysis, these questions test depth of understanding across different cognitive levels.
                       </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-surface-500">Generate</span>
-                      <select
-                        value={questionCount}
-                        onChange={(e) => setQuestionCount(Number(e.target.value))}
-                        className="px-3 py-2 border border-surface-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        disabled={isRegenerating}
-                      >
-                        <option value={5}>5 questions</option>
-                        <option value={3}>3 questions</option>
-                        <option value={10}>10 questions</option>
-                      </select>
-                      <button 
-                        onClick={() => handleRegenerateQuestions()}
-                        disabled={isRegenerating}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                          isRegenerating 
-                            ? 'bg-primary-400 text-white cursor-wait' 
-                            : 'bg-white border border-surface-200 text-surface-700 hover:bg-primary-50 hover:border-primary-300 hover:text-primary-600'
-                        }`}
-                      >
-                        <Sparkles className={`w-4 h-4 ${isRegenerating ? 'animate-pulse' : ''}`} />
-                        {isRegenerating ? 'Generating...' : 'Regenerate'}
-                      </button>
                     </div>
                   </div>
 
@@ -1346,117 +1397,179 @@ export default function SubmissionDetailPage() {
                     </div>
                   </div>
 
-                  {/* Class-Specific Insights */}
-                  <div>
-            <div className="flex items-center gap-2 mb-4">
+                  {/* Grading Rubric with Vertical Sidebar */}
+                  <div className="bg-white rounded-2xl border border-surface-200 overflow-hidden">
+                    <div className="flex items-center gap-2 p-4 border-b border-surface-100">
                       <BookOpen className="w-5 h-5 text-primary-600" />
-                      <h2 className="text-lg font-semibold text-surface-900">Class-Specific Insights</h2>
-            </div>
-                    <div className="space-y-4">
-                      {rubric?.criteriaBreakdown && rubric.criteriaBreakdown.length > 0 ? (
-                        rubric.criteriaBreakdown.map((c, i) => {
+                      <h2 className="text-lg font-semibold text-surface-900">Grading Rubric</h2>
+                    </div>
+                    
+                    <div className="flex min-h-[500px]">
+                      {/* Left Sidebar - Criterion Navigation */}
+                      <div className="w-56 border-r border-surface-100 bg-surface-50/50 flex-shrink-0">
+                        {/* Overall Score */}
+                        <div className="p-4 border-b border-surface-100">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-2xl font-bold text-surface-900">{Math.round(normalizedScore)}<span className="text-base font-normal text-surface-400">/100</span></span>
+                            <span className="text-sm font-medium text-surface-500">{Math.round(normalizedScore)}%</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                            <span className="text-xs font-medium text-emerald-600">Proficiency: {rubric?.letterGrade || 'B+'}</span>
+                          </div>
+                        </div>
+                        
+                        {/* Criterion List */}
+                        <div className="py-2">
+                          {(rubric?.criteriaBreakdown || [
+                            { criterion: 'Content Knowledge', score: 18, maxScore: 20 },
+                            { criterion: 'Structure', score: 14, maxScore: 20 },
+                            { criterion: 'Visual Aids', score: 8, maxScore: 15 },
+                            { criterion: 'Delivery', score: 10, maxScore: 10 },
+                          ]).map((c, i) => {
+                            const percentage = c.maxScore ? (c.score / c.maxScore) * 100 : 0;
+                            const isSelected = selectedCriterionIndex === i;
+                            const barColor = percentage >= 90 ? 'bg-emerald-500' : 
+                                            percentage >= 75 ? 'bg-blue-500' : 
+                                            percentage >= 50 ? 'bg-amber-500' : 'bg-red-500';
+                            
+                            return (
+                              <button
+                                key={i}
+                                onClick={() => setSelectedCriterionIndex(i)}
+                                className={`w-full text-left px-4 py-3 transition-colors relative ${
+                                  isSelected 
+                                    ? 'bg-primary-50 border-l-4 border-primary-500' 
+                                    : 'hover:bg-surface-100 border-l-4 border-transparent'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className={`text-sm font-medium truncate pr-2 ${isSelected ? 'text-primary-700' : 'text-surface-700'}`}>
+                                    Criterion {i + 1}
+                                  </span>
+                                  <span className="text-xs font-medium text-surface-500">{c.score}/{c.maxScore}</span>
+                                </div>
+                                <p className="text-xs text-surface-500 truncate mb-2">{c.criterion}</p>
+                                <div className="h-1.5 bg-surface-200 rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full rounded-full ${barColor}`}
+                                    style={{ width: `${percentage}%` }}
+                                  />
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      
+                      {/* Right Content - Selected Criterion Details */}
+                      <div className="flex-1 p-6 overflow-auto">
+                        {(() => {
+                          const criteria = rubric?.criteriaBreakdown || [
+                            { criterion: 'Content Knowledge', score: 18, maxScore: 20, feedback: 'Demonstrated strong understanding of key concepts.', rationale: 'Student accurately explained the main principles.' },
+                            { criterion: 'Structure', score: 14, maxScore: 20, feedback: 'Good overall structure with clear introduction.', rationale: 'The middle section could use better transitions.' },
+                            { criterion: 'Visual Aids', score: 8, maxScore: 15, feedback: 'Slides were text-heavy.', rationale: 'Consider using more visual elements.' },
+                            { criterion: 'Delivery', score: 10, maxScore: 10, feedback: 'Excellent delivery with confident pacing.', rationale: 'Maintained eye contact and spoke clearly.' },
+                          ];
+                          const c = criteria[selectedCriterionIndex];
+                          if (!c) return null;
+                          
                           const percentage = c.maxScore ? (c.score / c.maxScore) * 100 : 0;
                           const status = percentage >= 90 ? 'excellent' : 
                                         percentage >= 75 ? 'good' : 
                                         percentage >= 50 ? 'needs_improvement' : 'missing';
+                          const statusColor = percentage >= 90 ? 'text-emerald-600 bg-emerald-50' : 
+                                             percentage >= 75 ? 'text-blue-600 bg-blue-50' : 
+                                             percentage >= 50 ? 'text-amber-600 bg-amber-50' : 'text-red-600 bg-red-50';
                           
                           return (
-                            <HighlightableContent
-                              key={i}
-                              sourceType="rubric"
-                              sourceId={`criterion-${i}`}
-                              criterionId={`criterion-${i}`}
-                              rubricCriterion={c.criterion}
-                            >
-                              <ClassInsightCard
-                                title={c.criterion}
-                                score={c.score}
-                                maxScore={c.maxScore || 10}
-                                status={status}
-                                moduleReference={`Criterion ${i + 1}`}
-                                feedback={c.feedback || c.rationale || 'No detailed feedback available.'}
-                                courseAlignment={submission.analysis?.courseAlignment?.overall}
-                                defaultExpanded={i === 0}
-                                suggestedAction={
-                                  status === 'needs_improvement' || status === 'missing'
-                                    ? {
-                                        text: `Focus on improving ${c.criterion.toLowerCase()}. Review course materials for guidance.`,
-                                        linkText: 'View Course Resources',
-                                        linkUrl: '/resources',
-                                      }
-                                    : undefined
-                                }
-                                evidence={
-                                  submission.transcriptSegments?.slice(i * 2, i * 2 + 2).map((seg, segIdx) => ({
-                                    timestamp: formatTimestamp(seg.timestamp),
-                                    text: seg.text.slice(0, 100) + (seg.text.length > 100 ? '...' : ''),
-                                    analysis: segIdx === 0 
-                                      ? `This segment demonstrates the student's approach to ${c.criterion.toLowerCase()}.`
-                                      : `Additional context showing ${percentage >= 75 ? 'proficiency' : 'areas for growth'} in this criterion.`,
-                                  }))
-                                }
-                                onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
-                                onRequestMoreInsights={handleRequestCriterionInsights}
-                              />
-                            </HighlightableContent>
+                            <div className="space-y-6">
+                              {/* Criterion Header */}
+                              <div>
+                                <div className="flex items-start justify-between mb-2">
+                                  <h3 className="text-xl font-semibold text-surface-900">{c.criterion}</h3>
+                                  <div className="flex items-center gap-3">
+                                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColor}`}>
+                                      {status === 'excellent' ? 'Excellent' : status === 'good' ? 'Good' : status === 'needs_improvement' ? 'Needs Work' : 'Missing'}
+                                    </span>
+                                    <span className="text-2xl font-bold text-surface-900">{c.score}<span className="text-lg font-normal text-surface-400">/{c.maxScore}</span></span>
+                                  </div>
+                                </div>
+                                <div className="h-2 bg-surface-100 rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full rounded-full transition-all duration-300 ${
+                                      percentage >= 90 ? 'bg-emerald-500' : 
+                                      percentage >= 75 ? 'bg-blue-500' : 
+                                      percentage >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                                    }`}
+                                    style={{ width: `${percentage}%` }}
+                                  />
+                                </div>
+                              </div>
+                              
+                              {/* Feedback */}
+                              <div className="p-4 bg-surface-50 rounded-xl">
+                                <h4 className="text-sm font-semibold text-surface-700 mb-2">Feedback</h4>
+                                <p className="text-sm text-surface-600 leading-relaxed">{c.feedback || c.rationale || 'No detailed feedback available.'}</p>
+                              </div>
+                              
+                              {/* Evidence in Presentation */}
+                              <div>
+                                <h4 className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2">
+                                  <PlayCircle className="w-4 h-4 text-primary-500" />
+                                  Evidence in Presentation
+                                </h4>
+                                <div className="space-y-3">
+                                  {(submission.transcriptSegments?.slice(selectedCriterionIndex * 2, selectedCriterionIndex * 2 + 2) || []).map((seg, idx) => (
+                                    <div key={idx} className="p-3 bg-surface-50 rounded-lg border border-surface-100">
+                                      <div className="flex items-start gap-3">
+                                        <button
+                                          onClick={() => videoPanelRef.current?.seekTo(typeof seg.timestamp === 'number' ? seg.timestamp : parseFloat(seg.timestamp) * 1000)}
+                                          className="px-2 py-1 bg-primary-100 text-primary-700 text-xs font-mono font-medium rounded hover:bg-primary-200 transition-colors flex-shrink-0"
+                                        >
+                                          {formatTimestamp(seg.timestamp)}
+                                        </button>
+                                        <div className="flex-1">
+                                          <p className="text-sm text-surface-700 italic">&ldquo;{seg.text.slice(0, 120)}{seg.text.length > 120 ? '...' : ''}&rdquo;</p>
+                                          <p className="text-xs text-surface-500 mt-2">
+                                            <span className="font-medium text-primary-600">Analysis:</span> This segment demonstrates the student&apos;s approach to {c.criterion.toLowerCase()}.
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {(!submission.transcriptSegments || submission.transcriptSegments.length === 0) && (
+                                    <div className="p-4 bg-surface-50 rounded-lg text-center text-sm text-surface-500">
+                                      No transcript segments available for this criterion.
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              {/* Auto-generated Insights */}
+                              <div className="pt-4 border-t border-surface-100">
+                                <HighlightableContent
+                                  sourceType="rubric"
+                                  sourceId={`criterion-${selectedCriterionIndex}`}
+                                  criterionId={`criterion-${selectedCriterionIndex}`}
+                                  rubricCriterion={c.criterion}
+                                >
+                                  <ClassInsightCard
+                                    title={`Babblet Analysis: ${c.criterion}`}
+                                    score={c.score}
+                                    maxScore={c.maxScore || 10}
+                                    status={status}
+                                    feedback={c.feedback || c.rationale || 'No detailed feedback available.'}
+                                    defaultExpanded={true}
+                                    onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
+                                    onRequestMoreInsights={handleRequestCriterionInsights}
+                                  />
+                                </HighlightableContent>
+                              </div>
+                            </div>
                           );
-                        })
-                      ) : (
-                        // Fallback demo content
-                        <>
-                          <ClassInsightCard
-                            title="Content Knowledge & Accuracy"
-                            score={18}
-                            maxScore={20}
-                            status="excellent"
-                            moduleReference="Core Concepts"
-                            feedback="Demonstrated strong understanding of key concepts. Accurately explained the main principles and showed good integration of course material."
-                            courseAlignment={92}
-                            defaultExpanded={true}
-                            evidence={[
-                              { timestamp: '0:45', text: 'Correctly defined the core terminology and provided accurate examples...', analysis: 'Shows mastery of foundational concepts with clear, accurate explanations.' },
-                              { timestamp: '2:15', text: 'Referenced the textbook framework effectively...', analysis: 'Demonstrates ability to connect course materials to practical application.' },
-                            ]}
-                            onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
-                            onRequestMoreInsights={handleRequestCriterionInsights}
-                          />
-                          <ClassInsightCard
-                            title="Presentation Structure"
-                            score={14}
-                            maxScore={20}
-                            status="good"
-                            moduleReference="Organization"
-                            feedback="Good overall structure with clear introduction and conclusion. The middle section could benefit from better transitions between topics."
-                            courseAlignment={78}
-                            suggestedAction={{
-                              text: 'Consider using signposting phrases to guide the audience through your key points.',
-                              linkText: 'Presentation Guidelines',
-                              linkUrl: '/resources',
-                            }}
-                            evidence={[
-                              { timestamp: '0:15', text: 'Strong opening that captured attention...', analysis: 'Effective hook that engages the audience immediately.' },
-                            ]}
-                            onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
-                            onRequestMoreInsights={handleRequestCriterionInsights}
-                          />
-                          <ClassInsightCard
-                            title="Visual Aid Usage"
-                            score={8}
-                            maxScore={15}
-                            status="needs_improvement"
-                            moduleReference="Slides"
-                            feedback="Slides were text-heavy and not fully leveraged during the presentation. Consider using more visual elements and referencing slides directly."
-                            courseAlignment={65}
-                            suggestedAction={{
-                              text: 'Review the slide design principles covered in Week 3. Focus on visual hierarchy and reducing text.',
-                              linkText: 'Visual Presentation Tips',
-                              linkUrl: '/resources',
-                            }}
-                            onRequestMoreInsights={handleRequestCriterionInsights}
-                            onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
-                          />
-                        </>
-                      )}
+                        })()}
+                      </div>
                     </div>
                   </div>
 
