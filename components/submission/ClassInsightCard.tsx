@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { ChevronDown, BookOpen, Lightbulb, ExternalLink, PlayCircle, CheckCircle, AlertTriangle, Target, Loader2, Sparkles, ChevronRight, MessageSquarePlus, X, Send, GitBranch, ChevronUp, Trash2, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -23,6 +23,7 @@ interface ClassInsightCardProps {
   }>;
   courseAlignment?: number;
   defaultExpanded?: boolean;
+  autoGenerateInsights?: boolean; // Auto-fetch insights on mount
   onSeekToTime?: (timeMs: number) => void;
   onRequestMoreInsights?: (criterionTitle: string) => Promise<string>;
 }
@@ -87,6 +88,7 @@ export default function ClassInsightCard({
   evidence,
   courseAlignment,
   defaultExpanded = false,
+  autoGenerateInsights = false,
   onSeekToTime,
   onRequestMoreInsights,
 }: ClassInsightCardProps) {
@@ -99,6 +101,28 @@ export default function ClassInsightCard({
   const [branchQuery, setBranchQuery] = useState('');
   const config = statusConfig[status];
   const StatusIcon = config.icon;
+  const autoFetchedRef = useRef(false);
+  
+  // Auto-fetch insights on mount if enabled
+  useEffect(() => {
+    if (autoGenerateInsights && onRequestMoreInsights && !additionalInsights && !autoFetchedRef.current) {
+      autoFetchedRef.current = true;
+      setIsLoadingInsights(true);
+      onRequestMoreInsights(title)
+        .then(insights => {
+          // Ensure insights have a reference at the end
+          const insightWithRef = insights.includes('[1]') ? insights : `${insights} [1]`;
+          setAdditionalInsights(insightWithRef);
+        })
+        .catch(err => {
+          console.error('Failed to auto-generate insights:', err);
+          setAdditionalInsights('Unable to load insights. Please try again.');
+        })
+        .finally(() => {
+          setIsLoadingInsights(false);
+        });
+    }
+  }, [autoGenerateInsights, onRequestMoreInsights, title, additionalInsights]);
 
   // Build citations from evidence
   const citations = useMemo(() => {
@@ -116,7 +140,9 @@ export default function ClassInsightCard({
     setIsLoadingInsights(true);
     try {
       const insights = await onRequestMoreInsights(title);
-      setAdditionalInsights(insights);
+      // Ensure insights have a reference at the end
+      const insightWithRef = insights.includes('[1]') ? insights : `${insights} [1]`;
+      setAdditionalInsights(insightWithRef);
     } catch (err) {
       console.error('Failed to get insights:', err);
       setAdditionalInsights('Unable to load additional insights. Please try again.');

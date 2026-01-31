@@ -872,186 +872,167 @@ export default function SubmissionDetailPage() {
                     ]}
                   />
 
-                  {/* Presentation Highlights - TikTok-style Video Clips */}
-                  <div className="bg-white rounded-2xl border border-surface-200 p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-amber-500" />
-                        <h3 className="text-sm font-semibold text-surface-900">Presentation Highlights</h3>
+                  {/* Presentation Highlights and Speech Delivery - Side by Side */}
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Presentation Highlights - TikTok-style Video Clips */}
+                    <div className="bg-white rounded-2xl border border-surface-200 p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-amber-500" />
+                          <h3 className="text-sm font-semibold text-surface-900">Presentation Highlights</h3>
+                        </div>
+                        <span className="text-xs text-surface-500">Click to play</span>
                       </div>
-                      <span className="text-xs text-surface-500">Click to play key moments</span>
-                    </div>
-                    
-                    {/* Video Clip Cards - Horizontal Scroll */}
-                    <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-surface-300">
-                      {(submission.analysis?.keyClaims?.slice(0, 5) || sortedSegments.slice(0, 5)).map((item, idx) => {
-                        const seg = sortedSegments[Math.min(idx * Math.floor(sortedSegments.length / 5), sortedSegments.length - 1)];
-                        const timestamp = seg ? formatTimestamp(seg.timestamp) : `${idx}:00`;
-                        const timestampMs = seg ? normalizeTimestamp(seg.timestamp) : idx * 60000;
-                        const text = 'claim' in item ? item.claim : ('text' in item ? item.text.slice(0, 60) : 'Key moment');
-                        const highlightTypes = ['Strong Opening', 'Key Evidence', 'Clear Explanation', 'Great Example', 'Effective Conclusion'];
-                        const highlightColors = [
-                          'from-rose-500 to-pink-600',
-                          'from-amber-500 to-orange-600', 
-                          'from-emerald-500 to-teal-600',
-                          'from-blue-500 to-indigo-600',
-                          'from-purple-500 to-violet-600'
-                        ];
-                        
-                        return (
-                          <div
-                            key={idx}
-                            className="flex-shrink-0 w-40 group cursor-pointer"
-                            onClick={() => videoPanelRef.current?.seekTo(timestampMs)}
-                          >
-                            {/* Video Thumbnail Container */}
-                            <div className="relative aspect-[9/16] rounded-xl overflow-hidden bg-surface-900 mb-2 group-hover:ring-2 ring-primary-500 transition-all">
-                              {/* Video element for thumbnail */}
-                              {videoUrl && (
-                                <video
-                                  src={videoUrl}
-                                  className="absolute inset-0 w-full h-full object-cover"
-                                  muted
-                                  preload="metadata"
-                                  onLoadedMetadata={(e) => {
-                                    const video = e.target as HTMLVideoElement;
-                                    video.currentTime = timestampMs / 1000;
-                                  }}
-                                />
-                              )}
-                              {!videoUrl && (
-                                <div className={`absolute inset-0 bg-gradient-to-br ${highlightColors[idx % highlightColors.length]} opacity-80`} />
-                              )}
-                              
-                              {/* Play overlay */}
-                              <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
-                                  <PlayCircle className="w-6 h-6 text-surface-900 ml-0.5" />
+                      
+                      {/* Video Clip Cards - Vertical scroll for side layout */}
+                      <div className="flex flex-col gap-3 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-surface-300">
+                        {(submission.analysis?.keyClaims?.slice(0, 4) || sortedSegments.slice(0, 4)).map((item, idx) => {
+                          const seg = sortedSegments[Math.min(idx * Math.floor(sortedSegments.length / 4), sortedSegments.length - 1)];
+                          const timestamp = seg ? formatTimestamp(seg.timestamp) : `${idx}:00`;
+                          const timestampMs = seg ? normalizeTimestamp(seg.timestamp) : idx * 60000;
+                          const text = 'claim' in item ? item.claim : ('text' in item ? item.text.slice(0, 60) : 'Key moment');
+                          const highlightTypes = ['Strong Opening', 'Key Evidence', 'Clear Explanation', 'Great Example'];
+                          const highlightColors = [
+                            'from-rose-500 to-pink-600',
+                            'from-amber-500 to-orange-600', 
+                            'from-emerald-500 to-teal-600',
+                            'from-blue-500 to-indigo-600'
+                          ];
+                          
+                          return (
+                            <div
+                              key={idx}
+                              className="flex gap-3 group cursor-pointer p-2 rounded-lg hover:bg-surface-50 transition-colors"
+                              onClick={() => videoPanelRef.current?.seekTo(timestampMs)}
+                            >
+                              {/* Compact Video Thumbnail */}
+                              <div className="relative w-16 h-20 rounded-lg overflow-hidden bg-surface-900 flex-shrink-0 group-hover:ring-2 ring-primary-500 transition-all">
+                                {videoUrl && (
+                                  <video
+                                    src={videoUrl}
+                                    className="absolute inset-0 w-full h-full object-cover"
+                                    muted
+                                    preload="metadata"
+                                    onLoadedMetadata={(e) => {
+                                      const video = e.target as HTMLVideoElement;
+                                      video.currentTime = timestampMs / 1000;
+                                    }}
+                                  />
+                                )}
+                                {!videoUrl && (
+                                  <div className={`absolute inset-0 bg-gradient-to-br ${highlightColors[idx % highlightColors.length]} opacity-80`} />
+                                )}
+                                <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <PlayCircle className="w-6 h-6 text-white" />
+                                </div>
+                                <div className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/70 rounded text-white text-[10px] font-mono">
+                                  {timestamp}
                                 </div>
                               </div>
                               
-                              {/* Timestamp badge */}
-                              <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 rounded text-white text-xs font-mono font-medium">
-                                {timestamp}
-                              </div>
-                              
-                              {/* Highlight type badge */}
-                              <div className={`absolute top-2 left-2 right-2`}>
-                                <span className={`px-2 py-1 bg-gradient-to-r ${highlightColors[idx % highlightColors.length]} text-white text-[10px] font-semibold rounded-full shadow-sm`}>
+                              {/* Caption */}
+                              <div className="flex-1 min-w-0">
+                                <span className={`inline-block px-2 py-0.5 bg-gradient-to-r ${highlightColors[idx % highlightColors.length]} text-white text-[10px] font-semibold rounded-full mb-1`}>
                                   {highlightTypes[idx % highlightTypes.length]}
                                 </span>
+                                <p className="text-xs text-surface-600 line-clamp-2 leading-relaxed">
+                                  {typeof text === 'string' ? text : 'Notable presentation moment'}
+                                </p>
                               </div>
                             </div>
-                            
-                            {/* Caption */}
-                            <p className="text-xs text-surface-600 line-clamp-2 leading-relaxed">
-                              {typeof text === 'string' ? text : 'Notable presentation moment'}
-                            </p>
+                          );
+                        })}
+                        {sortedSegments.length === 0 && (
+                          <div className="flex items-center justify-center py-8 text-sm text-surface-500">
+                            <div className="text-center">
+                              <PlayCircle className="w-6 h-6 mx-auto mb-2 text-surface-300" />
+                              <p className="text-xs">No highlights yet</p>
+                            </div>
                           </div>
-                        );
-                      })}
-                      {sortedSegments.length === 0 && (
-                        <div className="flex-1 flex items-center justify-center py-12 text-sm text-surface-500">
-                          <div className="text-center">
-                            <PlayCircle className="w-8 h-8 mx-auto mb-2 text-surface-300" />
-                            <p>No highlights available yet.</p>
-                            <p className="text-xs">Process the video to generate highlights.</p>
-                          </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Speech Delivery */}
-                  <CollapsibleSection
-                    title="Speech Delivery"
-                    subtitle="Babblet-analyzed vocal metrics"
-                    icon={<Mic className="w-4 h-4" />}
-                    defaultExpanded={true}
-                  >
-                    <div className="grid grid-cols-3 gap-6">
-                      {/* Filler Word Count */}
-                      <div className="bg-surface-50 rounded-xl p-4">
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="text-sm font-medium text-surface-700">Filler Word Count</span>
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                            speechMetrics.fillerWordCount <= 10 
-                              ? 'bg-emerald-100 text-emerald-700' 
-                              : speechMetrics.fillerWordCount <= 20
-                                ? 'bg-amber-100 text-amber-700'
-                                : 'bg-red-100 text-red-700'
-                          }`}>
-                            {speechMetrics.fillerWordCount <= 10 ? 'Good' : speechMetrics.fillerWordCount <= 20 ? 'Moderate' : 'High'}
-                          </span>
-                        </div>
-                        <div className="flex items-baseline gap-2 mb-1">
-                          <span className="text-3xl font-bold text-surface-900">
-                            {speechMetrics.fillerWordCount}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-4 text-xs text-surface-500 mt-2 pt-2 border-t border-surface-100">
-                          <span>Student: <span className="font-medium text-surface-700">{speechMetrics.fillerWordCount}</span></span>
-                          <span>Class Avg: <span className="font-medium text-surface-700">18</span></span>
-                        </div>
+                    {/* Speech Delivery */}
+                    <div className="bg-white rounded-2xl border border-surface-200 p-4">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Mic className="w-4 h-4 text-primary-500" />
+                        <h3 className="text-sm font-semibold text-surface-900">Speech Delivery</h3>
                       </div>
+                      
+                      <div className="space-y-4">
+                        {/* Filler Word Count */}
+                        <div className="bg-surface-50 rounded-xl p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-surface-700">Filler Word Count</span>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                              speechMetrics.fillerWordCount <= 10 
+                                ? 'bg-emerald-100 text-emerald-700' 
+                                : speechMetrics.fillerWordCount <= 20
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-red-100 text-red-700'
+                            }`}>
+                              {speechMetrics.fillerWordCount <= 10 ? 'Good' : speechMetrics.fillerWordCount <= 20 ? 'Moderate' : 'High'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-2xl font-bold text-surface-900">{speechMetrics.fillerWordCount}</span>
+                            <span className="text-xs text-surface-500">Class Avg: <span className="font-medium">18</span></span>
+                          </div>
+                        </div>
 
-                      {/* Speaking Rate */}
-                      <div className="bg-surface-50 rounded-xl p-4">
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="text-sm font-medium text-surface-700">Speaking Rate</span>
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                            speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180
-                              ? 'bg-emerald-100 text-emerald-700' 
-                              : speechMetrics.speakingRateWpm < 100 || speechMetrics.speakingRateWpm > 200
-                                ? 'bg-red-100 text-red-700'
-                                : 'bg-amber-100 text-amber-700'
-                          }`}>
-                            {speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180 
-                              ? 'Optimal' 
-                              : speechMetrics.speakingRateWpm < 120 
-                                ? 'Slow' 
-                                : 'Fast'}
-                          </span>
+                        {/* Speaking Rate */}
+                        <div className="bg-surface-50 rounded-xl p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-surface-700">Speaking Rate</span>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                              speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180
+                                ? 'bg-emerald-100 text-emerald-700' 
+                                : speechMetrics.speakingRateWpm < 100 || speechMetrics.speakingRateWpm > 200
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-amber-100 text-amber-700'
+                            }`}>
+                              {speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180 
+                                ? 'Optimal' 
+                                : speechMetrics.speakingRateWpm < 120 
+                                  ? 'Slow' 
+                                  : 'Fast'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-2xl font-bold text-surface-900">{speechMetrics.speakingRateWpm}</span>
+                              <span className="text-sm text-surface-500">wpm</span>
+                            </div>
+                            <span className="text-xs text-surface-500">Class Avg: <span className="font-medium">130</span></span>
+                          </div>
                         </div>
-                        <div className="flex items-baseline gap-2 mb-1">
-                          <span className="text-3xl font-bold text-surface-900">
-                            {speechMetrics.speakingRateWpm}
-                          </span>
-                          <span className="text-sm text-surface-500">wpm</span>
-                        </div>
-                        <div className="flex items-center gap-4 text-xs text-surface-500 mt-2 pt-2 border-t border-surface-100">
-                          <span>Student: <span className="font-medium text-surface-700">{speechMetrics.speakingRateWpm}</span></span>
-                          <span>Class Avg: <span className="font-medium text-surface-700">130</span></span>
-                        </div>
-                      </div>
 
-                      {/* Pause Frequency */}
-                      <div className="bg-surface-50 rounded-xl p-4">
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="text-sm font-medium text-surface-700">Pause Frequency</span>
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                            speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8
-                              ? 'bg-emerald-100 text-emerald-700' 
-                              : speechMetrics.pauseFrequency > 8
-                                ? 'bg-red-100 text-red-700'
-                                : 'bg-amber-100 text-amber-700'
-                          }`}>
-                            {speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8 ? 'Good' : speechMetrics.pauseFrequency > 8 ? 'High' : 'Low'}
-                          </span>
-                        </div>
-                        <div className="flex items-baseline gap-2 mb-1">
-                          <span className="text-3xl font-bold text-surface-900">
-                            {speechMetrics.pauseFrequency.toFixed(1)}
-                          </span>
-                          <span className="text-sm text-surface-500">/min</span>
-                        </div>
-                        <div className="flex items-center gap-4 text-xs text-surface-500 mt-2 pt-2 border-t border-surface-100">
-                          <span>Student: <span className="font-medium text-surface-700">{speechMetrics.pauseFrequency.toFixed(1)}</span></span>
-                          <span>Class Avg: <span className="font-medium text-surface-700">4.2</span></span>
+                        {/* Pause Frequency */}
+                        <div className="bg-surface-50 rounded-xl p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-surface-700">Pause Frequency</span>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                              speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8
+                                ? 'bg-emerald-100 text-emerald-700' 
+                                : speechMetrics.pauseFrequency > 8
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-amber-100 text-amber-700'
+                            }`}>
+                              {speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8 ? 'Good' : speechMetrics.pauseFrequency > 8 ? 'High' : 'Low'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-2xl font-bold text-surface-900">{speechMetrics.pauseFrequency.toFixed(1)}</span>
+                              <span className="text-sm text-surface-500">/min</span>
+                            </div>
+                            <span className="text-xs text-surface-500">Class Avg: <span className="font-medium">4.2</span></span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </CollapsibleSection>
+                  </div>
 
                   {/* Course Material Alignment */}
                   <CollapsibleSection
@@ -1581,6 +1562,7 @@ export default function SubmissionDetailPage() {
                                     status={status}
                                     feedback={c.feedback || c.rationale || 'No detailed feedback available.'}
                                     defaultExpanded={true}
+                                    autoGenerateInsights={true}
                                     onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
                                     onRequestMoreInsights={handleRequestCriterionInsights}
                                   />
