@@ -98,7 +98,8 @@ function buildSystemPrompt(context: ChatContext, courseMaterials?: Array<{ name:
     parts.push(``);
     parts.push(`RUBRIC CRITERION BEING ANALYZED: ${context.rubricCriterion}`);
     parts.push(``);
-    parts.push(`ANALYSIS PRIORITY: First analyze how well the student aligns with THIS SPECIFIC rubric criterion. Then how they align with course content. Include [1], [2] references at the end of EACH bullet or paragraph.`);
+    parts.push(`ANALYSIS PRIORITY: First analyze how well the student aligns with THIS SPECIFIC rubric criterion. Then how they align with course content.`);
+    parts.push(`JUICY INSIGHTS: Include concrete details (durations, timestamps, confidence scores), vivid language, and specific suggestions. End each bullet with [1], [2] references.`);
   }
   
   if (context.rubricText) {

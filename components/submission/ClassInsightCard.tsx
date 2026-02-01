@@ -493,8 +493,11 @@ export default function ClassInsightCard({
                                   ))}
                                 </AnimatePresence>
 
-                                {/* Add branch button/input */}
+                                {/* Ask a question - prominent for juicier insights */}
                                 <div className="mt-4 pt-3 border-t border-primary-100">
+                                  <p className="text-[10px] font-medium text-surface-500 uppercase tracking-wide mb-2">
+                                    Want to dig deeper?
+                                  </p>
                                   <AnimatePresence mode="wait">
                                     {showBranchInput ? (
                                       <motion.div
@@ -509,7 +512,7 @@ export default function ClassInsightCard({
                                           value={branchQuery}
                                           onChange={(e) => setBranchQuery(e.target.value)}
                                           onKeyDown={(e) => e.key === 'Enter' && handleCreateBranch()}
-                                          placeholder="Ask a follow-up question..."
+                                          placeholder="Ask a question about this insight..."
                                           className="flex-1 px-3 py-2 text-sm bg-white border border-primary-200 rounded-lg focus:ring-2 focus:ring-primary-300 focus:border-primary-300 outline-none"
                                           autoFocus
                                         />
@@ -537,10 +540,10 @@ export default function ClassInsightCard({
                                         animate={{ opacity: 1 }}
                                         exit={{ opacity: 0 }}
                                         onClick={() => setShowBranchInput(true)}
-                                        className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
+                                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg transition-colors w-full justify-center"
                                       >
                                         <MessageSquarePlus className="w-4 h-4" />
-                                        Ask a follow-up
+                                        Ask a question
                                       </motion.button>
                                     )}
                                   </AnimatePresence>

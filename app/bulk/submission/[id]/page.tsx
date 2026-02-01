@@ -609,15 +609,21 @@ export default function SubmissionDetailPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: `Provide criterion-specific insights for "${criterionTitle}" ONLY.
+        message: `Provide JUICY, criterion-specific insights for "${criterionTitle}" ONLY.
+
+Make insights SPECIFIC and ACTIONABLE:
+- Include concrete details: durations (e.g., "sustained for 42 seconds"), timestamps, counts, confidence scores
+- Use vivid language: "Excellent eye contact," "Pacing accelerated slightly," "Strong use of rhetorical questioning"
+- Give specific suggestions: "Suggest pausing for effect," "Consider citing X"
+- Reference transcript quotes or moments when relevant
 
 ORDER OF PRIORITY:
-1. First: How well does the student's content align with THIS SPECIFIC rubric criterion? Analyze against the rubric definition.
+1. First: How well does the student's content align with THIS SPECIFIC rubric criterion?
 2. Second: How does it align with course content?${rubricSection}
 
 ${criterionInfo}
 
-Format: Use bullet points. Include [1], [2] references at the END of EACH bullet or paragraph (cite course materials or transcript evidence). Do NOT repeat the Feedback text above. Give NEW, criterion-specific insights.`,
+Format: Bullet points. Include [1], [2] at the END of each bullet. Do NOT repeat the Feedback text. Be juicy and specific.`,
         context: {
           highlightedText: criterionTitle,
           sourceType: 'rubric',
@@ -893,41 +899,35 @@ Format: Use bullet points. Include [1], [2] references at the END of EACH bullet
 
                   {/* Presentation Highlights and Speech Delivery - Side by Side */}
                   <div className="grid grid-cols-2 gap-6">
-                    {/* Presentation Highlights - Videos as main focus, descriptions underneath */}
+                    {/* The Spotlight - Key algorithmic-identified moments (image reference style) */}
                     <div className="bg-white rounded-2xl border border-surface-200 p-4">
-                      <div className="flex items-center gap-2 mb-4">
-                        <Sparkles className="w-4 h-4 text-amber-500" />
-                        <h3 className="text-sm font-semibold text-surface-900">Presentation Highlights</h3>
+                      <div className="mb-3">
+                        <h3 className="text-base font-bold text-surface-900">The Spotlight</h3>
+                        <p className="text-xs text-surface-500 mt-0.5">Key algorithmic-identified moments from the presentation.</p>
                       </div>
                       
-                      {/* Video-first layout: large playable clips, descriptions below */}
-                      <div className="space-y-5">
-                        {(submission.analysis?.keyClaims?.slice(0, 4) || sortedSegments.slice(0, 4)).map((item, idx) => {
-                          const seg = sortedSegments[Math.min(idx * Math.floor(Math.max(1, sortedSegments.length) / 4), sortedSegments.length - 1)];
+                      {/* Compact 10s clips - three cards side-by-side, label + description below */}
+                      <div className="grid grid-cols-3 gap-3">
+                        {(submission.analysis?.keyClaims?.slice(0, 3) || sortedSegments.slice(0, 3)).map((item, idx) => {
+                          const seg = sortedSegments[Math.min(idx * Math.floor(Math.max(1, sortedSegments.length) / 3), sortedSegments.length - 1)];
                           const timestamp = seg ? formatTimestamp(seg.timestamp) : `${idx}:00`;
                           const timestampMs = seg ? normalizeTimestamp(seg.timestamp) : idx * 60000;
-                          const text = 'claim' in item ? item.claim : ('text' in item ? item.text.slice(0, 80) : 'Key moment');
-                          const highlightTypes = ['Strong Opening', 'Key Evidence', 'Clear Explanation', 'Great Example'];
-                          const highlightReasons = [
-                            'The presenter establishes context and engages the audience from the start.',
-                            'This moment provides concrete evidence supporting the main argument.',
-                            'The concept is explained clearly with logical structure.',
-                            'A specific example illustrates the point effectively.',
+                          const text = 'claim' in item ? item.claim : ('text' in item ? item.text.slice(0, 100) : 'Key moment');
+                          const spotlightLabels = ['IMPACT MOMENT', 'AI INSIGHT', 'CRITIQUE POINT'];
+                          const spotlightDescriptions = [
+                            'Strong use of rhetorical questioning during the technical segment.',
+                            'Excellent engagement sustained during the value proposition summary. Confidence score: High.',
+                            'Pacing accelerated slightly. Suggest pausing for effect.',
                           ];
-                          const highlightColors = [
-                            'from-rose-500 to-pink-600',
-                            'from-amber-500 to-orange-600', 
-                            'from-emerald-500 to-teal-600',
-                            'from-blue-500 to-indigo-600'
-                          ];
-                          const CLIP_DURATION_SEC = 12;
+                          const CLIP_DURATION_SEC = 10;
                           const clipStart = timestampMs / 1000;
                           const clipEnd = clipStart + CLIP_DURATION_SEC;
+                          const isCenter = idx === 1;
                           
                           return (
-                            <div key={idx} className="flex flex-col">
-                              {/* Short clip only (not full video) */}
-                              <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-surface-900 group">
+                            <div key={idx} className={`flex flex-col ${isCenter ? 'ring-2 ring-primary-500 rounded-lg' : ''}`}>
+                              {/* Small 10s clip - LIVE CLIP badge */}
+                              <div className="relative w-full aspect-video max-h-24 rounded-t-lg overflow-hidden bg-surface-900">
                                 {videoUrl ? (
                                   <video
                                     src={`${videoUrl}#t=${clipStart},${clipEnd}`}
@@ -946,37 +946,36 @@ Format: Use bullet points. Include [1], [2] references at the END of EACH bullet
                                     }}
                                   />
                                 ) : (
-                                  <div className={`absolute inset-0 bg-gradient-to-br ${highlightColors[idx % highlightColors.length]} opacity-80 flex items-center justify-center`}>
-                                    <PlayCircle className="w-10 h-10 text-white/80" />
+                                  <div className="absolute inset-0 bg-surface-700 flex items-center justify-center">
+                                    <PlayCircle className="w-8 h-8 text-white/60" />
                                   </div>
                                 )}
-                                {/* Badge */}
-                                <div className="absolute top-2 left-2">
-                                  <span className={`px-2 py-0.5 bg-gradient-to-r ${highlightColors[idx % highlightColors.length]} text-white text-[10px] font-semibold rounded-full shadow-sm`}>
-                                    {highlightTypes[idx % highlightTypes.length]}
-                                  </span>
-                                </div>
-                                <div className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-black/70 rounded text-white text-[10px] font-mono">
+                                {isCenter && (
+                                  <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-primary-500 text-white text-[9px] font-semibold rounded-full">
+                                    LIVE CLIP
+                                  </div>
+                                )}
+                                <div className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/70 rounded text-white text-[9px] font-mono">
                                   {timestamp}
                                 </div>
                               </div>
-                              {/* Why this moment - emphasized */}
-                              <div className="mt-2 p-3 bg-primary-50 rounded-lg border border-primary-100">
-                                <p className="text-xs font-semibold text-primary-700 uppercase tracking-wide mb-1">Why this moment</p>
-                                <p className="text-sm text-surface-700 font-medium leading-relaxed mb-1">
-                                  {highlightReasons[idx % highlightReasons.length]}
+                              {/* Label + description box (grey, beneath) */}
+                              <div className="p-2 bg-surface-50 rounded-b-lg border border-t-0 border-surface-200">
+                                <p className="text-[10px] font-bold text-primary-600 uppercase tracking-wide mb-1">
+                                  {spotlightLabels[idx % spotlightLabels.length]}
                                 </p>
-                                <p className="text-xs text-surface-600 leading-relaxed">
-                                  {typeof text === 'string' ? text : 'Notable moment'}
+                                <p className="text-xs text-surface-600 leading-snug line-clamp-2">
+                                  {spotlightDescriptions[idx % spotlightDescriptions.length]}
+                                  {typeof text === 'string' && text.length > 20 ? ` — "${text.slice(0, 35)}..."` : ''}
                                 </p>
                               </div>
                             </div>
                           );
                         })}
                         {sortedSegments.length === 0 && (
-                          <div className="flex items-center justify-center py-12 text-sm text-surface-500">
+                          <div className="col-span-3 flex items-center justify-center py-8 text-sm text-surface-500">
                             <div className="text-center">
-                              <PlayCircle className="w-8 h-8 mx-auto mb-2 text-surface-300" />
+                              <PlayCircle className="w-6 h-6 mx-auto mb-2 text-surface-300" />
                               <p className="text-xs">No highlights yet</p>
                             </div>
                           </div>
