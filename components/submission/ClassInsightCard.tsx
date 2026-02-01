@@ -280,281 +280,181 @@ export default function ClassInsightCard({
   }, [citations, onSeekToTime]);
 
   return (
-    <div className={`bg-white rounded-2xl border ${config.borderColor} overflow-hidden`}>
-      {/* Header */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full p-5 flex items-start justify-between hover:bg-surface-50/50 transition-colors text-left"
-      >
-        <div className="flex items-start gap-3 flex-1 min-w-0">
-          <div className={`w-10 h-10 rounded-xl ${config.bgColor} flex items-center justify-center flex-shrink-0`}>
-            <StatusIcon className={`w-5 h-5 ${config.color}`} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-semibold text-surface-900">{title}</h3>
-              {moduleReference && (
-                <span className="px-2 py-0.5 bg-primary-100 text-primary-700 text-xs font-medium rounded-full">
-                  {moduleReference}
-                </span>
-              )}
-            </div>
-            {!isExpanded && (
-              <p className="text-sm text-surface-500 mt-1 line-clamp-2">{feedback}</p>
-            )}
-          </div>
+    <div className="space-y-4">
+      {/* Get More Insights button - only show when no insights yet */}
+      {onRequestMoreInsights && !additionalInsights && !isLoadingInsights && (
+        <button
+          onClick={handleRequestInsights}
+          disabled={isLoadingInsights}
+          className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
+        >
+          <Sparkles className="w-4 h-4" />
+          Generate Insights for {title}
+          <ChevronRight className="w-3 h-3" />
+        </button>
+      )}
+      
+      {/* Loading state */}
+      {isLoadingInsights && (
+        <div className="flex items-center gap-2 text-sm text-primary-600">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Analyzing {title}...
         </div>
-        <div className="flex items-center gap-3 flex-shrink-0 ml-4">
-          {score !== undefined && maxScore !== undefined && (
-            <div className="text-right">
-              <span className="text-lg font-bold text-surface-900">{score}</span>
-              <span className="text-sm text-surface-400">/{maxScore}</span>
+      )}
+      
+      {/* Insights Panel - show when insights exist */}
+      {additionalInsights && (
+        <div className="p-4 bg-gradient-to-r from-primary-50 to-blue-50 border border-primary-100 rounded-xl">
+          {/* Header with hide/delete controls */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-primary-600" />
+              <span className="text-xs font-semibold text-primary-700 uppercase tracking-wide">Babblet Insights</span>
             </div>
-          )}
-          <ChevronDown
-            className={`w-5 h-5 text-surface-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-          />
-        </div>
-      </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setIsInsightsHidden(!isInsightsHidden)}
+                className="p-1.5 text-surface-400 hover:text-surface-600 rounded-md hover:bg-white/50 transition-colors"
+                title={isInsightsHidden ? 'Show insights' : 'Hide insights'}
+              >
+                {isInsightsHidden ? <ChevronDown className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={() => {
+                  setLocalInsights(null);
+                  setBranches([]);
+                  onInsightsGenerated?.(title, '');
+                }}
+                className="p-1.5 text-surface-400 hover:text-red-500 rounded-md hover:bg-white/50 transition-colors"
+                title="Delete insights"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
 
-      {/* Expanded Content */}
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="px-5 pb-5 space-y-4">
-              {/* Course Alignment */}
-              {courseAlignment !== undefined && (
-                <div className="flex items-center gap-3 p-3 bg-surface-50 rounded-xl">
-                  <Target className="w-4 h-4 text-primary-500" />
-                  <span className="text-sm text-surface-600">Course Material Alignment:</span>
-                  <span className="text-sm font-semibold text-primary-600">{courseAlignment}%</span>
-                  <div className="flex-1 h-1.5 bg-surface-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary-500 rounded-full"
-                      style={{ width: `${courseAlignment}%` }}
-                    />
-                  </div>
+          {/* Collapsible content */}
+          <AnimatePresence>
+            {!isInsightsHidden && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.15 }}
+              >
+                {/* Insight content */}
+                <div className="text-sm leading-relaxed">
+                  {renderInsightContent(additionalInsights)}
                 </div>
-              )}
 
-              {/* Get More Insights button - only show when no insights yet */}
-              {onRequestMoreInsights && !additionalInsights && (
-                <div className="pt-3 border-t border-surface-100">
-                  <button
-                    onClick={handleRequestInsights}
-                    disabled={isLoadingInsights}
-                    className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
-                  >
-                    {isLoadingInsights ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="w-4 h-4" />
-                    )}
-                    {isLoadingInsights ? 'Generating insights...' : 'Get More Insights'}
-                    {!isLoadingInsights && <ChevronRight className="w-3 h-3" />}
-                  </button>
-                </div>
-              )}
-              
-              {/* Additional Insights Panel - show when insights exist */}
-              {onRequestMoreInsights && additionalInsights && (
-                <div className="pt-3 border-t border-surface-100">
-                  <AnimatePresence>
-                    {additionalInsights && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="mt-3 p-4 bg-gradient-to-r from-primary-50 to-blue-50 border border-primary-100 rounded-xl">
-                          {/* Header with hide/delete controls */}
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-1.5">
-                              <Sparkles className="w-4 h-4 text-primary-600" />
-                              <span className="text-xs font-semibold text-primary-700 uppercase tracking-wide">Babblet Insights</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => setIsInsightsHidden(!isInsightsHidden)}
-                                className="p-1.5 text-surface-400 hover:text-surface-600 rounded-md hover:bg-white/50 transition-colors"
-                                title={isInsightsHidden ? 'Show insights' : 'Hide insights'}
-                              >
-                                {isInsightsHidden ? <ChevronDown className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setLocalInsights(null);
-                                  setBranches([]);
-                                  onInsightsGenerated?.(title, '');
-                                }}
-                                className="p-1.5 text-surface-400 hover:text-red-500 rounded-md hover:bg-white/50 transition-colors"
-                                title="Delete insights"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Collapsible content */}
-                          <AnimatePresence>
-                            {!isInsightsHidden && (
-                              <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.15 }}
-                              >
-                                {/* Insight content - references are now inline at end of bullet points */}
-                                <div className="text-sm leading-relaxed">
-                                  {renderInsightContent(additionalInsights)}
-                                </div>
-
-                                {/* Branch insights */}
-                                <AnimatePresence>
-                                  {branches.map((branch) => (
-                                    <motion.div
-                                      key={branch.id}
-                                      initial={{ opacity: 0, y: -10 }}
-                                      animate={{ opacity: 1, y: 0 }}
-                                      exit={{ opacity: 0, y: -10 }}
-                                      className="mt-4 ml-4 pl-4 border-l-2 border-primary-200"
-                                    >
-                                      <div className="flex items-start justify-between gap-2 mb-2">
-                                        <div className="flex items-center gap-2">
-                                          <GitBranch className="w-3.5 h-3.5 text-primary-500" />
-                                          <span className="text-xs font-medium text-primary-700">{branch.query}</span>
-                                        </div>
-                                        <button
-                                          onClick={() => removeBranch(branch.id)}
-                                          className="p-1 text-surface-400 hover:text-red-500 rounded-full hover:bg-white/50"
-                                          title="Delete this branch"
-                                        >
-                                          <X className="w-3 h-3" />
-                                        </button>
-                                      </div>
-                                      {branch.isLoading ? (
-                                        <div className="flex items-center gap-2 text-xs text-primary-600">
-                                          <Loader2 className="w-3 h-3 animate-spin" />
-                                          Generating insight...
-                                        </div>
-                                      ) : branch.response && (
-                                        <div className="text-sm text-surface-700 bg-white/40 rounded-lg p-3">
-                                          {renderInsightContent(branch.response)}
-                                        </div>
-                                      )}
-                                    </motion.div>
-                                  ))}
-                                </AnimatePresence>
-
-                                {/* Ask a question - prominent for juicier insights */}
-                                <div className="mt-4 pt-3 border-t border-primary-100">
-                                  <p className="text-[10px] font-medium text-surface-500 uppercase tracking-wide mb-2">
-                                    Want to dig deeper?
-                                  </p>
-                                  <AnimatePresence mode="wait">
-                                    {showBranchInput ? (
-                                      <motion.div
-                                        key="input"
-                                        initial={{ opacity: 0, height: 0 }}
-                                        animate={{ opacity: 1, height: 'auto' }}
-                                        exit={{ opacity: 0, height: 0 }}
-                                        className="flex items-center gap-2"
-                                      >
-                                        <input
-                                          type="text"
-                                          value={branchQuery}
-                                          onChange={(e) => setBranchQuery(e.target.value)}
-                                          onKeyDown={(e) => e.key === 'Enter' && handleCreateBranch()}
-                                          placeholder="Ask a question about this insight..."
-                                          className="flex-1 px-3 py-2 text-sm bg-white border border-primary-200 rounded-lg focus:ring-2 focus:ring-primary-300 focus:border-primary-300 outline-none"
-                                          autoFocus
-                                        />
-                                        <button
-                                          onClick={handleCreateBranch}
-                                          disabled={!branchQuery.trim()}
-                                          className="p-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                        >
-                                          <Send className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                          onClick={() => {
-                                            setShowBranchInput(false);
-                                            setBranchQuery('');
-                                          }}
-                                          className="p-2 text-surface-500 hover:text-surface-700 transition-colors"
-                                        >
-                                          <X className="w-4 h-4" />
-                                        </button>
-                                      </motion.div>
-                                    ) : (
-                                      <motion.button
-                                        key="button"
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        exit={{ opacity: 0 }}
-                                        onClick={() => setShowBranchInput(true)}
-                                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg transition-colors w-full justify-center"
-                                      >
-                                        <MessageSquarePlus className="w-4 h-4" />
-                                        Ask a question
-                                      </motion.button>
-                                    )}
-                                  </AnimatePresence>
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-
-                          {/* Collapsed state indicator */}
-                          {isInsightsHidden && (
-                            <button
-                              onClick={() => setIsInsightsHidden(false)}
-                              className="text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1"
-                            >
-                              <ChevronDown className="w-3 h-3" />
-                              Show insights
-                            </button>
-                          )}
+                {/* Branch insights */}
+                <AnimatePresence>
+                  {branches.map((branch) => (
+                    <motion.div
+                      key={branch.id}
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="mt-4 ml-4 pl-4 border-l-2 border-primary-200"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <GitBranch className="w-3.5 h-3.5 text-primary-500" />
+                          <span className="text-xs font-medium text-primary-700">{branch.query}</span>
                         </div>
+                        <button
+                          onClick={() => removeBranch(branch.id)}
+                          className="p-1 text-surface-400 hover:text-red-500 rounded-full hover:bg-white/50"
+                          title="Delete this branch"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                      {branch.isLoading ? (
+                        <div className="flex items-center gap-2 text-xs text-primary-600">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Generating insight...
+                        </div>
+                      ) : branch.response && (
+                        <div className="text-sm text-surface-700 bg-white/40 rounded-lg p-3">
+                          {renderInsightContent(branch.response)}
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+
+                {/* Ask a question */}
+                <div className="mt-4 pt-3 border-t border-primary-100">
+                  <p className="text-[10px] font-medium text-surface-500 uppercase tracking-wide mb-2">
+                    Want to dig deeper?
+                  </p>
+                  <AnimatePresence mode="wait">
+                    {showBranchInput ? (
+                      <motion.div
+                        key="input"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="flex items-center gap-2"
+                      >
+                        <input
+                          type="text"
+                          value={branchQuery}
+                          onChange={(e) => setBranchQuery(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleCreateBranch()}
+                          placeholder="Ask a question about this insight..."
+                          className="flex-1 px-3 py-2 text-sm bg-white border border-primary-200 rounded-lg focus:ring-2 focus:ring-primary-300 focus:border-primary-300 outline-none"
+                          autoFocus
+                        />
+                        <button
+                          onClick={handleCreateBranch}
+                          disabled={!branchQuery.trim()}
+                          className="p-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowBranchInput(false);
+                            setBranchQuery('');
+                          }}
+                          className="p-2 text-surface-500 hover:text-surface-700 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </motion.div>
+                    ) : (
+                      <motion.button
+                        key="button"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setShowBranchInput(true)}
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg transition-colors w-full justify-center"
+                      >
+                        <MessageSquarePlus className="w-4 h-4" />
+                        Ask a question
+                      </motion.button>
                     )}
                   </AnimatePresence>
                 </div>
-              )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-              {/* Suggested Action */}
-              {suggestedAction && (
-                <div className={`p-4 ${config.bgColor} rounded-xl border ${config.borderColor}`}>
-                  <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                    <Lightbulb className="w-3.5 h-3.5" />
-                    Suggested Action
-                  </p>
-                  <p className="text-sm text-surface-700">{suggestedAction.text}</p>
-                  {suggestedAction.linkText && suggestedAction.linkUrl && (
-                    <a
-                      href={suggestedAction.linkUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 mt-2 text-sm font-medium text-primary-600 hover:text-primary-700"
-                    >
-                      {suggestedAction.linkText}
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  )}
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          {/* Collapsed state indicator */}
+          {isInsightsHidden && (
+            <button
+              onClick={() => setIsInsightsHidden(false)}
+              className="text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1"
+            >
+              <ChevronDown className="w-3 h-3" />
+              Show insights
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
