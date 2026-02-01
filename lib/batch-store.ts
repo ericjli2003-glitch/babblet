@@ -160,6 +160,8 @@ export interface Submission {
     presentationType: 'screen_share' | 'webcam_only' | 'mixed';
     summary: string;
   };
+  // Video duration in seconds (from transcription)
+  duration?: number;
   // Timing
   createdAt: number;
   startedAt?: number;

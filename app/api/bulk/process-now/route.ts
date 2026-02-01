@@ -46,6 +46,7 @@ function getDeepgram() {
 async function transcribeFromUrl(url: string): Promise<{
   transcript: string;
   segments: Array<{ id: string; text: string; timestamp: number; speaker?: string }>;
+  durationSeconds: number;
 }> {
   const deepgram = getDeepgram();
 
@@ -58,7 +59,11 @@ async function transcribeFromUrl(url: string): Promise<{
 
   const channel = result?.results?.channels?.[0];
   const alternative = channel?.alternatives?.[0];
-  if (!alternative) return { transcript: '', segments: [] };
+  
+  // Extract duration from Deepgram metadata (in seconds)
+  const durationSeconds = result?.metadata?.duration || 0;
+  
+  if (!alternative) return { transcript: '', segments: [], durationSeconds };
 
   const transcript = alternative.transcript || '';
   const segments: Array<{ id: string; text: string; timestamp: number; speaker?: string }> = [];
@@ -76,7 +81,7 @@ async function transcribeFromUrl(url: string): Promise<{
     });
   }
 
-  return { transcript, segments };
+  return { transcript, segments, durationSeconds };
 }
 
 async function processSubmission(submissionId: string): Promise<{ success: boolean; error?: string }> {
@@ -96,13 +101,19 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
     // Transcribe
     const downloadUrl = await getPresignedDownloadUrl(submission.fileKey);
     console.log(`[ProcessNow] Transcribing ${submissionId}...`);
-    const { transcript, segments } = await transcribeFromUrl(downloadUrl);
+    const { transcript, segments, durationSeconds } = await transcribeFromUrl(downloadUrl);
 
     if (!transcript || transcript.trim().length < 10) {
       throw new Error('Transcription returned empty or too short');
     }
 
-    await updateSubmission(submissionId, { transcript, transcriptSegments: segments, status: 'analyzing' });
+    console.log(`[ProcessNow] Video duration: ${durationSeconds}s for ${submissionId}`);
+    await updateSubmission(submissionId, { 
+      transcript, 
+      transcriptSegments: segments, 
+      duration: durationSeconds,
+      status: 'analyzing' 
+    });
 
     // Analyze with Babblet AI
     if (isClaudeConfigured()) {
