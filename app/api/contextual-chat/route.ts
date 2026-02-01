@@ -110,16 +110,17 @@ function buildSystemPrompt(context: ChatContext, courseMaterials?: Array<{ name:
   
   if (context.rubricCriterion) {
     parts.push(``);
-    parts.push(`RUBRIC CRITERION BEING ANALYZED: ${context.rubricCriterion}`);
+    parts.push(`CRITICAL: RUBRIC CRITERION BEING ANALYZED: "${context.rubricCriterion}"`);
     parts.push(``);
-    parts.push(`ANALYSIS PRIORITY: First analyze how well the student aligns with THIS SPECIFIC rubric criterion. Then how they align with course content.`);
-    parts.push(`JUICY INSIGHTS: Include concrete details (durations, timestamps, confidence scores), vivid language, and specific suggestions. End each bullet with [1], [2] references.`);
+    parts.push(`ANALYSIS PRIORITY: Analyze ONLY against the rubric section for "${context.rubricCriterion}". Do NOT give generic feedback. Each criterion has different expectations - use the rubric text below.`);
   }
   
   if (context.rubricText) {
     parts.push(``);
-    parts.push(`UPLOADED RUBRIC (use for criterion-specific analysis):`);
+    parts.push(`RUBRIC FOR "${context.rubricCriterion}" ONLY (analyze exclusively against this):`);
     parts.push(context.rubricText);
+    parts.push(``);
+    parts.push(`Use A for video moments, B for rubric/course. Every bullet must reference the rubric section above.`);
   }
   
   // Include full transcript context for rubric insights (generous limit for rich insights)

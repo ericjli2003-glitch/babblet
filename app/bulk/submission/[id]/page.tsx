@@ -586,6 +586,40 @@ export default function SubmissionDetailPage() {
     setShowMaterialModal(ref);
   }, []);
 
+  // Extract criterion-specific rubric text (only the section for THIS criterion)
+  const extractCriterionRubricText = useCallback((fullRubric: string, criterionName: string): string => {
+    if (!fullRubric?.trim()) return '';
+    const criterionLower = criterionName.toLowerCase();
+    const lines = fullRubric.split('\n');
+    let inSection = false;
+    const collected: string[] = [];
+    // Common criterion-like section headers to stop at
+    const otherCriterionPattern = /^(content\s+knowledge|presentation\s+skills|organization|delivery|evidence|argument|critical\s+thinking|communication|clarity|engagement|professionalism)/i;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lower = line.toLowerCase().trim();
+      if (lower.includes(criterionLower)) {
+        inSection = true;
+        collected.push(line);
+      } else if (inSection) {
+        // Stop at next major heading that looks like a different criterion
+        if (line.match(/^#{1,3}\s/) && !lower.includes(criterionLower)) break;
+        if (line.match(/^[A-Z][a-z]+(?:\s+[A-Za-z]+)*\s*:/) && !lower.includes(criterionLower) && otherCriterionPattern.test(lower)) break;
+        collected.push(line);
+        if (collected.join('\n').length > 1000) break;
+      }
+    }
+    if (collected.length > 0) return collected.join('\n').trim();
+    // Fallback: grab text around criterion name
+    const idx = fullRubric.toLowerCase().indexOf(criterionLower);
+    if (idx >= 0) {
+      const start = Math.max(0, idx - 80);
+      const end = Math.min(fullRubric.length, idx + 700);
+      return fullRubric.slice(start, end);
+    }
+    return fullRubric.slice(0, 1000);
+  }, []);
+
   // Request additional insights for a rubric criterion
   const handleRequestCriterionInsights = useCallback(async (criterionTitle: string): Promise<string> => {
     const fullTranscript = sortedSegments.length > 0 
@@ -604,8 +638,12 @@ export default function SubmissionDetailPage() {
       `[Slide ${s.slideNumber}${s.title ? `: ${s.title}` : ''}] ${s.textContent}`
     ).join('\n') || '';
     
-    const rubricText = batchInfo?.rubricCriteria || '';
-    const rubricSection = rubricText ? `\n\nUPLOADED RUBRIC:\n${rubricText.slice(0, 5000)}${rubricText.length > 5000 ? '\n[Rubric truncated]' : ''}` : '';
+    // CRITICAL: Pass ONLY the rubric section for THIS criterion - not the whole rubric
+    const fullRubricText = batchInfo?.rubricCriteria || '';
+    const criterionRubricOnly = extractCriterionRubricText(fullRubricText, criterionTitle);
+    const rubricSection = criterionRubricOnly 
+      ? `\n\nRUBRIC FOR "${criterionTitle}" ONLY (analyze ONLY against this):\n${criterionRubricOnly}\n\nDO NOT use other criteria. Focus exclusively on what the above says for ${criterionTitle}.`
+      : fullRubricText ? `\n\nFULL RUBRIC (find and use ONLY the section for ${criterionTitle}):\n${fullRubricText.slice(0, 1500)}` : '';
     
     const response = await fetch('/api/contextual-chat', {
       method: 'POST',
@@ -613,36 +651,33 @@ export default function SubmissionDetailPage() {
       body: JSON.stringify({
         message: `Analyze student performance for the "${criterionTitle}" criterion.
 
+CRITICAL: Your insights MUST be specific to "${criterionTitle}" and ONLY what the rubric says for this criterion. Do NOT give generic feedback. Each criterion has different expectations - match yours to the rubric section above.
+
 CRITERION: "${criterionTitle}"
 ${criterionInfo}
 
-Write naturally, like a thoughtful TA giving feedback in office hours. Be specific and helpful.
-
-REFERENCE FORMAT (IMPORTANT):
-- Use BLUE references [1], [2], [3] for VIDEO/SUBMISSION quotes (specific moments from the student's presentation)
-- Use ORANGE references {A}, {B}, {C} for COURSE/RUBRIC references (expectations from rubric or course materials)
+REFERENCE FORMAT:
+- Use A, B, C for VIDEO moments (student's presentation) - cite exact transcript quotes
+- Use A, B, C for COURSE/RUBRIC - cite the specific rubric expectation or course content
 
 FORMAT:
-**Overview** (2-3 sentences about their ${criterionTitle} performance)
+**Overview** (2-3 sentences about their ${criterionTitle} performance - reference the rubric)
 
 **What worked well:**
-- [Specific observation with transcript quote] [1] {A}
-- [Another strength tied to rubric expectations] [2] {B}
+- [Specific observation with transcript quote] A
+- [Another strength tied to rubric expectations] B
 
 **Areas to develop:**
-- [Gap identified + specific example of what would be better] [3] {A}
-- [Missing element the rubric expects + concrete suggestion] [4] {B}
+- [Gap identified + specific example] A
+- [Missing element the rubric expects] B
 
-**Example of excellence:** Provide 1-2 sentences showing what a strong response would look like for this criterion, based on the rubric and course content.
+**Example of excellence:** What a strong response would look like for THIS criterion per the rubric.
 
-MANDATORY RULES:
-1. Every bullet MUST have BOTH types of references:
-   - A BLUE [number] for video timestamp (quote from student's presentation)
-   - An ORANGE {letter} for rubric/course expectation
-2. Be SPECIFIC to "${criterionTitle}" - not generic feedback that could apply to any criterion
-3. Quote the student's actual words when possible
-4. Suggest concrete examples, not vague improvements
-5. Reference what the rubric specifically expects for this criterion
+RULES:
+1. Every bullet must end with A or B (video or rubric reference)
+2. Be SPECIFIC to the "${criterionTitle}" rubric section - NOT generic feedback
+3. Quote the rubric's exact language when describing expectations
+4. Quote the student's actual words for video references
 ${rubricSection}
 
 Sound like a helpful human, not a grading robot.`,
@@ -668,7 +703,7 @@ Sound like a helpful human, not a grading robot.`,
           submissionId,
           courseId: batchInfo?.courseId,
           assignmentId: batchInfo?.assignmentId,
-          rubricText: rubricSection,
+          rubricText: criterionRubricOnly || fullRubricText?.slice(0, 2000),
         },
         conversationHistory: [],
       }),
@@ -679,7 +714,7 @@ Sound like a helpful human, not a grading robot.`,
       return data.response;
     }
     throw new Error(data.error || 'Failed to get insights');
-  }, [submission, sortedSegments, submissionId, batchInfo?.courseId, batchInfo]);
+  }, [submission, sortedSegments, submissionId, batchInfo?.courseId, batchInfo, extractCriterionRubricText]);
 
   // Regenerate questions with the selected count
   const handleRegenerateQuestions = useCallback(async () => {
@@ -1701,21 +1736,10 @@ Sound like a helpful human, not a grading robot.`,
                                     initialInsights={criterionInsights[c.criterion] || null}
                                     citationSegments={sortedSegments.map(seg => ({ timestamp: normalizeTimestamp(seg.timestamp), text: seg.text }))}
                                     courseReferences={[
-                                      // Add rubric criteria as references
-                                      ...effectiveCriteria.map((cr, idx) => ({
-                                        id: String.fromCharCode(65 + idx),
-                                        title: cr.criterion,
-                                        excerpt: cr.feedback || cr.rationale || 'Rubric criterion',
-                                        type: 'rubric' as const,
-                                      })).slice(0, 3),
-                                      // Add course content if available
-                                      ...(batchInfo?.courseName ? [{
-                                        id: String.fromCharCode(65 + Math.min(3, effectiveCriteria.length)),
-                                        title: batchInfo.courseName,
-                                        excerpt: 'Course material alignment',
-                                        type: 'course' as const,
-                                      }] : []),
+                                      // B = rubric for THIS criterion (explains which part of class content)
+                                      { id: 'B', title: c.criterion, excerpt: (c.feedback || c.rationale || 'Rubric criterion').slice(0, 150), type: 'rubric' as const, explanation: `What the rubric expects for ${c.criterion}: ${(c.feedback || c.rationale || '').slice(0, 120)}` },
                                     ]}
+                                    videoUrl={videoUrl}
                                     onInsightsGenerated={(criterionTitle, insights) => {
                                       setCriterionInsights(prev => 
                                         insights ? { ...prev, [criterionTitle]: insights } : (() => { const { [criterionTitle]: _, ...rest } = prev; return rest; })()

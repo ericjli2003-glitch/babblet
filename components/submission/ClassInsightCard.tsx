@@ -19,19 +19,21 @@ interface ClassInsightCardProps {
   evidence?: Array<{
     timestamp: string;
     text: string;
-    analysis?: string; // Explanation of how this evidence relates to the criterion
+    analysis?: string;
   }>;
   courseAlignment?: number;
   defaultExpanded?: boolean;
-  autoGenerateInsights?: boolean; // Auto-fetch insights on mount (only if no initialInsights)
-  initialInsights?: string | null; // Persisted insights from parent - do not regenerate
-  onInsightsGenerated?: (criterionTitle: string, insights: string) => void; // Called when insights are generated to persist
+  autoGenerateInsights?: boolean;
+  initialInsights?: string | null;
+  onInsightsGenerated?: (criterionTitle: string, insights: string) => void;
   onSeekToTime?: (timeMs: number) => void;
   onRequestMoreInsights?: (criterionTitle: string) => Promise<string>;
-  /** Transcript segments for reference links [1], [2] at end of each bullet (BLUE - submission video) */
+  /** Transcript segments for A, B video refs (student submission) */
   citationSegments?: Array<{ timestamp: string | number; text: string }>;
-  /** Course content references for {A}, {B} etc. (ORANGE - course materials/rubric) */
-  courseReferences?: Array<{ id: string; title: string; excerpt: string; type: 'course' | 'rubric' }>;
+  /** Course/rubric references for A, B */
+  courseReferences?: Array<{ id: string; title: string; excerpt: string; type: 'course' | 'rubric'; explanation?: string }>;
+  /** Video URL for preview in reference popover */
+  videoUrl?: string | null;
 }
 
 function parseTimestamp(ts: string): number {
@@ -101,6 +103,7 @@ export default function ClassInsightCard({
   onRequestMoreInsights,
   citationSegments,
   courseReferences,
+  videoUrl,
 }: ClassInsightCardProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
@@ -114,48 +117,34 @@ export default function ClassInsightCard({
   const StatusIcon = config.icon;
   const autoFetchedRef = useRef(false);
   
-  // Build VIDEO citations from transcript segments (BLUE [1], [2] refs) - sample from entire video
-  const videoCitations = useMemo(() => {
+  // A = video/submission ref (single representative moment)
+  const videoRefA = useMemo(() => {
     if (citationSegments && citationSegments.length > 0) {
-      // Sample evenly from entire video: beginning, middle, end
-      const total = citationSegments.length;
-      const sampleSize = Math.min(10, total);
-      const step = Math.max(1, Math.floor(total / sampleSize));
-      const sampled: typeof citationSegments = [];
-      for (let i = 0; i < total && sampled.length < sampleSize; i += step) {
-        sampled.push(citationSegments[i]);
-      }
-      // Ensure we have last segment for end of video
-      if (total > 1 && sampled.length < sampleSize && !sampled.includes(citationSegments[total - 1])) {
-        sampled.push(citationSegments[total - 1]);
-      }
-      return sampled.map((seg, i) => {
-        const timeMs = typeof seg.timestamp === 'number' ? seg.timestamp : parseTimestamp(String(seg.timestamp));
-        const timestamp = typeof seg.timestamp === 'string' ? seg.timestamp : (timeMs >= 0 ? `${Math.floor(timeMs / 60000)}:${String(Math.floor((timeMs % 60000) / 1000)).padStart(2, '0')}` : '0:00');
-        return { id: i + 1, timestamp, timeMs, text: seg.text.slice(0, 50) + (seg.text.length > 50 ? '...' : ''), type: 'video' as const };
-      });
+      const seg = citationSegments[Math.floor(citationSegments.length / 2)]; // Middle of video
+      const timeMs = typeof seg.timestamp === 'number' ? seg.timestamp : parseTimestamp(String(seg.timestamp));
+      const timestamp = typeof seg.timestamp === 'string' ? seg.timestamp : (timeMs >= 0 ? `${Math.floor(timeMs / 60000)}:${String(Math.floor((timeMs % 60000) / 1000)).padStart(2, '0')}` : '0:00');
+      return { id: 'A' as const, timestamp, timeMs, text: seg.text.slice(0, 80) + (seg.text.length > 80 ? '...' : ''), explanation: `Student said at ${timestamp}: "${seg.text.slice(0, 60)}${seg.text.length > 60 ? '...' : ''}"` };
     }
     if (evidence && evidence.length > 0) {
-      return evidence.map((e, i) => ({ id: i + 1, timestamp: e.timestamp, timeMs: parseTimestamp(e.timestamp), text: e.text.slice(0, 50) + (e.text.length > 50 ? '...' : ''), type: 'video' as const }));
+      const e = evidence[0];
+      return { id: 'A' as const, timestamp: e.timestamp, timeMs: parseTimestamp(e.timestamp), text: e.text.slice(0, 80) + (e.text.length > 80 ? '...' : ''), explanation: e.analysis || `Evidence at ${e.timestamp}` };
     }
-    return [];
+    return null;
   }, [citationSegments, evidence]);
   
-  // Build COURSE citations from course references (ORANGE {A}, {B} refs)
-  const courseCitations = useMemo(() => {
-    if (courseReferences && courseReferences.length > 0) {
-      return courseReferences.slice(0, 5).map((ref, i) => ({
-        id: String.fromCharCode(65 + i), // A, B, C, D, E
-        title: ref.title,
-        excerpt: ref.excerpt.slice(0, 60) + (ref.excerpt.length > 60 ? '...' : ''),
-        type: ref.type,
-      }));
-    }
-    return [];
+  // B = course/rubric ref
+  const courseRefB = useMemo(() => {
+    const ref = courseReferences?.[0];
+    if (!ref) return null;
+    return {
+      id: 'B' as const,
+      title: ref.title,
+      excerpt: ref.excerpt.slice(0, 120) + (ref.excerpt.length > 120 ? '...' : ''),
+      type: ref.type,
+      explanation: ref.explanation || `Relevant ${ref.type} expectation for this criterion.`,
+    };
   }, [courseReferences]);
   
-  // Legacy: keep citations for backward compatibility
-  const citations = videoCitations;
   
   // Auto-fetch insights on mount if enabled (only when no persisted insights)
   useEffect(() => {
@@ -227,66 +216,25 @@ export default function ClassInsightCard({
     setBranches(prev => prev.filter(b => b.id !== branchId));
   }, []);
 
-  // Render insight content with citations at end of bullet points
-  // BLUE [1], [2] = video submission timestamps
-  // ORANGE {A}, {B} = course content / rubric references
+  // Popover state for reference A/B
+  const [openRef, setOpenRef] = useState<string | null>(null);
+  const openRefRef = useRef<HTMLDivElement | null>(null);
+  
+  // Render insight content with A, B references
+  // A = video/submission, B = course/rubric
   const renderInsightContent = useCallback((content: string) => {
     const lines = content.split('\n').filter(l => l.trim());
     
-    // Render BLUE [1], [2] as clickable buttons that seek to video timestamp
-    const renderVideoCitationButton = (citationNum: number, key: string) => {
-      const citation = videoCitations[citationNum - 1] as { timestamp: string; timeMs?: number; text: string } | undefined;
-      if (citation) {
-        const timeMs = citation.timeMs ?? parseTimestamp(citation.timestamp);
-        return (
-          <button
-            key={key}
-            onClick={() => onSeekToTime?.(timeMs)}
-            className="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold text-blue-700 bg-blue-100 rounded-full hover:bg-blue-200 transition-colors mx-0.5"
-            title={`Video @ ${citation.timestamp}: "${citation.text}"`}
-          >
-            {citationNum}
-          </button>
-        );
-      }
-      return null;
+    // Extract A, B from text (standalone letters or [A], {A}, A. etc.)
+    const extractRefLetters = (text: string): string[] => {
+      const matches = text.match(/\b([AB])\b|\[([AB])\]|\{([AB])\}/gi) || [];
+      return matches.map(m => m.replace(/[\[\]{}]/gi, '').toUpperCase());
     };
     
-    // Render ORANGE {A}, {B} as course/rubric references
-    const renderCourseCitationButton = (letter: string, key: string) => {
-      const citation = courseCitations.find(c => c.id === letter);
-      if (citation) {
-        return (
-          <span
-            key={key}
-            className="inline-flex items-center justify-center min-w-5 h-5 px-1 text-xs font-semibold text-orange-700 bg-orange-100 rounded-full mx-0.5 cursor-help"
-            title={`${citation.type === 'rubric' ? 'Rubric' : 'Course'}: ${citation.title} - "${citation.excerpt}"`}
-          >
-            {letter}
-          </span>
-        );
-      }
-      return null;
-    };
-
-    // Extract video citation numbers from text [1], [2]
-    const extractVideoCitations = (text: string): number[] => {
-      const matches = text.match(/\[(\d+)\]/g) || [];
-      return matches.map(m => parseInt(m.replace(/[\[\]]/g, '')));
-    };
-    
-    // Extract course citation letters from text {A}, {B}
-    const extractCourseCitations = (text: string): string[] => {
-      const matches = text.match(/\{([A-Z])\}/g) || [];
-      return matches.map(m => m.replace(/[{}]/g, ''));
-    };
-
-    // Remove inline citations from text
     const stripCitations = (text: string): string => {
-      return text.replace(/\[\d+\]/g, '').replace(/\{[A-Z]\}/g, '').trim();
+      return text.replace(/\b[AB]\b(?=\s|$)/gi, '').replace(/\[[AB]\]|\{[AB]\}/gi, '').trim();
     };
-
-    // Render text with bold formatting (but without inline citations)
+    
     const renderText = (text: string) => {
       const cleanText = stripCitations(text);
       if (cleanText.includes('**')) {
@@ -297,25 +245,95 @@ export default function ClassInsightCard({
       }
       return cleanText;
     };
-
-    // Bullet index for assigning origin reference at end of each bullet
+    
+    // A = video ref: popover with video preview, Go to button, explanation
+    const renderVideoRef = (_letter: string, key: string) => {
+      const ref = videoRefA;
+      if (!ref) return null;
+      const isOpen = openRef === `v-A-${key}`;
+      const clipStart = ref.timeMs / 1000;
+      const clipEnd = clipStart + 8;
+      return (
+        <div key={key} className="relative inline-block">
+          <button
+            onClick={() => setOpenRef(isOpen ? null : `v-A-${key}`)}
+            className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 text-xs font-semibold text-blue-700 bg-blue-100 rounded-full hover:bg-blue-200 transition-colors mx-0.5"
+            title="Student video"
+          >
+            A
+          </button>
+          {isOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setOpenRef(null)} aria-hidden="true" />
+              <div ref={openRefRef} className="absolute left-0 top-full mt-1 z-50 w-72 rounded-lg border border-surface-200 bg-white shadow-lg p-3">
+                <p className="text-xs font-semibold text-surface-900 mb-1">Student video @ {ref.timestamp}</p>
+                {videoUrl && (
+                  <div className="rounded overflow-hidden bg-surface-900 mb-2">
+                    <video
+                      src={`${videoUrl}#t=${clipStart},${clipEnd}`}
+                      className="w-full aspect-video object-cover"
+                      controls
+                      muted
+                      playsInline
+                    />
+                  </div>
+                )}
+                <p className="text-xs text-surface-600 mb-2 line-clamp-2">&quot;{ref.text}&quot;</p>
+                <p className="text-xs text-surface-500 mb-2">{ref.explanation}</p>
+                <button
+                  onClick={() => { onSeekToTime?.(ref.timeMs); setOpenRef(null); }}
+                  className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded"
+                >
+                  <PlayCircle className="w-3.5 h-3.5" /> Go to
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    };
+    
+    // B = course ref: popover with excerpt + explanation
+    const renderCourseRef = (_letter: string, key: string) => {
+      const ref = courseRefB;
+      if (!ref) return null;
+      const isOpen = openRef === `c-B-${key}`;
+      return (
+        <div key={key} className="relative inline-block">
+          <button
+            onClick={() => setOpenRef(isOpen ? null : `c-B-${key}`)}
+            className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 text-xs font-semibold text-orange-700 bg-orange-100 rounded-full hover:bg-orange-200 transition-colors mx-0.5"
+            title={`${ref.type === 'rubric' ? 'Rubric' : 'Course'} reference`}
+          >
+            B
+          </button>
+          {isOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setOpenRef(null)} aria-hidden="true" />
+              <div className="absolute left-0 top-full mt-1 z-50 w-72 rounded-lg border border-surface-200 bg-white shadow-lg p-3">
+                <p className="text-xs font-semibold text-surface-900 mb-1">{ref.type === 'rubric' ? 'Rubric' : 'Course'}: {ref.title}</p>
+                <p className="text-xs text-surface-600 mb-2">&quot;{ref.excerpt}&quot;</p>
+                <p className="text-xs text-surface-500">{ref.explanation}</p>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    };
+    
+    const renderRefButton = (letter: string, key: string) => {
+      if (letter === 'A' && videoRefA) return renderVideoRef('A', key);
+      if (letter === 'B' && courseRefB) return renderCourseRef('B', key);
+      return null;
+    };
+    
     let bulletIndex = 0;
     return (
       <div className="space-y-2">
         {lines.map((line, i) => {
-          const lineVideoCitations = extractVideoCitations(line);
-          const lineCourseCitations = extractCourseCitations(line);
+          const refLetters = extractRefLetters(line);
           const isBullet = line.startsWith('- ') || line.startsWith('* ');
           if (isBullet) bulletIndex += 1;
-          
-          // Alternate between video and course citations for each bullet
-          // Blue [1]: video timestamp, Orange {A}: course/rubric
-          const videoRef = videoCitations.length > 0 && isBullet 
-            ? ((bulletIndex - 1) % videoCitations.length) + 1 
-            : null;
-          const courseRef = courseCitations.length > 0 && isBullet 
-            ? courseCitations[(bulletIndex - 1) % courseCitations.length]?.id 
-            : null;
           
           if (line.startsWith('## ')) {
             return (
@@ -335,21 +353,14 @@ export default function ClassInsightCard({
             return (
               <p key={i} className="text-surface-700 pl-4 flex items-start gap-1 flex-wrap items-baseline">
                 <span>• {renderText(line.slice(2))}</span>
-                {/* Inline citations from Claude's response */}
-                {lineVideoCitations.length > 0 && (
-                  <span className="inline-flex items-center gap-0.5 ml-1">
-                    {lineVideoCitations.map((num, idx) => renderVideoCitationButton(num, `${i}-v${idx}`))}
-                  </span>
-                )}
-                {lineCourseCitations.length > 0 && (
-                  <span className="inline-flex items-center gap-0.5 ml-1">
-                    {lineCourseCitations.map((letter, idx) => renderCourseCitationButton(letter, `${i}-c${idx}`))}
-                  </span>
-                )}
-                {/* Auto-appended origin references */}
                 <span className="inline-flex items-center gap-0.5 ml-1">
-                  {videoRef != null && renderVideoCitationButton(videoRef, `${i}-origin-v`)}
-                  {courseRef && renderCourseCitationButton(courseRef, `${i}-origin-c`)}
+                  {refLetters.map((l, idx) => renderRefButton(l, `${i}-${idx}`))}
+                  {refLetters.length === 0 && (
+                    <>
+                      {videoRefA && renderVideoRef('A', `${i}-v`)}
+                      {courseRefB && renderCourseRef('B', `${i}-c`)}
+                    </>
+                  )}
                 </span>
               </p>
             );
@@ -357,14 +368,9 @@ export default function ClassInsightCard({
           return (
             <p key={i} className="text-surface-700 flex items-start gap-1 flex-wrap">
               <span>{renderText(line)}</span>
-              {lineVideoCitations.length > 0 && (
+              {refLetters.length > 0 && (
                 <span className="inline-flex items-center gap-0.5 ml-1">
-                  {lineVideoCitations.map((num, idx) => renderVideoCitationButton(num, `${i}-v${idx}`))}
-                </span>
-              )}
-              {lineCourseCitations.length > 0 && (
-                <span className="inline-flex items-center gap-0.5 ml-1">
-                  {lineCourseCitations.map((letter, idx) => renderCourseCitationButton(letter, `${i}-c${idx}`))}
+                  {refLetters.map((l, idx) => renderRefButton(l, `${i}-${idx}`))}
                 </span>
               )}
             </p>
@@ -372,7 +378,7 @@ export default function ClassInsightCard({
         })}
       </div>
     );
-  }, [videoCitations, courseCitations, onSeekToTime]);
+  }, [videoRefA, courseRefB, videoUrl, onSeekToTime, openRef]);
 
   return (
     <div className="space-y-4">
