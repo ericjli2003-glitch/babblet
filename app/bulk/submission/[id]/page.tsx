@@ -1058,56 +1058,38 @@ RULES:
                           
                           return (
                             <div key={idx} className={`flex flex-col ${isCenter ? 'ring-2 ring-primary-500 rounded-lg' : ''}`}>
-                              {/* 10s clip - plays only the clip segment, no native controls */}
-                              <div className="relative w-full aspect-video max-h-40 rounded-t-lg overflow-hidden bg-surface-900 group">
+                              {/* 10s clip - native controls with timeline hidden */}
+                              <div className="relative w-full aspect-video max-h-40 rounded-t-lg overflow-hidden bg-surface-900">
                                 {videoUrl ? (
-                                  <>
-                                    <video
-                                      src={videoUrl}
-                                      className="clip-video absolute inset-0 w-full h-full object-cover pointer-events-none"
-                                      muted
-                                      preload="metadata"
-                                      playsInline
-                                      disablePictureInPicture
-                                      controlsList="nodownload nofullscreen noremoteplayback"
-                                      onLoadedMetadata={(e) => {
-                                        const video = e.target as HTMLVideoElement;
-                                        video.currentTime = clipStart;
-                                      }}
-                                      onPlay={(e) => {
-                                        const v = e.target as HTMLVideoElement;
-                                        if (v.currentTime < clipStart || v.currentTime >= clipEnd) v.currentTime = clipStart;
-                                      }}
-                                      onTimeUpdate={(e) => {
-                                        const v = e.target as HTMLVideoElement;
-                                        if (v.currentTime >= clipEnd - 0.3) {
-                                          v.pause();
-                                          v.currentTime = clipStart;
-                                        }
-                                      }}
-                                      onSeeked={(e) => {
-                                        const v = e.target as HTMLVideoElement;
-                                        if (v.currentTime >= clipEnd || v.currentTime < clipStart) v.currentTime = clipStart;
-                                      }}
-                                    />
-                                    {/* Custom play button overlay */}
-                                    <button
-                                      onClick={(e) => {
-                                        const container = e.currentTarget.parentElement;
-                                        const video = container?.querySelector('video');
-                                        if (video) {
-                                          if (video.paused) {
-                                            video.play();
-                                          } else {
-                                            video.pause();
-                                          }
-                                        }
-                                      }}
-                                      className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-colors cursor-pointer"
-                                    >
-                                      <PlayCircle className="w-8 h-8 text-white drop-shadow-lg opacity-80 group-hover:opacity-100 transition-opacity" />
-                                    </button>
-                                  </>
+                                  <video
+                                    src={videoUrl}
+                                    className="clip-video absolute inset-0 w-full h-full object-cover"
+                                    controls
+                                    muted
+                                    preload="metadata"
+                                    playsInline
+                                    disablePictureInPicture
+                                    controlsList="nodownload noremoteplayback"
+                                    onLoadedMetadata={(e) => {
+                                      const video = e.target as HTMLVideoElement;
+                                      video.currentTime = clipStart;
+                                    }}
+                                    onPlay={(e) => {
+                                      const v = e.target as HTMLVideoElement;
+                                      if (v.currentTime < clipStart || v.currentTime >= clipEnd) v.currentTime = clipStart;
+                                    }}
+                                    onTimeUpdate={(e) => {
+                                      const v = e.target as HTMLVideoElement;
+                                      if (v.currentTime >= clipEnd - 0.3) {
+                                        v.pause();
+                                        v.currentTime = clipStart;
+                                      }
+                                    }}
+                                    onSeeked={(e) => {
+                                      const v = e.target as HTMLVideoElement;
+                                      if (v.currentTime >= clipEnd || v.currentTime < clipStart) v.currentTime = clipStart;
+                                    }}
+                                  />
                                 ) : (
                                   <div className="absolute inset-0 bg-surface-700 flex items-center justify-center">
                                     <PlayCircle className="w-8 h-8 text-white/60" />
@@ -1120,10 +1102,6 @@ RULES:
                                 )}
                                 <div className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/70 rounded text-white text-[9px] font-mono z-10">
                                   {timestamp}
-                                </div>
-                                {/* Clip progress indicator */}
-                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/30 z-10">
-                                  <div className="h-full bg-primary-500 w-0 spotlight-progress" />
                                 </div>
                               </div>
                               {/* Label + description box (grey, beneath) */}

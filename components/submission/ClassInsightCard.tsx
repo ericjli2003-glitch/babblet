@@ -320,15 +320,16 @@ export default function ClassInsightCard({
                 </div>
                 {videoUrl && (
                   <div className="rounded overflow-hidden bg-surface-900 mb-2 relative group">
-                    {/* Video with NO native controls - using clip-video class to hide all browser defaults */}
+                    {/* Video with native controls but timeline hidden via clip-video class */}
                     <video
                       ref={clipVideoRef}
                       src={videoUrl}
-                      className="clip-video w-full aspect-video object-cover pointer-events-none"
+                      className="clip-video w-full aspect-video object-cover"
+                      controls
                       muted
                       playsInline
                       disablePictureInPicture
-                      controlsList="nodownload nofullscreen noremoteplayback"
+                      controlsList="nodownload noremoteplayback"
                       onLoadedMetadata={(e) => {
                         const v = e.target as HTMLVideoElement;
                         v.currentTime = clipStart;
@@ -355,24 +356,6 @@ export default function ClassInsightCard({
                         }
                       }}
                     />
-                    {/* Custom play/pause overlay - this captures all clicks */}
-                    <button
-                      onClick={handleClipPlayPause}
-                      className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-colors cursor-pointer"
-                    >
-                      {clipPlaying ? (
-                        <Pause className="w-10 h-10 text-white drop-shadow-lg" />
-                      ) : (
-                        <Play className="w-10 h-10 text-white drop-shadow-lg" />
-                      )}
-                    </button>
-                    {/* Custom progress bar (0-8 seconds only) */}
-                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/30">
-                      <div 
-                        className="h-full bg-blue-500 transition-all duration-100"
-                        style={{ width: `${clipProgress}%` }}
-                      />
-                    </div>
                   </div>
                 )}
                 <p className="text-xs text-surface-600 mb-2 line-clamp-2">&quot;{ref.text}&quot;</p>
