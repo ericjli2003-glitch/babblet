@@ -28,6 +28,8 @@ interface ClassInsightCardProps {
   onInsightsGenerated?: (criterionTitle: string, insights: string) => void; // Called when insights are generated to persist
   onSeekToTime?: (timeMs: number) => void;
   onRequestMoreInsights?: (criterionTitle: string) => Promise<string>;
+  /** Transcript segments for reference links [1], [2] at end of each bullet (origin of bullet) */
+  citationSegments?: Array<{ timestamp: string | number; text: string }>;
 }
 
 function parseTimestamp(ts: string): number {
@@ -95,6 +97,7 @@ export default function ClassInsightCard({
   onInsightsGenerated,
   onSeekToTime,
   onRequestMoreInsights,
+  citationSegments,
 }: ClassInsightCardProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
@@ -107,6 +110,21 @@ export default function ClassInsightCard({
   const config = statusConfig[status];
   const StatusIcon = config.icon;
   const autoFetchedRef = useRef(false);
+  
+  // Build citations from transcript segments (origin for [1], [2] refs at end of each bullet) or evidence
+  const citations = useMemo(() => {
+    if (citationSegments && citationSegments.length > 0) {
+      return citationSegments.slice(0, 10).map((seg, i) => {
+        const timeMs = typeof seg.timestamp === 'number' ? seg.timestamp : parseTimestamp(String(seg.timestamp));
+        const timestamp = typeof seg.timestamp === 'string' ? seg.timestamp : (timeMs >= 0 ? `${Math.floor(timeMs / 60000)}:${String(Math.floor((timeMs % 60000) / 1000)).padStart(2, '0')}` : '0:00');
+        return { id: i + 1, timestamp, timeMs, text: seg.text.slice(0, 50) + (seg.text.length > 50 ? '...' : '') };
+      });
+    }
+    if (evidence && evidence.length > 0) {
+      return evidence.map((e, i) => ({ id: i + 1, timestamp: e.timestamp, timeMs: parseTimestamp(e.timestamp), text: e.text.slice(0, 50) + (e.text.length > 50 ? '...' : '') }));
+    }
+    return [];
+  }, [citationSegments, evidence]);
   
   // Auto-fetch insights on mount if enabled (only when no persisted insights)
   useEffect(() => {
@@ -129,16 +147,6 @@ export default function ClassInsightCard({
     }
   }, [autoGenerateInsights, onRequestMoreInsights, title, initialInsights, additionalInsights, onInsightsGenerated]);
 
-  // Build citations from evidence
-  const citations = useMemo(() => {
-    if (!evidence) return [];
-    return evidence.map((e, i) => ({
-      id: i + 1,
-      timestamp: e.timestamp,
-      text: e.text.slice(0, 50) + (e.text.length > 50 ? '...' : ''),
-    }));
-  }, [evidence]);
-  
   const handleRequestInsights = useCallback(async () => {
     if (!onRequestMoreInsights || isLoadingInsights || additionalInsights) return;
     
@@ -192,14 +200,15 @@ export default function ClassInsightCard({
   const renderInsightContent = useCallback((content: string) => {
     const lines = content.split('\n').filter(l => l.trim());
     
-    // Parse citations in text like [1], [2] - render as clickable buttons
+    // Render [1], [2] as clickable buttons that seek to transcript origin
     const renderCitationButton = (citationNum: number, key: string) => {
-      const citation = citations[citationNum - 1];
+      const citation = citations[citationNum - 1] as { timestamp: string; timeMs?: number; text: string } | undefined;
       if (citation) {
+        const timeMs = citation.timeMs ?? parseTimestamp(citation.timestamp);
         return (
           <button
             key={key}
-            onClick={() => onSeekToTime?.(parseTimestamp(citation.timestamp))}
+            onClick={() => onSeekToTime?.(timeMs)}
             className="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold text-primary-700 bg-primary-100 rounded-full hover:bg-primary-200 transition-colors mx-0.5"
             title={`Jump to ${citation.timestamp}: "${citation.text}"`}
           >
@@ -233,10 +242,16 @@ export default function ClassInsightCard({
       return cleanText;
     };
 
+    // Bullet index for assigning origin reference [1], [2] at end of each bullet
+    let bulletIndex = 0;
     return (
       <div className="space-y-2">
         {lines.map((line, i) => {
           const lineCitations = extractCitations(line);
+          const isBullet = line.startsWith('- ') || line.startsWith('* ');
+          if (isBullet) bulletIndex += 1;
+          // Origin reference: cycle through transcript segments so each bullet has a ref at the end
+          const originRef = citations.length > 0 && isBullet ? ((bulletIndex - 1) % citations.length) + 1 : null;
           
           if (line.startsWith('## ')) {
             return (
@@ -252,13 +267,18 @@ export default function ClassInsightCard({
               </h2>
             );
           }
-          if (line.startsWith('- ') || line.startsWith('* ')) {
+          if (isBullet) {
             return (
-              <p key={i} className="text-surface-700 pl-4 flex items-start gap-1 flex-wrap">
+              <p key={i} className="text-surface-700 pl-4 flex items-start gap-1 flex-wrap items-baseline">
                 <span>• {renderText(line.slice(2))}</span>
                 {lineCitations.length > 0 && (
                   <span className="inline-flex items-center gap-0.5 ml-1">
                     {lineCitations.map((num, idx) => renderCitationButton(num, `${i}-${idx}`))}
+                  </span>
+                )}
+                {originRef != null && (
+                  <span className="inline-flex items-center gap-0.5 ml-1" title="Origin in transcript">
+                    {renderCitationButton(originRef, `${i}-origin`)}
                   </span>
                 )}
               </p>

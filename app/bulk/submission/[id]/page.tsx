@@ -1693,6 +1693,7 @@ Sound like a helpful human, not a grading robot.`,
                                     defaultExpanded={true}
                                     autoGenerateInsights={true}
                                     initialInsights={criterionInsights[c.criterion] || null}
+                                    citationSegments={sortedSegments.slice(0, 10).map(seg => ({ timestamp: normalizeTimestamp(seg.timestamp), text: seg.text }))}
                                     onInsightsGenerated={(criterionTitle, insights) => {
                                       setCriterionInsights(prev => 
                                         insights ? { ...prev, [criterionTitle]: insights } : (() => { const { [criterionTitle]: _, ...rest } = prev; return rest; })()
