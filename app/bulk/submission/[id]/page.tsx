@@ -997,11 +997,11 @@ Sound like a helpful human, not a grading robot.`,
                           
                           return (
                             <div key={idx} className={`flex flex-col ${isCenter ? 'ring-2 ring-primary-500 rounded-lg' : ''}`}>
-                              {/* Small 10s clip - LIVE CLIP badge */}
+                              {/* 10s clip - plays only the clip segment */}
                               <div className="relative w-full aspect-video max-h-24 rounded-t-lg overflow-hidden bg-surface-900">
                                 {videoUrl ? (
                                   <video
-                                    src={`${videoUrl}#t=${clipStart},${clipEnd}`}
+                                    src={videoUrl}
                                     className="absolute inset-0 w-full h-full object-cover"
                                     controls
                                     muted
@@ -1011,9 +1011,20 @@ Sound like a helpful human, not a grading robot.`,
                                       const video = e.target as HTMLVideoElement;
                                       video.currentTime = clipStart;
                                     }}
+                                    onPlay={(e) => {
+                                      const v = e.target as HTMLVideoElement;
+                                      if (v.currentTime < clipStart || v.currentTime >= clipEnd) v.currentTime = clipStart;
+                                    }}
                                     onTimeUpdate={(e) => {
                                       const v = e.target as HTMLVideoElement;
-                                      if (v.currentTime >= clipEnd - 0.5) v.pause();
+                                      if (v.currentTime >= clipEnd - 0.3) {
+                                        v.pause();
+                                        v.currentTime = clipStart;
+                                      }
+                                    }}
+                                    onSeeked={(e) => {
+                                      const v = e.target as HTMLVideoElement;
+                                      if (v.currentTime >= clipEnd || v.currentTime < clipStart) v.currentTime = clipStart;
                                     }}
                                   />
                                 ) : (
@@ -1054,46 +1065,12 @@ Sound like a helpful human, not a grading robot.`,
                       </div>
                     </div>
 
-                    {/* Speech Delivery - Compact layout, less empty space */}
+                    {/* Speech Delivery - Metrics only, no videos */}
                     <div className="bg-white rounded-2xl border border-surface-200 p-4">
                       <div className="flex items-center gap-2 mb-3">
                         <Mic className="w-4 h-4 text-primary-500" />
                         <h3 className="text-sm font-semibold text-surface-900">Speech Delivery</h3>
                       </div>
-                      
-                      {/* Compact clips - smaller, side-by-side */}
-                      {videoUrl && sortedSegments.length > 0 && (
-                        <div className="flex gap-2 mb-3">
-                          {[0, Math.floor(sortedSegments.length / 2)].map((segIdx, i) => {
-                            const seg = sortedSegments[segIdx];
-                            const ts = seg ? normalizeTimestamp(seg.timestamp) : 0;
-                            const labels = ['Opening', 'Mid'];
-                            return (
-                              <div key={i} className="flex-1 min-w-0 flex flex-col">
-                                <div className="relative w-full aspect-video max-h-20 rounded-lg overflow-hidden bg-surface-900">
-                                  <video
-                                    src={`${videoUrl}#t=${ts / 1000}`}
-                                    className="absolute inset-0 w-full h-full object-cover"
-                                    controls
-                                    muted
-                                    preload="metadata"
-                                    playsInline
-                                    onLoadedMetadata={(e) => {
-                                      (e.target as HTMLVideoElement).currentTime = ts / 1000;
-                                    }}
-                                  />
-                                  <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/70 rounded text-white text-[9px] font-mono">
-                                    {formatTimestamp(seg?.timestamp ?? 0)}
-                                  </div>
-                                </div>
-                                <p className="text-[10px] text-surface-600 mt-1 line-clamp-1">
-                                  {labels[i]} — {seg?.text?.slice(0, 35)}{seg?.text && seg.text.length > 35 ? '...' : ''}
-                                </p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
                       
                       {/* Metrics - compact */}
                       <div className="grid grid-cols-3 gap-2 text-center">
@@ -1156,79 +1133,38 @@ Sound like a helpful human, not a grading robot.`,
                     </div>
                   </div>
 
-                  {/* Course Material Alignment - Percentages + description, no bars, aligned with course content */}
+                  {/* Course Material Alignment - Criteria from uploaded rubric */}
                   <CollapsibleSection
                     title="Course Material Alignment"
-                    subtitle="How well the presentation aligns with course content"
+                    subtitle="Feedback based on your rubric criteria"
                     icon={<Target className="w-4 h-4" />}
                     defaultExpanded={true}
                     headerRight={
                       <div className="text-right mr-2">
                         <span className="text-lg font-bold text-primary-600">
-                          {submission.analysis?.courseAlignment?.overall ?? Math.round((submission.analysis?.overallStrength || 0) * 20)}%
+                          {Math.round(normalizedScore)}%
                         </span>
                       </div>
                     }
                   >
-                    <div className="space-y-4">
-                      {/* Topic Coverage - aligned with overall course content */}
-                      <div className="p-4 bg-surface-50 rounded-xl">
-                        <div className="flex items-start justify-between gap-3 mb-1">
-                          <h4 className="text-sm font-semibold text-surface-900">Topic Coverage</h4>
-                          <span className="text-sm font-bold text-primary-600">
-                            {submission.analysis?.courseAlignment?.topicCoverage ?? 85}%
-                          </span>
-                        </div>
-                        <p className="text-sm text-surface-600">
-                          How well the presentation covers key topics from the course. This presentation addressed core concepts from the syllabus and demonstrated understanding of the main learning objectives. <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-semibold text-primary-700 bg-primary-100 rounded-full mx-0.5 cursor-pointer hover:bg-primary-200">[1]</span>
-                        </p>
-                      </div>
-                      
-                      {/* Terminology Accuracy */}
-                      <div className="p-4 bg-surface-50 rounded-xl">
-                        <div className="flex items-start justify-between gap-3 mb-1">
-                          <h4 className="text-sm font-semibold text-surface-900">Terminology Accuracy</h4>
-                          <span className="text-sm font-bold text-primary-600">
-                            {submission.analysis?.courseAlignment?.terminologyAccuracy ?? 90}%
-                          </span>
-                        </div>
-                        <p className="text-sm text-surface-600">
-                          Alignment with course vocabulary and definitions. The presenter used appropriate terminology from the course materials and readings. Minor opportunities to apply more precise terms from the syllabus.
-                        </p>
-                      </div>
-                      
-                      {/* Content Depth */}
-                      <div className="p-4 bg-surface-50 rounded-xl">
-                        <div className="flex items-start justify-between gap-3 mb-1">
-                          <h4 className="text-sm font-semibold text-surface-900">Content Depth</h4>
-                          <span className="text-sm font-bold text-primary-600">
-                            {submission.analysis?.courseAlignment?.contentDepth ?? 75}%
-                          </span>
-                        </div>
-                        <p className="text-sm text-surface-600">
-                          Depth of analysis compared to course expectations. Good practical application; could strengthen by connecting to frameworks and theories from the course modules.
-                        </p>
-                      </div>
-                      
-                      {/* Reference Integration */}
-                      <div className="p-4 bg-surface-50 rounded-xl">
-                        <div className="flex items-start justify-between gap-3 mb-1">
-                          <h4 className="text-sm font-semibold text-surface-900">Reference Integration</h4>
-                          <span className="text-sm font-bold text-primary-600">
-                            {submission.analysis?.courseAlignment?.referenceIntegration ?? 70}%
-                          </span>
-                        </div>
-                        <p className="text-sm text-surface-600">
-                          Use of course readings and external sources. Consider adding explicit citations to assigned readings and research to strengthen the evidence base.
-                        </p>
-                      </div>
-                      
-                      {/* Get More Insights Button */}
+                    <div className="space-y-2">
+                      {effectiveCriteria.map((c, idx) => {
+                        const pct = c.maxScore ? Math.round((c.score / c.maxScore) * 100) : c.score;
+                        return (
+                          <div key={idx} className="flex items-start justify-between gap-2 py-2 border-b border-surface-100 last:border-0">
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-sm font-semibold text-surface-900">{c.criterion}</h4>
+                              <p className="text-xs text-surface-600 mt-0.5 line-clamp-2">{c.feedback || c.rationale}</p>
+                            </div>
+                            <span className="text-sm font-bold text-primary-600 shrink-0">{pct}%</span>
+                          </div>
+                        );
+                      })}
                       <button
-                        onClick={() => handleRequestCriterionInsights('Course Material Alignment')}
-                        className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
+                        onClick={() => handleRequestCriterionInsights(effectiveCriteria[0]?.criterion || 'Course Material Alignment')}
+                        className="flex items-center gap-2 text-xs text-primary-600 hover:text-primary-700 font-medium mt-2"
                       >
-                        <Sparkles className="w-4 h-4" />
+                        <Sparkles className="w-3.5 h-3.5" />
                         Get More Alignment Insights
                         <ChevronRight className="w-3 h-3" />
                       </button>
