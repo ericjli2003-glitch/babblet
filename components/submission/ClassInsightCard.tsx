@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { ChevronDown, BookOpen, Lightbulb, ExternalLink, PlayCircle, CheckCircle, AlertTriangle, Target, Loader2, Sparkles, ChevronRight, MessageSquarePlus, X, Send, GitBranch, ChevronUp, Trash2, EyeOff } from 'lucide-react';
+import { ChevronDown, BookOpen, Lightbulb, ExternalLink, PlayCircle, CheckCircle, AlertTriangle, Target, Loader2, Sparkles, ChevronRight, MessageSquarePlus, X, Send, GitBranch, ChevronUp, Trash2, EyeOff, Play, Pause } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface ClassInsightCardProps {
@@ -138,6 +138,8 @@ export default function ClassInsightCard({
       const seg = citationSegments[segmentIndex];
       const timeMs = typeof seg.timestamp === 'number' ? seg.timestamp : parseTimestamp(String(seg.timestamp));
       const timestamp = typeof seg.timestamp === 'string' ? seg.timestamp : (timeMs >= 0 ? `${Math.floor(timeMs / 60000)}:${String(Math.floor((timeMs % 60000) / 1000)).padStart(2, '0')}` : '0:00');
+      // Debug: verify different segments are selected
+      console.log(`[ClassInsightCard] criterion=${criterionIndex}/${numCriteria}, segmentIndex=${segmentIndex}/${numSegments}, timestamp=${timestamp}`);
       return { id: 'A' as const, timestamp, timeMs, text: seg.text.slice(0, 80) + (seg.text.length > 80 ? '...' : ''), explanation: `Student said at ${timestamp}: "${seg.text.slice(0, 60)}${seg.text.length > 60 ? '...' : ''}"` };
     }
     if (evidence && evidence.length > 0) {
@@ -148,6 +150,7 @@ export default function ClassInsightCard({
         numEvidence - 1
       );
       const e = evidence[idx];
+      console.log(`[ClassInsightCard] criterion=${criterionIndex}/${numCriteria}, evidenceIdx=${idx}/${numEvidence}`);
       return { id: 'A' as const, timestamp: e.timestamp, timeMs: parseTimestamp(e.timestamp), text: e.text.slice(0, 80) + (e.text.length > 80 ? '...' : ''), explanation: e.analysis || `Evidence at ${e.timestamp}` };
     }
     return null;
@@ -240,6 +243,10 @@ export default function ClassInsightCard({
   // Popover state for reference A/B
   const [openRef, setOpenRef] = useState<string | null>(null);
   const openRefRef = useRef<HTMLDivElement | null>(null);
+  // Custom clip player state
+  const [clipPlaying, setClipPlaying] = useState(false);
+  const [clipProgress, setClipProgress] = useState(0);
+  const clipVideoRef = useRef<HTMLVideoElement>(null);
   
   // Render insight content with A, B references
   // A = video/submission, B = course/rubric
@@ -267,8 +274,21 @@ export default function ClassInsightCard({
       return cleanText;
     };
     
-    // A = video ref: popover with 8-second clip preview
+    // A = video ref: popover with 8-second clip preview (custom controls, no timeline)
     const CLIP_DURATION = 8; // seconds
+    
+    const handleClipPlayPause = () => {
+      const v = clipVideoRef.current;
+      if (!v) return;
+      if (clipPlaying) {
+        v.pause();
+        setClipPlaying(false);
+      } else {
+        v.play();
+        setClipPlaying(true);
+      }
+    };
+    
     const renderVideoRef = (_letter: string, key: string) => {
       const ref = videoRefA;
       if (!ref) return null;
@@ -278,57 +298,83 @@ export default function ClassInsightCard({
       return (
         <div key={key} className="relative inline-block">
           <button
-            onClick={() => setOpenRef(isOpen ? null : `v-A-${key}`)}
+            onClick={() => {
+              setOpenRef(isOpen ? null : `v-A-${key}`);
+              if (!isOpen) {
+                setClipProgress(0);
+                setClipPlaying(false);
+              }
+            }}
             className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 text-xs font-semibold text-blue-700 bg-blue-100 rounded-full hover:bg-blue-200 transition-colors mx-0.5"
-            title="Student video"
+            title={`Student video @ ${ref.timestamp}`}
           >
             A
           </button>
           {isOpen && (
             <>
-              <div className="fixed inset-0 z-40" onClick={() => setOpenRef(null)} aria-hidden="true" />
+              <div className="fixed inset-0 z-40" onClick={() => { setOpenRef(null); setClipPlaying(false); }} aria-hidden="true" />
               <div ref={openRefRef} className="absolute left-0 top-full mt-1 z-50 w-72 rounded-lg border border-surface-200 bg-white shadow-lg p-3">
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-xs font-semibold text-surface-900">Clip @ {ref.timestamp}</p>
                   <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">{CLIP_DURATION}s clip</span>
                 </div>
                 {videoUrl && (
-                  <div className="rounded overflow-hidden bg-surface-900 mb-2 relative">
+                  <div className="rounded overflow-hidden bg-surface-900 mb-2 relative group">
                     <video
+                      ref={clipVideoRef}
                       src={videoUrl}
                       className="w-full aspect-video object-cover"
-                      controls
                       muted
                       playsInline
                       onLoadedMetadata={(e) => {
                         const v = e.target as HTMLVideoElement;
                         v.currentTime = clipStart;
                       }}
-                      onPlay={(e) => {
-                        const v = e.target as HTMLVideoElement;
-                        if (v.currentTime < clipStart || v.currentTime >= clipEnd) {
-                          v.currentTime = clipStart;
-                        }
-                      }}
+                      onPlay={() => setClipPlaying(true)}
+                      onPause={() => setClipPlaying(false)}
                       onTimeUpdate={(e) => {
                         const v = e.target as HTMLVideoElement;
-                        if (v.currentTime >= clipEnd - 0.2) {
+                        const elapsed = v.currentTime - clipStart;
+                        const progress = Math.min(Math.max(elapsed / CLIP_DURATION, 0), 1);
+                        setClipProgress(progress * 100);
+                        if (v.currentTime >= clipEnd - 0.1) {
                           v.pause();
                           v.currentTime = clipStart;
+                          setClipPlaying(false);
+                          setClipProgress(0);
                         }
                       }}
-                      onSeeked={(e) => {
-                        const v = e.target as HTMLVideoElement;
-                        if (v.currentTime < clipStart || v.currentTime >= clipEnd) {
-                          v.currentTime = clipStart;
+                      onEnded={() => {
+                        setClipPlaying(false);
+                        setClipProgress(0);
+                        if (clipVideoRef.current) {
+                          clipVideoRef.current.currentTime = clipStart;
                         }
                       }}
                     />
+                    {/* Custom play/pause overlay */}
+                    <button
+                      onClick={handleClipPlayPause}
+                      className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-colors"
+                    >
+                      {clipPlaying ? (
+                        <Pause className="w-10 h-10 text-white drop-shadow-lg" />
+                      ) : (
+                        <Play className="w-10 h-10 text-white drop-shadow-lg" />
+                      )}
+                    </button>
+                    {/* Custom progress bar (0-8 seconds only) */}
+                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/30">
+                      <div 
+                        className="h-full bg-blue-500 transition-all duration-100"
+                        style={{ width: `${clipProgress}%` }}
+                      />
+                    </div>
                   </div>
                 )}
                 <p className="text-xs text-surface-600 mb-2 line-clamp-2">&quot;{ref.text}&quot;</p>
                 <button
-                  onClick={() => { onSeekToTime?.(ref.timeMs); setOpenRef(null); }}
+                  onClick={() => { onSeekToTime?.(ref.timeMs); setOpenRef(null); setClipPlaying(false); }}
                   className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded"
                 >
                   <PlayCircle className="w-3.5 h-3.5" /> Go to full video
