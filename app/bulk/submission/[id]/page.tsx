@@ -618,22 +618,28 @@ ${criterionInfo}
 
 Write naturally, like a thoughtful TA giving feedback in office hours. Be specific and helpful.
 
+REFERENCE FORMAT (IMPORTANT):
+- Use BLUE references [1], [2], [3] for VIDEO/SUBMISSION quotes (specific moments from the student's presentation)
+- Use ORANGE references {A}, {B}, {C} for COURSE/RUBRIC references (expectations from rubric or course materials)
+
 FORMAT:
 **Overview** (2-3 sentences about their ${criterionTitle} performance)
 
 **What worked well:**
-- [Specific observation with transcript quote] [1]
-- [Another strength tied to rubric expectations] [2]
+- [Specific observation with transcript quote] [1] {A}
+- [Another strength tied to rubric expectations] [2] {B}
 
 **Areas to develop:**
-- [Gap identified + specific example of what would be better] [1]
-- [Missing element the rubric expects + concrete suggestion] [2]
+- [Gap identified + specific example of what would be better] [3] {A}
+- [Missing element the rubric expects + concrete suggestion] [4] {B}
 
 **Example of excellence:** Provide 1-2 sentences showing what a strong response would look like for this criterion, based on the rubric and course content.
 
 MANDATORY RULES:
-1. Every bullet MUST end with a reference like [1] or [2] linking to transcript/course material
-2. Be SPECIFIC to "${criterionTitle}" - not generic feedback
+1. Every bullet MUST have BOTH types of references:
+   - A BLUE [number] for video timestamp (quote from student's presentation)
+   - An ORANGE {letter} for rubric/course expectation
+2. Be SPECIFIC to "${criterionTitle}" - not generic feedback that could apply to any criterion
 3. Quote the student's actual words when possible
 4. Suggest concrete examples, not vague improvements
 5. Reference what the rubric specifically expects for this criterion
@@ -1693,7 +1699,23 @@ Sound like a helpful human, not a grading robot.`,
                                     defaultExpanded={true}
                                     autoGenerateInsights={true}
                                     initialInsights={criterionInsights[c.criterion] || null}
-                                    citationSegments={sortedSegments.slice(0, 10).map(seg => ({ timestamp: normalizeTimestamp(seg.timestamp), text: seg.text }))}
+                                    citationSegments={sortedSegments.map(seg => ({ timestamp: normalizeTimestamp(seg.timestamp), text: seg.text }))}
+                                    courseReferences={[
+                                      // Add rubric criteria as references
+                                      ...effectiveCriteria.map((cr, idx) => ({
+                                        id: String.fromCharCode(65 + idx),
+                                        title: cr.criterion,
+                                        excerpt: cr.feedback || cr.rationale || 'Rubric criterion',
+                                        type: 'rubric' as const,
+                                      })).slice(0, 3),
+                                      // Add course content if available
+                                      ...(batchInfo?.courseName ? [{
+                                        id: String.fromCharCode(65 + Math.min(3, effectiveCriteria.length)),
+                                        title: batchInfo.courseName,
+                                        excerpt: 'Course material alignment',
+                                        type: 'course' as const,
+                                      }] : []),
+                                    ]}
                                     onInsightsGenerated={(criterionTitle, insights) => {
                                       setCriterionInsights(prev => 
                                         insights ? { ...prev, [criterionTitle]: insights } : (() => { const { [criterionTitle]: _, ...rest } = prev; return rest; })()

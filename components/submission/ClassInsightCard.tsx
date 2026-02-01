@@ -28,8 +28,10 @@ interface ClassInsightCardProps {
   onInsightsGenerated?: (criterionTitle: string, insights: string) => void; // Called when insights are generated to persist
   onSeekToTime?: (timeMs: number) => void;
   onRequestMoreInsights?: (criterionTitle: string) => Promise<string>;
-  /** Transcript segments for reference links [1], [2] at end of each bullet (origin of bullet) */
+  /** Transcript segments for reference links [1], [2] at end of each bullet (BLUE - submission video) */
   citationSegments?: Array<{ timestamp: string | number; text: string }>;
+  /** Course content references for {A}, {B} etc. (ORANGE - course materials/rubric) */
+  courseReferences?: Array<{ id: string; title: string; excerpt: string; type: 'course' | 'rubric' }>;
 }
 
 function parseTimestamp(ts: string): number {
@@ -98,6 +100,7 @@ export default function ClassInsightCard({
   onSeekToTime,
   onRequestMoreInsights,
   citationSegments,
+  courseReferences,
 }: ClassInsightCardProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
@@ -111,20 +114,48 @@ export default function ClassInsightCard({
   const StatusIcon = config.icon;
   const autoFetchedRef = useRef(false);
   
-  // Build citations from transcript segments (origin for [1], [2] refs at end of each bullet) or evidence
-  const citations = useMemo(() => {
+  // Build VIDEO citations from transcript segments (BLUE [1], [2] refs) - sample from entire video
+  const videoCitations = useMemo(() => {
     if (citationSegments && citationSegments.length > 0) {
-      return citationSegments.slice(0, 10).map((seg, i) => {
+      // Sample evenly from entire video: beginning, middle, end
+      const total = citationSegments.length;
+      const sampleSize = Math.min(10, total);
+      const step = Math.max(1, Math.floor(total / sampleSize));
+      const sampled: typeof citationSegments = [];
+      for (let i = 0; i < total && sampled.length < sampleSize; i += step) {
+        sampled.push(citationSegments[i]);
+      }
+      // Ensure we have last segment for end of video
+      if (total > 1 && sampled.length < sampleSize && !sampled.includes(citationSegments[total - 1])) {
+        sampled.push(citationSegments[total - 1]);
+      }
+      return sampled.map((seg, i) => {
         const timeMs = typeof seg.timestamp === 'number' ? seg.timestamp : parseTimestamp(String(seg.timestamp));
         const timestamp = typeof seg.timestamp === 'string' ? seg.timestamp : (timeMs >= 0 ? `${Math.floor(timeMs / 60000)}:${String(Math.floor((timeMs % 60000) / 1000)).padStart(2, '0')}` : '0:00');
-        return { id: i + 1, timestamp, timeMs, text: seg.text.slice(0, 50) + (seg.text.length > 50 ? '...' : '') };
+        return { id: i + 1, timestamp, timeMs, text: seg.text.slice(0, 50) + (seg.text.length > 50 ? '...' : ''), type: 'video' as const };
       });
     }
     if (evidence && evidence.length > 0) {
-      return evidence.map((e, i) => ({ id: i + 1, timestamp: e.timestamp, timeMs: parseTimestamp(e.timestamp), text: e.text.slice(0, 50) + (e.text.length > 50 ? '...' : '') }));
+      return evidence.map((e, i) => ({ id: i + 1, timestamp: e.timestamp, timeMs: parseTimestamp(e.timestamp), text: e.text.slice(0, 50) + (e.text.length > 50 ? '...' : ''), type: 'video' as const }));
     }
     return [];
   }, [citationSegments, evidence]);
+  
+  // Build COURSE citations from course references (ORANGE {A}, {B} refs)
+  const courseCitations = useMemo(() => {
+    if (courseReferences && courseReferences.length > 0) {
+      return courseReferences.slice(0, 5).map((ref, i) => ({
+        id: String.fromCharCode(65 + i), // A, B, C, D, E
+        title: ref.title,
+        excerpt: ref.excerpt.slice(0, 60) + (ref.excerpt.length > 60 ? '...' : ''),
+        type: ref.type,
+      }));
+    }
+    return [];
+  }, [courseReferences]);
+  
+  // Legacy: keep citations for backward compatibility
+  const citations = videoCitations;
   
   // Auto-fetch insights on mount if enabled (only when no persisted insights)
   useEffect(() => {
@@ -197,20 +228,22 @@ export default function ClassInsightCard({
   }, []);
 
   // Render insight content with citations at end of bullet points
+  // BLUE [1], [2] = video submission timestamps
+  // ORANGE {A}, {B} = course content / rubric references
   const renderInsightContent = useCallback((content: string) => {
     const lines = content.split('\n').filter(l => l.trim());
     
-    // Render [1], [2] as clickable buttons that seek to transcript origin
-    const renderCitationButton = (citationNum: number, key: string) => {
-      const citation = citations[citationNum - 1] as { timestamp: string; timeMs?: number; text: string } | undefined;
+    // Render BLUE [1], [2] as clickable buttons that seek to video timestamp
+    const renderVideoCitationButton = (citationNum: number, key: string) => {
+      const citation = videoCitations[citationNum - 1] as { timestamp: string; timeMs?: number; text: string } | undefined;
       if (citation) {
         const timeMs = citation.timeMs ?? parseTimestamp(citation.timestamp);
         return (
           <button
             key={key}
             onClick={() => onSeekToTime?.(timeMs)}
-            className="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold text-primary-700 bg-primary-100 rounded-full hover:bg-primary-200 transition-colors mx-0.5"
-            title={`Jump to ${citation.timestamp}: "${citation.text}"`}
+            className="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold text-blue-700 bg-blue-100 rounded-full hover:bg-blue-200 transition-colors mx-0.5"
+            title={`Video @ ${citation.timestamp}: "${citation.text}"`}
           >
             {citationNum}
           </button>
@@ -218,16 +251,39 @@ export default function ClassInsightCard({
       }
       return null;
     };
+    
+    // Render ORANGE {A}, {B} as course/rubric references
+    const renderCourseCitationButton = (letter: string, key: string) => {
+      const citation = courseCitations.find(c => c.id === letter);
+      if (citation) {
+        return (
+          <span
+            key={key}
+            className="inline-flex items-center justify-center min-w-5 h-5 px-1 text-xs font-semibold text-orange-700 bg-orange-100 rounded-full mx-0.5 cursor-help"
+            title={`${citation.type === 'rubric' ? 'Rubric' : 'Course'}: ${citation.title} - "${citation.excerpt}"`}
+          >
+            {letter}
+          </span>
+        );
+      }
+      return null;
+    };
 
-    // Extract citation numbers from text
-    const extractCitations = (text: string): number[] => {
+    // Extract video citation numbers from text [1], [2]
+    const extractVideoCitations = (text: string): number[] => {
       const matches = text.match(/\[(\d+)\]/g) || [];
       return matches.map(m => parseInt(m.replace(/[\[\]]/g, '')));
+    };
+    
+    // Extract course citation letters from text {A}, {B}
+    const extractCourseCitations = (text: string): string[] => {
+      const matches = text.match(/\{([A-Z])\}/g) || [];
+      return matches.map(m => m.replace(/[{}]/g, ''));
     };
 
     // Remove inline citations from text
     const stripCitations = (text: string): string => {
-      return text.replace(/\[\d+\]/g, '').trim();
+      return text.replace(/\[\d+\]/g, '').replace(/\{[A-Z]\}/g, '').trim();
     };
 
     // Render text with bold formatting (but without inline citations)
@@ -242,16 +298,24 @@ export default function ClassInsightCard({
       return cleanText;
     };
 
-    // Bullet index for assigning origin reference [1], [2] at end of each bullet
+    // Bullet index for assigning origin reference at end of each bullet
     let bulletIndex = 0;
     return (
       <div className="space-y-2">
         {lines.map((line, i) => {
-          const lineCitations = extractCitations(line);
+          const lineVideoCitations = extractVideoCitations(line);
+          const lineCourseCitations = extractCourseCitations(line);
           const isBullet = line.startsWith('- ') || line.startsWith('* ');
           if (isBullet) bulletIndex += 1;
-          // Origin reference: cycle through transcript segments so each bullet has a ref at the end
-          const originRef = citations.length > 0 && isBullet ? ((bulletIndex - 1) % citations.length) + 1 : null;
+          
+          // Alternate between video and course citations for each bullet
+          // Blue [1]: video timestamp, Orange {A}: course/rubric
+          const videoRef = videoCitations.length > 0 && isBullet 
+            ? ((bulletIndex - 1) % videoCitations.length) + 1 
+            : null;
+          const courseRef = courseCitations.length > 0 && isBullet 
+            ? courseCitations[(bulletIndex - 1) % courseCitations.length]?.id 
+            : null;
           
           if (line.startsWith('## ')) {
             return (
@@ -271,25 +335,36 @@ export default function ClassInsightCard({
             return (
               <p key={i} className="text-surface-700 pl-4 flex items-start gap-1 flex-wrap items-baseline">
                 <span>• {renderText(line.slice(2))}</span>
-                {lineCitations.length > 0 && (
+                {/* Inline citations from Claude's response */}
+                {lineVideoCitations.length > 0 && (
                   <span className="inline-flex items-center gap-0.5 ml-1">
-                    {lineCitations.map((num, idx) => renderCitationButton(num, `${i}-${idx}`))}
+                    {lineVideoCitations.map((num, idx) => renderVideoCitationButton(num, `${i}-v${idx}`))}
                   </span>
                 )}
-                {originRef != null && (
-                  <span className="inline-flex items-center gap-0.5 ml-1" title="Origin in transcript">
-                    {renderCitationButton(originRef, `${i}-origin`)}
+                {lineCourseCitations.length > 0 && (
+                  <span className="inline-flex items-center gap-0.5 ml-1">
+                    {lineCourseCitations.map((letter, idx) => renderCourseCitationButton(letter, `${i}-c${idx}`))}
                   </span>
                 )}
+                {/* Auto-appended origin references */}
+                <span className="inline-flex items-center gap-0.5 ml-1">
+                  {videoRef != null && renderVideoCitationButton(videoRef, `${i}-origin-v`)}
+                  {courseRef && renderCourseCitationButton(courseRef, `${i}-origin-c`)}
+                </span>
               </p>
             );
           }
           return (
             <p key={i} className="text-surface-700 flex items-start gap-1 flex-wrap">
               <span>{renderText(line)}</span>
-              {lineCitations.length > 0 && (
+              {lineVideoCitations.length > 0 && (
                 <span className="inline-flex items-center gap-0.5 ml-1">
-                  {lineCitations.map((num, idx) => renderCitationButton(num, `${i}-${idx}`))}
+                  {lineVideoCitations.map((num, idx) => renderVideoCitationButton(num, `${i}-v${idx}`))}
+                </span>
+              )}
+              {lineCourseCitations.length > 0 && (
+                <span className="inline-flex items-center gap-0.5 ml-1">
+                  {lineCourseCitations.map((letter, idx) => renderCourseCitationButton(letter, `${i}-c${idx}`))}
                 </span>
               )}
             </p>
@@ -297,7 +372,7 @@ export default function ClassInsightCard({
         })}
       </div>
     );
-  }, [citations, onSeekToTime]);
+  }, [videoCitations, courseCitations, onSeekToTime]);
 
   return (
     <div className="space-y-4">
