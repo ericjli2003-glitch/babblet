@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '@/lib/config';
-import { getCourseDocuments } from '@/lib/context-store';
+import { getCourseDocuments, getAssignmentDocuments } from '@/lib/context-store';
 import { getSubmission, getBatch } from '@/lib/batch-store';
 
 export const dynamic = 'force-dynamic';
@@ -44,11 +44,21 @@ interface ConversationMessage {
 
 // Build the system prompt with context
 function buildSystemPrompt(context: ChatContext, courseMaterials?: Array<{ name: string; type: string; excerpt: string }>): string {
+  const isRubricInsight = context.sourceType === 'rubric';
   const parts: string[] = [
     `You are Babblet, an AI teaching assistant helping instructors analyze and improve student presentations.`,
     ``,
     `RESPONSE GUIDELINES:`,
-    `- Keep responses concise: 2-5 sentences for explanations`,
+    ...(isRubricInsight 
+      ? [
+        `- For rubric/criterion analysis: Provide RICH, DETAILED insights. Depth over brevity.`,
+        `- Include specific transcript quotes, timestamps, concrete examples, and actionable suggestions.`,
+        `- Reference course materials heavily - this context is critical for meaningful feedback.`,
+        ]
+      : [
+        `- Keep responses concise: 2-5 sentences for explanations`,
+        ]
+    ),
     `- Be instructional, supportive, and neutral in tone`,
     `- Always ground your explanations in the highlighted text AND course materials when available`,
     `- Never re-grade or modify scores unless explicitly asked`,
@@ -108,13 +118,13 @@ function buildSystemPrompt(context: ChatContext, courseMaterials?: Array<{ name:
     parts.push(context.rubricText);
   }
   
-  // Include full transcript context for rubric insights
+  // Include full transcript context for rubric insights (generous limit for rich insights)
   if (context.fullContext && context.sourceType === 'rubric') {
     parts.push(``);
-    parts.push(`STUDENT'S PRESENTATION TRANSCRIPT:`);
-    parts.push(`"${context.fullContext.slice(0, 8000)}${context.fullContext.length > 8000 ? '...' : ''}"`);
+    parts.push(`STUDENT'S PRESENTATION TRANSCRIPT (use specific quotes and timestamps in your insights):`);
+    parts.push(`"${context.fullContext.slice(0, 14000)}${context.fullContext.length > 14000 ? '...' : ''}"`);
     parts.push(``);
-    parts.push(`IMPORTANT: Use this transcript to provide specific, evidence-based feedback about the student's performance on the criterion above.`);
+    parts.push(`CRITICAL: Quote the transcript directly, cite specific moments, and ground every insight in evidence from above.`);
   } else if (context.fullContext && context.fullContext !== context.highlightedText) {
     // Include full context when user only highlighted a portion
     parts.push(``);
@@ -124,15 +134,36 @@ function buildSystemPrompt(context: ChatContext, courseMaterials?: Array<{ name:
     parts.push(`NOTE: The user highlighted only a portion of the above. Answer about the highlighted portion but use the full context for understanding.`);
   }
   
-  // Include analysis data if provided
+  // Include analysis data if provided - use full structure for rich context
   if (context.analysisData) {
     try {
-      const analysis = JSON.parse(context.analysisData);
+      const a = JSON.parse(context.analysisData);
       parts.push(``);
-      parts.push(`ANALYSIS DATA:`);
-      if (analysis.summary) parts.push(`Summary: ${analysis.summary}`);
-      if (analysis.strengthAreas) parts.push(`Strengths: ${analysis.strengthAreas.join(', ')}`);
-      if (analysis.improvementAreas) parts.push(`Areas for Improvement: ${analysis.improvementAreas.join(', ')}`);
+      parts.push(`ANALYSIS DATA (use this for detailed, evidence-based insights):`);
+      if (a.keyClaims?.length) {
+        parts.push(`Key Claims: ${a.keyClaims.map((c: { claim?: string }) => c.claim).join('; ')}`);
+      }
+      if (a.logicalGaps?.length) {
+        parts.push(`Logical Gaps: ${a.logicalGaps.map((g: { description?: string }) => g.description).join('; ')}`);
+      }
+      if (a.missingEvidence?.length) {
+        parts.push(`Missing Evidence: ${a.missingEvidence.map((e: { description?: string }) => e.description).join('; ')}`);
+      }
+      if (a.courseAlignment) {
+        parts.push(`Course Alignment: topic ${a.courseAlignment.topicCoverage}%, terminology ${a.courseAlignment.terminologyAccuracy}%, depth ${a.courseAlignment.contentDepth}%, references ${a.courseAlignment.referenceIntegration}%`);
+      }
+      if (a.speechMetrics) {
+        parts.push(`Speech: ${a.speechMetrics.fillerWordCount} filler words, ${a.speechMetrics.speakingRateWpm} wpm, ${a.speechMetrics.pauseFrequency} pauses/min`);
+      }
+      if (a.summary) parts.push(`Summary: ${a.summary}`);
+      if (a.strengthAreas?.length) parts.push(`Strengths: ${a.strengthAreas.join(', ')}`);
+      if (a.improvementAreas?.length) parts.push(`Improvements: ${a.improvementAreas.join(', ')}`);
+      if (a.rubricEvaluation?.criteriaBreakdown?.length) {
+        parts.push(`Rubric Scores: ${a.rubricEvaluation.criteriaBreakdown.map((c: { criterion?: string; score?: number; maxScore?: number; feedback?: string }) => 
+          `${c.criterion} ${c.score}/${c.maxScore || 10} - ${(c.feedback || '').slice(0, 80)}`
+        ).join(' | ')}`);
+      }
+      if (a.slideSummary) parts.push(`Slide/Presentation Summary: ${a.slideSummary}`);
     } catch {
       // Ignore parse errors
     }
@@ -218,18 +249,35 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Fetch course documents
+    // Fetch course documents (primary context for rubric insights)
     if (courseId) {
       try {
         const docs = await getCourseDocuments(courseId);
-        courseMaterials = docs.slice(0, 5).map((d: { name: string; type: string; rawText: string }) => ({
+        courseMaterials = docs.slice(0, 10).map((d: { name: string; type: string; rawText: string }) => ({
           name: d.name,
           type: d.type,
-          excerpt: d.rawText.substring(0, 500) + (d.rawText.length > 500 ? '...' : ''),
+          excerpt: d.rawText.substring(0, 1800) + (d.rawText.length > 1800 ? '...' : ''),
         }));
         console.log('[ContextualChat] Loaded', courseMaterials.length, 'course materials for context');
       } catch (e) {
         console.log('[ContextualChat] Could not fetch course materials:', e);
+      }
+    }
+    
+    // Also fetch assignment documents (rubric, assignment-specific materials) for richer context
+    const assignmentId = context.assignmentId;
+    if (assignmentId && courseMaterials.length < 10) {
+      try {
+        const assignDocs = await getAssignmentDocuments(assignmentId);
+        const assignMaterials = assignDocs.slice(0, 5).map((d: { name: string; type: string; rawText: string }) => ({
+          name: `[Assignment] ${d.name}`,
+          type: d.type,
+          excerpt: d.rawText.substring(0, 1800) + (d.rawText.length > 1800 ? '...' : ''),
+        }));
+        courseMaterials = [...courseMaterials, ...assignMaterials].slice(0, 12);
+        console.log('[ContextualChat] Added', assignMaterials.length, 'assignment documents');
+      } catch (e) {
+        console.log('[ContextualChat] Could not fetch assignment documents:', e);
       }
     }
     
@@ -252,10 +300,13 @@ export async function POST(request: NextRequest) {
       content: message,
     });
     
+    const systemPrompt = buildSystemPrompt(context, courseMaterials);
+    const isRubricInsight = context.sourceType === 'rubric';
+    
     const response = await client.messages.create({
       model: config.models.claude,
-      max_tokens: 1024,
-      system: buildSystemPrompt(context, courseMaterials),
+      max_tokens: isRubricInsight ? 2048 : 1024,
+      system: systemPrompt,
       messages,
     });
     

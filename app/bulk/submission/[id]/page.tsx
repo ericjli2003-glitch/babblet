@@ -208,6 +208,7 @@ export default function SubmissionDetailPage() {
     courseName?: string; 
     courseId?: string;
     courseCode?: string;
+    assignmentId?: string;
     assignmentName?: string;
     rubricCriteria?: string;
   } | null>(null);
@@ -237,6 +238,7 @@ export default function SubmissionDetailPage() {
                 courseName: batchData.batch.courseName,
                 courseId: batchData.batch.courseId,
                 courseCode: batchData.batch.courseCode,
+                assignmentId: batchData.batch.assignmentId,
                 assignmentName: batchData.batch.assignmentName,
                 rubricCriteria: batchData.batch.rubricCriteria,
               });
@@ -603,7 +605,7 @@ export default function SubmissionDetailPage() {
     ).join('\n') || '';
     
     const rubricText = batchInfo?.rubricCriteria || '';
-    const rubricSection = rubricText ? `\n\nUPLOADED RUBRIC:\n${rubricText.slice(0, 3000)}${rubricText.length > 3000 ? '\n[Rubric truncated]' : ''}` : '';
+    const rubricSection = rubricText ? `\n\nUPLOADED RUBRIC:\n${rubricText.slice(0, 5000)}${rubricText.length > 5000 ? '\n[Rubric truncated]' : ''}` : '';
     
     const response = await fetch('/api/contextual-chat', {
       method: 'POST',
@@ -629,9 +631,23 @@ Format: Bullet points. Include [1], [2] at the END of each bullet. Do NOT repeat
           sourceType: 'rubric',
           rubricCriterion: criterionTitle,
           fullContext: fullTranscript + (slideContext ? `\n\nPRESENTATION SLIDES:\n${slideContext}` : '') + rubricSection,
-          analysisData: submission?.analysis ? JSON.stringify(submission.analysis) : undefined,
+          analysisData: submission ? JSON.stringify({
+            ...submission.analysis,
+            rubricEvaluation: submission.rubricEvaluation ? {
+              overallScore: submission.rubricEvaluation.overallScore,
+              criteriaBreakdown: submission.rubricEvaluation.criteriaBreakdown?.map(c => ({
+                criterion: c.criterion,
+                score: c.score,
+                maxScore: c.maxScore,
+                feedback: c.feedback,
+                rationale: c.rationale,
+              })),
+            } : undefined,
+            slideSummary: submission.slideContent?.summary,
+          }) : undefined,
           submissionId,
           courseId: batchInfo?.courseId,
+          assignmentId: batchInfo?.assignmentId,
           rubricText: rubricSection,
         },
         conversationHistory: [],
