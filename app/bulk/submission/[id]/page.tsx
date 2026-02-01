@@ -611,21 +611,29 @@ export default function SubmissionDetailPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: `Provide JUICY, criterion-specific insights for "${criterionTitle}" ONLY.
+        message: `Provide DEEP, criterion-specific insights for the rubric category "${criterionTitle}".
 
-Make insights SPECIFIC and ACTIONABLE:
-- Include concrete details: durations (e.g., "sustained for 42 seconds"), timestamps, counts, confidence scores
-- Use vivid language: "Excellent eye contact," "Pacing accelerated slightly," "Strong use of rhetorical questioning"
-- Give specific suggestions: "Suggest pausing for effect," "Consider citing X"
-- Reference transcript quotes or moments when relevant
-
-ORDER OF PRIORITY:
-1. First: How well does the student's content align with THIS SPECIFIC rubric criterion?
-2. Second: How does it align with course content?${rubricSection}
-
+FOCUS ENTIRELY ON THIS CRITERION: "${criterionTitle}"
 ${criterionInfo}
 
-Format: Bullet points. Include [1], [2] at the END of each bullet. Do NOT repeat the Feedback text. Be juicy and specific.`,
+STRUCTURE YOUR RESPONSE AS:
+1. **Opening paragraph** (2-3 sentences): Summarize how the student performed on THIS criterion specifically. Be direct and evaluative.
+
+2. **Key observations** (3-5 bullets): Each bullet should be specific and grounded in evidence:
+   - Quote the transcript directly when relevant
+   - Include timestamps, durations, or counts where applicable
+   - Connect observations to what the rubric expects for "${criterionTitle}"
+
+3. **Closing paragraph** (2-3 sentences): Actionable recommendations for improving performance on THIS criterion.
+
+GROUNDING ORDER:
+1. First: Align insights to the SPECIFIC rubric requirements for "${criterionTitle}"
+2. Second: Connect to course content and learning objectives
+${rubricSection}
+
+CITATION REQUIREMENT: End each bullet and paragraph with [1], [2] references to transcript moments or course materials.
+
+Do NOT repeat the basic feedback already given. Go deeper. Be specific about what worked, what didn't, and exactly how to improve.`,
         context: {
           highlightedText: criterionTitle,
           sourceType: 'rubric',
