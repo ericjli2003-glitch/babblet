@@ -23,7 +23,9 @@ interface ClassInsightCardProps {
   }>;
   courseAlignment?: number;
   defaultExpanded?: boolean;
-  autoGenerateInsights?: boolean; // Auto-fetch insights on mount
+  autoGenerateInsights?: boolean; // Auto-fetch insights on mount (only if no initialInsights)
+  initialInsights?: string | null; // Persisted insights from parent - do not regenerate
+  onInsightsGenerated?: (criterionTitle: string, insights: string) => void; // Called when insights are generated to persist
   onSeekToTime?: (timeMs: number) => void;
   onRequestMoreInsights?: (criterionTitle: string) => Promise<string>;
 }
@@ -89,12 +91,15 @@ export default function ClassInsightCard({
   courseAlignment,
   defaultExpanded = false,
   autoGenerateInsights = false,
+  initialInsights,
+  onInsightsGenerated,
   onSeekToTime,
   onRequestMoreInsights,
 }: ClassInsightCardProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
-  const [additionalInsights, setAdditionalInsights] = useState<string | null>(null);
+  const [localInsights, setLocalInsights] = useState<string | null>(null);
+  const additionalInsights = initialInsights ?? localInsights;
   const [isInsightsHidden, setIsInsightsHidden] = useState(false);
   const [branches, setBranches] = useState<BranchInsight[]>([]);
   const [showBranchInput, setShowBranchInput] = useState(false);
@@ -103,26 +108,26 @@ export default function ClassInsightCard({
   const StatusIcon = config.icon;
   const autoFetchedRef = useRef(false);
   
-  // Auto-fetch insights on mount if enabled
+  // Auto-fetch insights on mount if enabled (only when no persisted insights)
   useEffect(() => {
-    if (autoGenerateInsights && onRequestMoreInsights && !additionalInsights && !autoFetchedRef.current) {
+    if (autoGenerateInsights && onRequestMoreInsights && !initialInsights && !additionalInsights && !autoFetchedRef.current) {
       autoFetchedRef.current = true;
       setIsLoadingInsights(true);
       onRequestMoreInsights(title)
         .then(insights => {
-          // Ensure insights have a reference at the end
           const insightWithRef = insights.includes('[1]') ? insights : `${insights} [1]`;
-          setAdditionalInsights(insightWithRef);
+          setLocalInsights(insightWithRef);
+          onInsightsGenerated?.(title, insightWithRef);
         })
         .catch(err => {
           console.error('Failed to auto-generate insights:', err);
-          setAdditionalInsights('Unable to load insights. Please try again.');
+          setLocalInsights('Unable to load insights. Please try again.');
         })
         .finally(() => {
           setIsLoadingInsights(false);
         });
     }
-  }, [autoGenerateInsights, onRequestMoreInsights, title, additionalInsights]);
+  }, [autoGenerateInsights, onRequestMoreInsights, title, initialInsights, additionalInsights, onInsightsGenerated]);
 
   // Build citations from evidence
   const citations = useMemo(() => {
@@ -135,21 +140,21 @@ export default function ClassInsightCard({
   }, [evidence]);
   
   const handleRequestInsights = useCallback(async () => {
-    if (!onRequestMoreInsights || isLoadingInsights) return;
+    if (!onRequestMoreInsights || isLoadingInsights || additionalInsights) return;
     
     setIsLoadingInsights(true);
     try {
       const insights = await onRequestMoreInsights(title);
-      // Ensure insights have a reference at the end
       const insightWithRef = insights.includes('[1]') ? insights : `${insights} [1]`;
-      setAdditionalInsights(insightWithRef);
+      setLocalInsights(insightWithRef);
+      onInsightsGenerated?.(title, insightWithRef);
     } catch (err) {
       console.error('Failed to get insights:', err);
-      setAdditionalInsights('Unable to load additional insights. Please try again.');
+      setLocalInsights('Unable to load additional insights. Please try again.');
     } finally {
       setIsLoadingInsights(false);
     }
-  }, [title, onRequestMoreInsights, isLoadingInsights]);
+  }, [title, onRequestMoreInsights, isLoadingInsights, additionalInsights, onInsightsGenerated]);
 
   // Handle creating a new branch insight
   const handleCreateBranch = useCallback(async () => {
@@ -381,8 +386,8 @@ export default function ClassInsightCard({
                 </div>
               )}
 
-              {/* Get More Insights Button */}
-              {onRequestMoreInsights && (
+              {/* Get More Insights - only show when no insights yet; once generated, do not regenerate */}
+              {onRequestMoreInsights && !additionalInsights && (
                 <div className="pt-3 border-t border-surface-100">
                   <button
                     onClick={handleRequestInsights}
@@ -394,8 +399,8 @@ export default function ClassInsightCard({
                     ) : (
                       <Sparkles className="w-4 h-4" />
                     )}
-                    {isLoadingInsights ? 'Generating insights...' : additionalInsights ? 'Refresh Insights' : 'Get More Insights'}
-                    {!isLoadingInsights && !additionalInsights && <ChevronRight className="w-3 h-3" />}
+                    {isLoadingInsights ? 'Generating insights...' : 'Get More Insights'}
+                    {!isLoadingInsights && <ChevronRight className="w-3 h-3" />}
                   </button>
                   
                   {/* Additional Insights Panel */}
@@ -425,8 +430,9 @@ export default function ClassInsightCard({
                               </button>
                               <button
                                 onClick={() => {
-                                  setAdditionalInsights(null);
+                                  setLocalInsights(null);
                                   setBranches([]);
+                                  onInsightsGenerated?.(title, '');
                                 }}
                                 className="p-1.5 text-surface-400 hover:text-red-500 rounded-md hover:bg-white/50 transition-colors"
                                 title="Delete insights"

@@ -34,6 +34,7 @@ interface ChatContext {
   learningObjective?: string;
   courseId?: string;
   analysisData?: string; // JSON stringified analysis data
+  rubricText?: string; // Uploaded rubric text for criterion-specific analysis
 }
 
 interface ConversationMessage {
@@ -96,6 +97,14 @@ function buildSystemPrompt(context: ChatContext, courseMaterials?: Array<{ name:
   if (context.rubricCriterion) {
     parts.push(``);
     parts.push(`RUBRIC CRITERION BEING ANALYZED: ${context.rubricCriterion}`);
+    parts.push(``);
+    parts.push(`ANALYSIS PRIORITY: First analyze how well the student aligns with THIS SPECIFIC rubric criterion. Then how they align with course content. Include [1], [2] references at the end of EACH bullet or paragraph.`);
+  }
+  
+  if (context.rubricText) {
+    parts.push(``);
+    parts.push(`UPLOADED RUBRIC (use for criterion-specific analysis):`);
+    parts.push(context.rubricText);
   }
   
   // Include full transcript context for rubric insights

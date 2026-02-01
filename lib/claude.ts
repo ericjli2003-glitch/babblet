@@ -251,10 +251,16 @@ function selectDiverseTop(
   for (let i = 0; i < wExp; i++) categoryOrder.push('application');
   for (let i = 0; i < wClar; i++) categoryOrder.push('clarification');
   
-  // Default diverse mix if no priorities set
+  // Default diverse mix - shuffle order so we don't always get same type sequence
   if (categoryOrder.length === 0) {
-    categoryOrder.push('evidence', 'assumption', 'counterargument', 'application', 
-      'evaluation', 'methodology', 'limitation', 'synthesis', 'implication', 'clarification');
+    const cats: Array<GeneratedQuestion['category']> = ['evidence', 'assumption', 'counterargument', 'application', 
+      'evaluation', 'methodology', 'limitation', 'synthesis', 'implication', 'clarification'];
+    // Fisher-Yates shuffle for variety
+    for (let i = cats.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [cats[i], cats[j]] = [cats[j], cats[i]];
+    }
+    categoryOrder.push(...cats);
   }
 
   const picked: GeneratedQuestion[] = [];
@@ -360,7 +366,7 @@ QUESTION CATEGORIES (use these exact category values):
 10. "clarification" - Clarification: "Can you explain what you mean by...?" Seeks clearer explanation.
 
 Your goals:
-1. CRITICAL: Follow the CATEGORY ASSIGNMENT exactly - Question 1 is always "evidence", Question 2 is always "assumption", etc.
+1. MIX question types - do NOT generate in a fixed order (evidence, assumption, counterargument...). For each moment or segment, pick the category that has the BEST potential for a high-quality question. Vary the order naturally based on what fits the content.
 2. Avoid generic or low-value clarifications - every question should challenge the student
 3. Questions should help students demonstrate deeper understanding and critical thinking
 4. Never repeat or closely paraphrase existing questions
@@ -508,20 +514,8 @@ GOOD examples (precise):
 - "toaster model of cognition"
 - "social cognition nobody's mastered"
 
-CATEGORY ASSIGNMENT (MANDATORY - FOLLOW EXACTLY):
-Generate ${returnCount} questions with EXACTLY these categories in this order:
-${returnCount >= 1 ? '- Question 1: "evidence" (Evidence Request)' : ''}
-${returnCount >= 2 ? '- Question 2: "assumption" (Assumption Challenge)' : ''}
-${returnCount >= 3 ? '- Question 3: "counterargument" (Counterargument)' : ''}
-${returnCount >= 4 ? '- Question 4: "limitation" (Limitation)' : ''}
-${returnCount >= 5 ? '- Question 5: "methodology" (Methodology)' : ''}
-${returnCount >= 6 ? '- Question 6: "application" (Application)' : ''}
-${returnCount >= 7 ? '- Question 7: "evaluation" (Evaluation)' : ''}
-${returnCount >= 8 ? '- Question 8: "synthesis" (Synthesis)' : ''}
-${returnCount >= 9 ? '- Question 9: "implication" (Implication)' : ''}
-${returnCount >= 10 ? '- Question 10: "clarification" (Clarification)' : ''}
-
-This is NON-NEGOTIABLE. Each question MUST use its assigned category.
+CATEGORY SELECTION (MIX AND VARY):
+Do NOT use a fixed order. For each question, pick the category that has the BEST potential at that moment in the transcript. Scan the content and choose the most fitting category for each question - mix evidence, assumption, counterargument, limitation, methodology, application, evaluation, synthesis, implication, and clarification based on which fits best. Aim for diversity but prioritize quality over rigid type rotation.
 
 Return ONLY valid JSON in this exact format (no markdown, no extra text):
 {"questions":[{"question":"Question text here","category":"evidence","difficulty":"medium","rationale":"Brief rationale","relevantSnippet":"exact quote from transcript"}]}

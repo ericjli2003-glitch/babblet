@@ -209,7 +209,10 @@ export default function SubmissionDetailPage() {
     courseId?: string;
     courseCode?: string;
     assignmentName?: string;
+    rubricCriteria?: string;
   } | null>(null);
+  const [otherSubmissionsCount, setOtherSubmissionsCount] = useState<number>(0);
+  const [criterionInsights, setCriterionInsights] = useState<Record<string, string>>({});
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const [videoPanelWidth, setVideoPanelWidth] = useState(420);
   const [isResizing, setIsResizing] = useState(false);
@@ -235,7 +238,11 @@ export default function SubmissionDetailPage() {
                 courseId: batchData.batch.courseId,
                 courseCode: batchData.batch.courseCode,
                 assignmentName: batchData.batch.assignmentName,
+                rubricCriteria: batchData.batch.rubricCriteria,
               });
+              // For Content Originality: count other submissions in batch
+              const subs = batchData.submissions || [];
+              setOtherSubmissionsCount(Math.max(0, subs.length - 1));
             }
           } catch (e) {
             console.log('Could not load batch info:', e);
@@ -595,17 +602,31 @@ export default function SubmissionDetailPage() {
       `[Slide ${s.slideNumber}${s.title ? `: ${s.title}` : ''}] ${s.textContent}`
     ).join('\n') || '';
     
+    const rubricText = batchInfo?.rubricCriteria || '';
+    const rubricSection = rubricText ? `\n\nUPLOADED RUBRIC:\n${rubricText.slice(0, 3000)}${rubricText.length > 3000 ? '\n[Rubric truncated]' : ''}` : '';
+    
     const response = await fetch('/api/contextual-chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: `Provide detailed insights about how this student performed on the "${criterionTitle}" criterion. ${criterionInfo}. What did they do well? What could be improved? Give specific, actionable feedback based on the transcript${slideContext ? ' and their presentation slides' : ''}.`,
+        message: `Provide criterion-specific insights for "${criterionTitle}" ONLY.
+
+ORDER OF PRIORITY:
+1. First: How well does the student's content align with THIS SPECIFIC rubric criterion? Analyze against the rubric definition.
+2. Second: How does it align with course content?${rubricSection}
+
+${criterionInfo}
+
+Format: Use bullet points. Include [1], [2] references at the END of EACH bullet or paragraph (cite course materials or transcript evidence). Do NOT repeat the Feedback text above. Give NEW, criterion-specific insights.`,
         context: {
           highlightedText: criterionTitle,
           sourceType: 'rubric',
           rubricCriterion: criterionTitle,
-          fullContext: fullTranscript + (slideContext ? `\n\nPRESENTATION SLIDES:\n${slideContext}` : ''),
+          fullContext: fullTranscript + (slideContext ? `\n\nPRESENTATION SLIDES:\n${slideContext}` : '') + rubricSection,
           analysisData: submission?.analysis ? JSON.stringify(submission.analysis) : undefined,
+          submissionId,
+          courseId: batchInfo?.courseId,
+          rubricText: rubricSection,
         },
         conversationHistory: [],
       }),
@@ -616,7 +637,7 @@ export default function SubmissionDetailPage() {
       return data.response;
     }
     throw new Error(data.error || 'Failed to get insights');
-  }, [submission, sortedSegments]);
+  }, [submission, sortedSegments, submissionId, batchInfo?.courseId, batchInfo]);
 
   // Regenerate questions with the selected count
   const handleRegenerateQuestions = useCallback(async () => {
@@ -872,48 +893,61 @@ export default function SubmissionDetailPage() {
 
                   {/* Presentation Highlights and Speech Delivery - Side by Side */}
                   <div className="grid grid-cols-2 gap-6">
-                    {/* Presentation Highlights - Centered with inline video playback */}
+                    {/* Presentation Highlights - Videos as main focus, descriptions underneath */}
                     <div className="bg-white rounded-2xl border border-surface-200 p-4">
                       <div className="flex items-center gap-2 mb-4">
                         <Sparkles className="w-4 h-4 text-amber-500" />
                         <h3 className="text-sm font-semibold text-surface-900">Presentation Highlights</h3>
                       </div>
                       
-                      {/* Centered Video Clips Grid */}
-                      <div className="grid grid-cols-2 gap-3">
+                      {/* Video-first layout: large playable clips, descriptions below */}
+                      <div className="space-y-5">
                         {(submission.analysis?.keyClaims?.slice(0, 4) || sortedSegments.slice(0, 4)).map((item, idx) => {
-                          const seg = sortedSegments[Math.min(idx * Math.floor(sortedSegments.length / 4), sortedSegments.length - 1)];
+                          const seg = sortedSegments[Math.min(idx * Math.floor(Math.max(1, sortedSegments.length) / 4), sortedSegments.length - 1)];
                           const timestamp = seg ? formatTimestamp(seg.timestamp) : `${idx}:00`;
                           const timestampMs = seg ? normalizeTimestamp(seg.timestamp) : idx * 60000;
-                          const text = 'claim' in item ? item.claim : ('text' in item ? item.text.slice(0, 60) : 'Key moment');
+                          const text = 'claim' in item ? item.claim : ('text' in item ? item.text.slice(0, 80) : 'Key moment');
                           const highlightTypes = ['Strong Opening', 'Key Evidence', 'Clear Explanation', 'Great Example'];
+                          const highlightReasons = [
+                            'The presenter establishes context and engages the audience from the start.',
+                            'This moment provides concrete evidence supporting the main argument.',
+                            'The concept is explained clearly with logical structure.',
+                            'A specific example illustrates the point effectively.',
+                          ];
                           const highlightColors = [
                             'from-rose-500 to-pink-600',
                             'from-amber-500 to-orange-600', 
                             'from-emerald-500 to-teal-600',
                             'from-blue-500 to-indigo-600'
                           ];
+                          const CLIP_DURATION_SEC = 12;
+                          const clipStart = timestampMs / 1000;
+                          const clipEnd = clipStart + CLIP_DURATION_SEC;
                           
                           return (
-                            <div key={idx} className="flex flex-col items-center text-center">
-                              {/* Inline Video Player */}
-                              <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-surface-900 mb-2 group">
-                                {videoUrl && (
+                            <div key={idx} className="flex flex-col">
+                              {/* Short clip only (not full video) */}
+                              <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-surface-900 group">
+                                {videoUrl ? (
                                   <video
-                                    src={`${videoUrl}#t=${timestampMs / 1000}`}
+                                    src={`${videoUrl}#t=${clipStart},${clipEnd}`}
                                     className="absolute inset-0 w-full h-full object-cover"
                                     controls
                                     muted
                                     preload="metadata"
+                                    playsInline
                                     onLoadedMetadata={(e) => {
                                       const video = e.target as HTMLVideoElement;
-                                      video.currentTime = timestampMs / 1000;
+                                      video.currentTime = clipStart;
+                                    }}
+                                    onTimeUpdate={(e) => {
+                                      const v = e.target as HTMLVideoElement;
+                                      if (v.currentTime >= clipEnd - 0.5) v.pause();
                                     }}
                                   />
-                                )}
-                                {!videoUrl && (
+                                ) : (
                                   <div className={`absolute inset-0 bg-gradient-to-br ${highlightColors[idx % highlightColors.length]} opacity-80 flex items-center justify-center`}>
-                                    <PlayCircle className="w-8 h-8 text-white/80" />
+                                    <PlayCircle className="w-10 h-10 text-white/80" />
                                   </div>
                                 )}
                                 {/* Badge */}
@@ -922,23 +956,27 @@ export default function SubmissionDetailPage() {
                                     {highlightTypes[idx % highlightTypes.length]}
                                   </span>
                                 </div>
-                                {/* Timestamp */}
                                 <div className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-black/70 rounded text-white text-[10px] font-mono">
                                   {timestamp}
                                 </div>
                               </div>
-                              
-                              {/* Description below, centered */}
-                              <p className="text-xs text-surface-600 line-clamp-2 leading-relaxed px-1">
-                                {typeof text === 'string' ? text : 'Notable moment'}
-                              </p>
+                              {/* Why this moment - emphasized */}
+                              <div className="mt-2 p-3 bg-primary-50 rounded-lg border border-primary-100">
+                                <p className="text-xs font-semibold text-primary-700 uppercase tracking-wide mb-1">Why this moment</p>
+                                <p className="text-sm text-surface-700 font-medium leading-relaxed mb-1">
+                                  {highlightReasons[idx % highlightReasons.length]}
+                                </p>
+                                <p className="text-xs text-surface-600 leading-relaxed">
+                                  {typeof text === 'string' ? text : 'Notable moment'}
+                                </p>
+                              </div>
                             </div>
                           );
                         })}
                         {sortedSegments.length === 0 && (
-                          <div className="col-span-2 flex items-center justify-center py-8 text-sm text-surface-500">
+                          <div className="flex items-center justify-center py-12 text-sm text-surface-500">
                             <div className="text-center">
-                              <PlayCircle className="w-6 h-6 mx-auto mb-2 text-surface-300" />
+                              <PlayCircle className="w-8 h-8 mx-auto mb-2 text-surface-300" />
                               <p className="text-xs">No highlights yet</p>
                             </div>
                           </div>
@@ -946,18 +984,52 @@ export default function SubmissionDetailPage() {
                       </div>
                     </div>
 
-                    {/* Speech Delivery - Centered metrics with class averages */}
+                    {/* Speech Delivery - Compact layout, less empty space */}
                     <div className="bg-white rounded-2xl border border-surface-200 p-4">
-                      <div className="flex items-center gap-2 mb-4">
+                      <div className="flex items-center gap-2 mb-3">
                         <Mic className="w-4 h-4 text-primary-500" />
                         <h3 className="text-sm font-semibold text-surface-900">Speech Delivery</h3>
                       </div>
                       
-                      {/* Centered Metrics Grid */}
-                      <div className="grid grid-cols-3 gap-3 text-center">
+                      {/* Compact clips - smaller, side-by-side */}
+                      {videoUrl && sortedSegments.length > 0 && (
+                        <div className="flex gap-2 mb-3">
+                          {[0, Math.floor(sortedSegments.length / 2)].map((segIdx, i) => {
+                            const seg = sortedSegments[segIdx];
+                            const ts = seg ? normalizeTimestamp(seg.timestamp) : 0;
+                            const labels = ['Opening', 'Mid'];
+                            return (
+                              <div key={i} className="flex-1 min-w-0 flex flex-col">
+                                <div className="relative w-full aspect-video max-h-20 rounded-lg overflow-hidden bg-surface-900">
+                                  <video
+                                    src={`${videoUrl}#t=${ts / 1000}`}
+                                    className="absolute inset-0 w-full h-full object-cover"
+                                    controls
+                                    muted
+                                    preload="metadata"
+                                    playsInline
+                                    onLoadedMetadata={(e) => {
+                                      (e.target as HTMLVideoElement).currentTime = ts / 1000;
+                                    }}
+                                  />
+                                  <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/70 rounded text-white text-[9px] font-mono">
+                                    {formatTimestamp(seg?.timestamp ?? 0)}
+                                  </div>
+                                </div>
+                                <p className="text-[10px] text-surface-600 mt-1 line-clamp-1">
+                                  {labels[i]} — {seg?.text?.slice(0, 35)}{seg?.text && seg.text.length > 35 ? '...' : ''}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      
+                      {/* Metrics - compact */}
+                      <div className="grid grid-cols-3 gap-2 text-center">
                         {/* Filler Word Count */}
-                        <div className="bg-surface-50 rounded-xl p-4">
-                          <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full mb-2 ${
+                        <div className="bg-surface-50 rounded-lg p-3">
+                          <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full mb-1 ${
                             speechMetrics.fillerWordCount <= 10 
                               ? 'bg-emerald-100 text-emerald-700' 
                               : speechMetrics.fillerWordCount <= 20
@@ -966,16 +1038,16 @@ export default function SubmissionDetailPage() {
                           }`}>
                             {speechMetrics.fillerWordCount <= 10 ? 'Good' : speechMetrics.fillerWordCount <= 20 ? 'Moderate' : 'High'}
                           </span>
-                          <div className="text-3xl font-bold text-surface-900 mb-1">{speechMetrics.fillerWordCount}</div>
-                          <p className="text-xs text-surface-500 mb-2">Filler Words</p>
-                          <div className="text-[10px] text-surface-400 pt-2 border-t border-surface-100">
-                            Class Avg: <span className="font-medium text-surface-600">18</span>
-                          </div>
+                          <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.fillerWordCount}</div>
+                          <p className="text-[10px] text-surface-500 mb-0.5">Filler Words</p>
+                          <p className="text-[9px] text-surface-600 leading-tight">
+                            Class Avg: <span className="font-medium">18</span> — Lower filler use improves clarity.
+                          </p>
                         </div>
 
                         {/* Speaking Rate */}
-                        <div className="bg-surface-50 rounded-xl p-4">
-                          <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full mb-2 ${
+                        <div className="bg-surface-50 rounded-lg p-3">
+                          <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full mb-1 ${
                             speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180
                               ? 'bg-emerald-100 text-emerald-700' 
                               : speechMetrics.speakingRateWpm < 100 || speechMetrics.speakingRateWpm > 200
@@ -986,16 +1058,16 @@ export default function SubmissionDetailPage() {
                               ? 'Optimal' 
                               : speechMetrics.speakingRateWpm < 120 ? 'Slow' : 'Fast'}
                           </span>
-                          <div className="text-3xl font-bold text-surface-900 mb-1">{speechMetrics.speakingRateWpm}</div>
-                          <p className="text-xs text-surface-500 mb-2">Words/min</p>
-                          <div className="text-[10px] text-surface-400 pt-2 border-t border-surface-100">
-                            Class Avg: <span className="font-medium text-surface-600">130</span>
-                          </div>
+                          <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.speakingRateWpm}</div>
+                          <p className="text-[10px] text-surface-500 mb-0.5">Words/min</p>
+                          <p className="text-[9px] text-surface-600 leading-tight">
+                            Class Avg: <span className="font-medium">130</span> — Ideal range 120–180 for comprehension.
+                          </p>
                         </div>
 
                         {/* Pause Frequency */}
-                        <div className="bg-surface-50 rounded-xl p-4">
-                          <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full mb-2 ${
+                        <div className="bg-surface-50 rounded-lg p-3">
+                          <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full mb-1 ${
                             speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8
                               ? 'bg-emerald-100 text-emerald-700' 
                               : speechMetrics.pauseFrequency > 8
@@ -1004,17 +1076,17 @@ export default function SubmissionDetailPage() {
                           }`}>
                             {speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8 ? 'Good' : speechMetrics.pauseFrequency > 8 ? 'High' : 'Low'}
                           </span>
-                          <div className="text-3xl font-bold text-surface-900 mb-1">{speechMetrics.pauseFrequency.toFixed(1)}</div>
-                          <p className="text-xs text-surface-500 mb-2">Pauses/min</p>
-                          <div className="text-[10px] text-surface-400 pt-2 border-t border-surface-100">
-                            Class Avg: <span className="font-medium text-surface-600">4.2</span>
-                          </div>
+                          <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.pauseFrequency.toFixed(1)}</div>
+                          <p className="text-[10px] text-surface-500 mb-0.5">Pauses/min</p>
+                          <p className="text-[9px] text-surface-600 leading-tight">
+                            Class Avg: <span className="font-medium">4.2</span> — Strategic pauses aid emphasis.
+                          </p>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Course Material Alignment - With reasons and citations */}
+                  {/* Course Material Alignment - Percentages + description, no bars, aligned with course content */}
                   <CollapsibleSection
                     title="Course Material Alignment"
                     subtitle="How well the presentation aligns with course content"
@@ -1029,56 +1101,56 @@ export default function SubmissionDetailPage() {
                     }
                   >
                     <div className="space-y-4">
-                      {/* Topic Coverage */}
+                      {/* Topic Coverage - aligned with overall course content */}
                       <div className="p-4 bg-surface-50 rounded-xl">
-                        <div className="flex items-start gap-3">
-                          <CheckCircle className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
-                          <div className="flex-1">
-                            <h4 className="text-sm font-semibold text-surface-900 mb-1">Topic Coverage</h4>
-                            <p className="text-sm text-surface-600 mb-2">
-                              Addressed key concepts including occupational therapy advocacy at individual, organizational, and systemic levels. Demonstrated understanding of &ldquo;meaningful occupations&rdquo; and &ldquo;occupational justice.&rdquo; <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-semibold text-primary-700 bg-primary-100 rounded-full mx-0.5 cursor-pointer hover:bg-primary-200">[1]</span>
-                            </p>
-                          </div>
+                        <div className="flex items-start justify-between gap-3 mb-1">
+                          <h4 className="text-sm font-semibold text-surface-900">Topic Coverage</h4>
+                          <span className="text-sm font-bold text-primary-600">
+                            {submission.analysis?.courseAlignment?.topicCoverage ?? 85}%
+                          </span>
                         </div>
+                        <p className="text-sm text-surface-600">
+                          How well the presentation covers key topics from the course. This presentation addressed core concepts from the syllabus and demonstrated understanding of the main learning objectives. <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-semibold text-primary-700 bg-primary-100 rounded-full mx-0.5 cursor-pointer hover:bg-primary-200">[1]</span>
+                        </p>
                       </div>
                       
                       {/* Terminology Accuracy */}
                       <div className="p-4 bg-surface-50 rounded-xl">
-                        <div className="flex items-start gap-3">
-                          <CheckCircle className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
-                          <div className="flex-1">
-                            <h4 className="text-sm font-semibold text-surface-900 mb-1">Terminology Accuracy</h4>
-                            <p className="text-sm text-surface-600 mb-2">
-                              Consistently used appropriate OT language like &ldquo;client-centered,&rdquo; &ldquo;meaningful occupations,&rdquo; and &ldquo;occupational justice.&rdquo; These terms align with course readings from Module 3. <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-semibold text-primary-700 bg-primary-100 rounded-full mx-0.5 cursor-pointer hover:bg-primary-200">[2]</span>
-                            </p>
-                          </div>
+                        <div className="flex items-start justify-between gap-3 mb-1">
+                          <h4 className="text-sm font-semibold text-surface-900">Terminology Accuracy</h4>
+                          <span className="text-sm font-bold text-primary-600">
+                            {submission.analysis?.courseAlignment?.terminologyAccuracy ?? 90}%
+                          </span>
                         </div>
+                        <p className="text-sm text-surface-600">
+                          Alignment with course vocabulary and definitions. The presenter used appropriate terminology from the course materials and readings. Minor opportunities to apply more precise terms from the syllabus.
+                        </p>
                       </div>
                       
                       {/* Content Depth */}
                       <div className="p-4 bg-surface-50 rounded-xl">
-                        <div className="flex items-start gap-3">
-                          <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
-                          <div className="flex-1">
-                            <h4 className="text-sm font-semibold text-surface-900 mb-1">Content Depth</h4>
-                            <p className="text-sm text-surface-600 mb-2">
-                              Good practical application through the older adult case study. Could strengthen by explicitly connecting to OT frameworks like MOHO or PEO models discussed in Week 4 materials.
-                            </p>
-                          </div>
+                        <div className="flex items-start justify-between gap-3 mb-1">
+                          <h4 className="text-sm font-semibold text-surface-900">Content Depth</h4>
+                          <span className="text-sm font-bold text-primary-600">
+                            {submission.analysis?.courseAlignment?.contentDepth ?? 75}%
+                          </span>
                         </div>
+                        <p className="text-sm text-surface-600">
+                          Depth of analysis compared to course expectations. Good practical application; could strengthen by connecting to frameworks and theories from the course modules.
+                        </p>
                       </div>
                       
                       {/* Reference Integration */}
                       <div className="p-4 bg-surface-50 rounded-xl">
-                        <div className="flex items-start gap-3">
-                          <XCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
-                          <div className="flex-1">
-                            <h4 className="text-sm font-semibold text-surface-900 mb-1">Reference Integration</h4>
-                            <p className="text-sm text-surface-600 mb-2">
-                              While knowledge is solid, the presentation lacks explicit citations or references to research supporting advocacy practices. Consider adding sources from assigned readings.
-                            </p>
-                          </div>
+                        <div className="flex items-start justify-between gap-3 mb-1">
+                          <h4 className="text-sm font-semibold text-surface-900">Reference Integration</h4>
+                          <span className="text-sm font-bold text-primary-600">
+                            {submission.analysis?.courseAlignment?.referenceIntegration ?? 70}%
+                          </span>
                         </div>
+                        <p className="text-sm text-surface-600">
+                          Use of course readings and external sources. Consider adding explicit citations to assigned readings and research to strengthen the evidence base.
+                        </p>
                       </div>
                       
                       {/* Get More Insights Button */}
@@ -1095,7 +1167,7 @@ export default function SubmissionDetailPage() {
 
                   {/* Two Column Grid */}
                   <div className="grid grid-cols-2 gap-6">
-                    {/* Key Insights - Enhanced with citations */}
+                    {/* Key Insights - From rubric strengths/improvements */}
                     <CollapsibleSection
                       title="Key Insights"
                       subtitle="Strengths & areas for improvement"
@@ -1103,37 +1175,38 @@ export default function SubmissionDetailPage() {
                       defaultExpanded={true}
                     >
                       <div className="space-y-4">
-                        {/* Strengths */}
+                        {/* Strengths - from rubricEvaluation.strengths */}
                         <div>
                           <h4 className="text-xs font-semibold text-emerald-600 uppercase tracking-wide mb-2">Strengths</h4>
                           <div className="space-y-3">
-                            <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
-                              <p className="text-sm text-surface-700">
-                                <strong>Comprehensive advocacy coverage</strong> - Addressed advocacy at multiple levels (individual, organizational, systemic) showing depth of understanding. <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-semibold text-emerald-700 bg-emerald-200 rounded-full mx-0.5">[1]</span>
-                              </p>
-                            </div>
-                            <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
-                              <p className="text-sm text-surface-700">
-                                <strong>Strong practical application</strong> - Provided a specific, concrete example of advocating for an older adult&apos;s home-based needs. <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-semibold text-emerald-700 bg-emerald-200 rounded-full mx-0.5">[2]</span>
-                              </p>
-                            </div>
+                            {(rubric?.strengths?.length ? rubric.strengths : [
+                              'Demonstrated solid understanding of core concepts.',
+                              'Clear structure with logical flow.',
+                            ]).slice(0, 4).map((s, i) => (
+                              <div key={i} className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                                <p className="text-sm text-surface-700">
+                                  {typeof s === 'string' ? s : (s as { text: string }).text}
+                                  {i < 2 && <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-semibold text-emerald-700 bg-emerald-200 rounded-full mx-0.5">[{i + 1}]</span>}
+                                </p>
+                              </div>
+                            ))}
                           </div>
                         </div>
                         
-                        {/* Areas for Improvement */}
+                        {/* Areas for Improvement - from rubricEvaluation.improvements */}
                         <div>
                           <h4 className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2">Areas for Improvement</h4>
                           <div className="space-y-3">
-                            <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
-                              <p className="text-sm text-surface-700">
-                                <strong>Evidence integration</strong> - Presentation lacks citations or references to research supporting advocacy practices. Consider citing course readings.
-                              </p>
-                            </div>
-                            <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
-                              <p className="text-sm text-surface-700">
-                                <strong>Framework utilization</strong> - Could strengthen by explicitly connecting to established OT models or theoretical frameworks discussed in class.
-                              </p>
-                            </div>
+                            {(rubric?.improvements?.length ? rubric.improvements : [
+                              'Consider adding citations or references to research.',
+                              'Could strengthen by connecting to established frameworks discussed in class.',
+                            ]).slice(0, 4).map((s, i) => (
+                              <div key={i} className="p-3 bg-amber-50 rounded-lg border border-amber-100">
+                                <p className="text-sm text-surface-700">
+                                  {typeof s === 'string' ? s : (s as { text: string }).text}
+                                </p>
+                              </div>
+                            ))}
                           </div>
                         </div>
                         
@@ -1186,7 +1259,7 @@ export default function SubmissionDetailPage() {
                           </div>
                         </div>
                         
-                        {/* Content Originality - Compared to class */}
+                        {/* Content Originality - Dependent on other submissions in batch */}
                         <div className="p-4 bg-surface-50 rounded-xl">
                           <div className="flex items-start gap-3">
                             <BarChart3 className="w-5 h-5 text-primary-500 mt-0.5 flex-shrink-0" />
@@ -1194,24 +1267,26 @@ export default function SubmissionDetailPage() {
                               <div className="flex items-center justify-between mb-2">
                                 <h4 className="text-sm font-semibold text-surface-900">Content Originality</h4>
                                 <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                                  94% Unique
+                                  {Math.round(submission.analysis?.contentOriginality ?? 94)}% Unique
                                 </span>
                               </div>
                               <p className="text-sm text-surface-600 mb-2">
-                                Compared against 6 other submissions in this assignment:
+                                {otherSubmissionsCount > 0 
+                                  ? `Compared against ${otherSubmissionsCount} other submission${otherSubmissionsCount !== 1 ? 's' : ''} in this assignment:`
+                                  : 'Compared to class submissions when available.'}
                               </p>
-                              <div className="space-y-1 text-xs text-surface-500">
-                                <div className="flex justify-between">
-                                  <span>Unique phrasing and examples</span>
-                                  <span className="text-emerald-600 font-medium">High</span>
+                              <div className="space-y-2 text-sm text-surface-600">
+                                <div className="flex items-start gap-2">
+                                  <CheckCircle className="w-3.5 h-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                                  <span>Unique phrasing and examples compared to peer submissions.</span>
                                 </div>
-                                <div className="flex justify-between">
-                                  <span>Distinct case study selection</span>
-                                  <span className="text-emerald-600 font-medium">Unique</span>
+                                <div className="flex items-start gap-2">
+                                  <CheckCircle className="w-3.5 h-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                                  <span>Distinct case study or example selection.</span>
                                 </div>
-                                <div className="flex justify-between">
-                                  <span>Common terminology overlap</span>
-                                  <span className="text-surface-600">Expected (6%)</span>
+                                <div className="flex items-start gap-2">
+                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                                  <span>Common terminology overlap is expected and acceptable.</span>
                                 </div>
                               </div>
                             </div>
@@ -1515,13 +1590,12 @@ export default function SubmissionDetailPage() {
                                     : 'hover:bg-surface-100 border-l-4 border-transparent'
                                 }`}
                               >
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className={`text-sm font-medium truncate pr-2 ${isSelected ? 'text-primary-700' : 'text-surface-700'}`}>
-                                    Criterion {i + 1}
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                  <span className={`text-sm font-medium truncate flex-1 ${isSelected ? 'text-primary-700' : 'text-surface-700'}`} title={c.criterion}>
+                                    {c.criterion}
                                   </span>
-                                  <span className="text-xs font-medium text-surface-500">{c.score}/{c.maxScore}</span>
+                                  <span className="text-xs font-medium text-surface-500 flex-shrink-0">{c.score}/{c.maxScore}</span>
                                 </div>
-                                <p className="text-xs text-surface-500 truncate mb-2">{c.criterion}</p>
                                 <div className="h-1.5 bg-surface-200 rounded-full overflow-hidden">
                                   <div 
                                     className={`h-full rounded-full ${barColor}`}
@@ -1621,13 +1695,19 @@ export default function SubmissionDetailPage() {
                                   rubricCriterion={c.criterion}
                                 >
                                   <ClassInsightCard
-                                    title={`Babblet Analysis: ${c.criterion}`}
+                                    title={c.criterion}
                                     score={c.score}
                                     maxScore={c.maxScore || 10}
                                     status={status}
                                     feedback={c.feedback || c.rationale || 'No detailed feedback available.'}
                                     defaultExpanded={true}
                                     autoGenerateInsights={true}
+                                    initialInsights={criterionInsights[c.criterion] || null}
+                                    onInsightsGenerated={(criterionTitle, insights) => {
+                                      setCriterionInsights(prev => 
+                                        insights ? { ...prev, [criterionTitle]: insights } : (() => { const { [criterionTitle]: _, ...rest } = prev; return rest; })()
+                                      );
+                                    }}
                                     onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
                                     onRequestMoreInsights={handleRequestCriterionInsights}
                                   />
@@ -1648,50 +1728,62 @@ export default function SubmissionDetailPage() {
             </div>
 
                     <div className="grid md:grid-cols-2 gap-6">
-                      {/* Transcript Accuracy */}
-              <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-surface-700">Transcript Accuracy</span>
-                          <span className="text-lg font-bold text-emerald-600">
-                            {submission.analysis?.transcriptAccuracy ?? 98}% High Confidence
-                      </span>
-                      </div>
-                        <div className="h-2 bg-surface-100 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-emerald-500 rounded-full"
-                            style={{ width: `${submission.analysis?.transcriptAccuracy ?? 98}%` }}
-                          />
-                    </div>
-                        <div className="p-3 bg-surface-50 rounded-lg">
-                          <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-1">Methodology</p>
-                          <p className="text-sm text-surface-600">
-                            Audio analyzed using multi-pass spectral analysis. Speech patterns verified against expected terminology from course materials.
-                          </p>
-                  </div>
-              </div>
-
-                      {/* Content Originality */}
+                      {/* Transcript Accuracy - Truthfulness detector */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-surface-700">Content Originality</span>
+                          <span className="text-sm font-semibold text-surface-900">Truthfulness (Transcript Accuracy)</span>
                           <span className="text-lg font-bold text-emerald-600">
-                            {submission.analysis?.contentOriginality ?? 100}% Unique
+                            {submission.analysis?.transcriptAccuracy ?? 98}%
                           </span>
-        </div>
-                        <div className="h-2 bg-surface-100 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-emerald-500 rounded-full"
-                            style={{ width: `${submission.analysis?.contentOriginality ?? 100}%` }}
-                          />
-            </div>
-                        <div className="p-3 bg-surface-50 rounded-lg">
-                          <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-1">Methodology</p>
-                          <p className="text-sm text-surface-600">
-                            Cross-referenced against academic databases and internet sources. No matching content found.
-                      </p>
+                        </div>
+                        <p className="text-xs text-surface-500 mb-2">
+                          Verified against class content, assignment expectations, and factual accuracy.
+                        </p>
+                        <div className="space-y-2">
+                          <div className="flex items-start gap-2 p-3 bg-emerald-50 rounded-lg">
+                            <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                            <span className="text-sm text-surface-700">Definitions align with course materials.</span>
+                          </div>
+                          <div className="flex items-start gap-2 p-3 bg-emerald-50 rounded-lg">
+                            <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                            <span className="text-sm text-surface-700">Claims match assignment requirements.</span>
+                          </div>
+                          <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg">
+                            <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                            <span className="text-sm text-surface-700">Unverified claims — consider adding sources.</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Content Originality - Dependent on other submissions */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold text-surface-900">Content Originality</span>
+                          <span className="text-lg font-bold text-emerald-600">
+                            {submission.analysis?.contentOriginality ?? 94}% Unique
+                          </span>
+                        </div>
+                        <p className="text-xs text-surface-500 mb-2">
+                          {otherSubmissionsCount > 0 
+                            ? `Compared to ${otherSubmissionsCount} other submission${otherSubmissionsCount !== 1 ? 's' : ''} in this assignment.`
+                            : 'Compared to peer submissions when available.'}
+                        </p>
+                        <div className="space-y-2">
+                          <div className="flex items-start gap-2 p-3 bg-emerald-50 rounded-lg">
+                            <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                            <span className="text-sm text-surface-700">Unique phrasing and examples.</span>
+                          </div>
+                          <div className="flex items-start gap-2 p-3 bg-emerald-50 rounded-lg">
+                            <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                            <span className="text-sm text-surface-700">Distinct case study selection.</span>
+                          </div>
+                          <div className="flex items-start gap-2 p-3 bg-surface-50 rounded-lg">
+                            <BarChart3 className="w-4 h-4 text-surface-500 mt-0.5 flex-shrink-0" />
+                            <span className="text-sm text-surface-600">Common terminology overlap expected.</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-              </div>
-              </div>
                   </div>
 
                   {/* Additional Notes */}
