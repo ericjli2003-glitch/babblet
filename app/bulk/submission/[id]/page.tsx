@@ -1685,6 +1685,7 @@ RULES:
                                     ]}
                                     videoUrl={videoUrl}
                                     criterionIndex={selectedCriterionIndex}
+                                    totalCriteria={effectiveCriteria.length}
                                     onInsightsGenerated={(criterionTitle, insights) => {
                                       setCriterionInsights(prev => 
                                         insights ? { ...prev, [criterionTitle]: insights } : (() => { const { [criterionTitle]: _, ...rest } = prev; return rest; })()

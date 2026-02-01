@@ -36,6 +36,8 @@ interface ClassInsightCardProps {
   videoUrl?: string | null;
   /** Index of criterion (0,1,2,3...) to pick different video segments for each criterion */
   criterionIndex?: number;
+  /** Total number of criteria (used to distribute video references evenly) */
+  totalCriteria?: number;
 }
 
 function parseTimestamp(ts: string): number {
@@ -107,6 +109,7 @@ export default function ClassInsightCard({
   courseReferences,
   videoUrl,
   criterionIndex = 0,
+  totalCriteria = 1,
 }: ClassInsightCardProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
@@ -121,13 +124,16 @@ export default function ClassInsightCard({
   const autoFetchedRef = useRef(false);
   
   // A = video/submission ref - pick DIFFERENT segments for each criterion
+  // Evenly distributes across the entire video based on total number of criteria
   const videoRefA = useMemo(() => {
     if (citationSegments && citationSegments.length > 0) {
-      // Distribute segments across criteria: criterion 0 -> early, 1 -> mid-early, 2 -> mid-late, 3 -> late
-      const total = citationSegments.length;
+      const numSegments = citationSegments.length;
+      const numCriteria = Math.max(totalCriteria, 1);
+      // Calculate segment index: distribute evenly across all segments
+      // criterionIndex 0 → near start, criterionIndex (n-1) → near end
       const segmentIndex = Math.min(
-        Math.floor(((criterionIndex + 0.5) / 4) * total), // Spread across 4 quarters
-        total - 1
+        Math.floor(((criterionIndex + 0.5) / numCriteria) * numSegments),
+        numSegments - 1
       );
       const seg = citationSegments[segmentIndex];
       const timeMs = typeof seg.timestamp === 'number' ? seg.timestamp : parseTimestamp(String(seg.timestamp));
@@ -135,12 +141,17 @@ export default function ClassInsightCard({
       return { id: 'A' as const, timestamp, timeMs, text: seg.text.slice(0, 80) + (seg.text.length > 80 ? '...' : ''), explanation: `Student said at ${timestamp}: "${seg.text.slice(0, 60)}${seg.text.length > 60 ? '...' : ''}"` };
     }
     if (evidence && evidence.length > 0) {
-      const idx = Math.min(criterionIndex, evidence.length - 1);
+      const numEvidence = evidence.length;
+      const numCriteria = Math.max(totalCriteria, 1);
+      const idx = Math.min(
+        Math.floor(((criterionIndex + 0.5) / numCriteria) * numEvidence),
+        numEvidence - 1
+      );
       const e = evidence[idx];
       return { id: 'A' as const, timestamp: e.timestamp, timeMs: parseTimestamp(e.timestamp), text: e.text.slice(0, 80) + (e.text.length > 80 ? '...' : ''), explanation: e.analysis || `Evidence at ${e.timestamp}` };
     }
     return null;
-  }, [citationSegments, evidence, criterionIndex]);
+  }, [citationSegments, evidence, criterionIndex, totalCriteria]);
   
   // B = course/rubric ref
   const courseRefB = useMemo(() => {
