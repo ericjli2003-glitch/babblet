@@ -653,47 +653,51 @@ export default function SubmissionDetailPage() {
       ? `\n\nRUBRIC FOR "${criterionTitle}" ONLY (analyze ONLY against this):\n${criterionRubricOnly}\n\nDO NOT use other criteria. Focus exclusively on what the above says for ${criterionTitle}.`
       : fullRubricText ? `\n\nFULL RUBRIC (find and use ONLY the section for ${criterionTitle}):\n${fullRubricText.slice(0, 1500)}` : '';
     
+    // Build criterion-specific expectations
+    const criterionExpectations: Record<string, string> = {
+      'Content Knowledge': 'Focus on: concept accuracy, understanding depth, integration of material, factual correctness, use of terminology.',
+      'Structure': 'Focus on: organization, logical flow, transitions between sections, introduction/conclusion quality, coherence.',
+      'Visual Aids': 'Focus on: slide design, visual clarity, appropriate use of graphics, readability, visual support of content.',
+      'Delivery': 'Focus on: speaking pace, eye contact, voice clarity, confidence, engagement, gestures, enthusiasm.',
+    };
+    const expectationsForCriterion = criterionExpectations[criterionTitle] || `Focus on what the rubric says about ${criterionTitle}.`;
+    
     const response = await fetch('/api/contextual-chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: `You are analyzing ONLY the "${criterionTitle}" criterion. Your entire response must focus exclusively on "${criterionTitle}". Do NOT discuss other criteria. Do NOT give generic feedback that could apply to any criterion.
+        message: `ANALYZE ONLY: "${criterionTitle}"
 
-CRITICAL: Each criterion has different expectations:
-- Content Knowledge = concepts, accuracy, integration
-- Structure = organization, flow, transitions
-- Visual Aids = slides, visuals, design
-- Delivery = speaking, pacing, eye contact
-Your insights must match the expectations for "${criterionTitle}" ONLY.
+${expectationsForCriterion}
 
-CRITERION: "${criterionTitle}"
-${criterionInfo}
+DO NOT mention or evaluate other rubric categories. Your ENTIRE response is about "${criterionTitle}" only.
 
-REFERENCE FORMAT:
-- Use A, B, C for VIDEO moments (student's presentation) - cite exact transcript quotes
-- Use A, B, C for COURSE/RUBRIC - cite the specific rubric expectation or course content
+CRITERION BEING GRADED: "${criterionTitle}"
+SCORE: ${criterionInfo || 'See rubric'}
 
-FORMAT:
-**Overview** (2-3 sentences about their ${criterionTitle} performance - reference the rubric)
+WHAT TO ANALYZE FOR "${criterionTitle}":
+${criterionTitle === 'Content Knowledge' ? '- Did the student demonstrate understanding of the topic?\n- Were concepts explained accurately?\n- Did they integrate course material?' : ''}${criterionTitle === 'Structure' ? '- Was the presentation well-organized?\n- Were transitions smooth?\n- Did it have a clear beginning, middle, end?' : ''}${criterionTitle === 'Visual Aids' ? '- Were slides/visuals effective?\n- Was text readable and not too dense?\n- Did visuals support the content?' : ''}${criterionTitle === 'Delivery' ? '- How was their speaking pace and clarity?\n- Did they maintain eye contact?\n- Did they appear confident and engaged?' : ''}
 
-**What worked well:**
-- [Specific observation with transcript quote] A
-- [Another strength tied to rubric expectations] B
+FORMAT YOUR RESPONSE:
+**Overview** (2-3 sentences specifically about their ${criterionTitle})
 
-**Areas to develop:**
-- [Gap identified + specific example] A
-- [Missing element the rubric expects] B
+**What worked well for ${criterionTitle}:**
+- [Specific strength with quote from presentation] A
+- [Another ${criterionTitle}-specific strength] B
 
-**Example of excellence:** What a strong response would look like for THIS criterion per the rubric.
+**Areas to develop for ${criterionTitle}:**
+- [Specific gap in ${criterionTitle}] A
+- [What the rubric expects for ${criterionTitle} that was missing] B
+
+**Example of excellence for ${criterionTitle}:** One sentence showing what excellent ${criterionTitle} looks like.
+
+RUBRIC SECTION FOR "${criterionTitle}":
+${criterionRubricOnly || 'Evaluate based on the criterion name and general expectations.'}
 
 RULES:
-1. Every bullet must end with A or B (video or rubric reference)
-2. Be SPECIFIC to the "${criterionTitle}" rubric section - NOT generic feedback
-3. Quote the rubric's exact language when describing expectations
-4. Quote the student's actual words for video references
-${rubricSection}
-
-Sound like a helpful human, not a grading robot.`,
+- End each bullet with A (video quote) or B (rubric reference)
+- Quote the student's words when possible
+- Be specific to ${criterionTitle} - no generic feedback`,
         context: {
           highlightedText: criterionTitle,
           sourceType: 'rubric',
@@ -1665,6 +1669,7 @@ Sound like a helpful human, not a grading robot.`,
                                   rubricCriterion={c.criterion}
                                 >
                                   <ClassInsightCard
+                                    key={`insight-${c.criterion}-${selectedCriterionIndex}`}
                                     title={c.criterion}
                                     score={c.score}
                                     maxScore={c.maxScore || 10}
