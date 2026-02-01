@@ -10,7 +10,7 @@ import {
   updateBatchStats,
   getBatch,
   getBatchSubmissions,
-  requeue
+  requeue,
 } from '@/lib/batch-store';
 import { getPresignedDownloadUrl, isR2Configured } from '@/lib/r2';
 import { analyzeWithClaude, isClaudeConfigured, generateQuestionsWithClaude, evaluateWithClaude, ProfessorContext, GradingScaleConfig } from '@/lib/claude';
@@ -25,6 +25,7 @@ import {
   type RetrievalResult,
   type CriterionRetrievalResult,
 } from '@/lib/embeddings';
+import { generateCriterionInsight } from '@/lib/generate-criterion-insight';
 
 // Process 1 submission per request - frontend fires multiple parallel requests
 // This gives each video its own 300s timeout
@@ -284,14 +285,47 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
         }
       }
 
-      // Generate questions and verify in parallel (non-critical)
-      const [questionsResult, verifyResult] = await Promise.allSettled([
+      // Generate questions, verify, AND criterion insights in parallel (non-critical)
+      const criteria = rubricEvaluation?.criteriaBreakdown || [];
+      const virtualSubmissionForInsights = {
+        transcript,
+        transcriptSegments: segments,
+        rubricEvaluation,
+        analysis,
+      };
+
+      const insightPromises = criteria.map((c: { criterion: string }, idx: number) =>
+        generateCriterionInsight({
+          criterionTitle: c.criterion,
+          criterionIndex: idx,
+          submission: virtualSubmissionForInsights,
+          batchCourseId: batch?.courseId,
+          batchAssignmentId: batch?.assignmentId,
+          fullRubricText: fullRubricContext || '',
+        }).catch((err) => {
+          console.error(`[ProcessNow] Criterion insight failed for ${c.criterion}:`, err);
+          return null;
+        })
+      );
+
+      const [questionsResult, verifyResult, ...insightResults] = await Promise.allSettled([
         generateQuestionsWithClaude(transcript, analysis, undefined, { maxQuestions: 5 }),
         claims.length > 0 ? verifyWithClaude(transcript, claims) : Promise.resolve([]),
+        ...insightPromises,
       ]);
 
       const questions = questionsResult.status === 'fulfilled' ? questionsResult.value : [];
       const findings = verifyResult.status === 'fulfilled' ? verifyResult.value : [];
+      const criterionInsights: Record<string, string> = {};
+      criteria.forEach((c: { criterion: string }, idx: number) => {
+        const r = insightResults[idx];
+        if (r?.status === 'fulfilled' && r.value && typeof r.value === 'string') {
+          criterionInsights[c.criterion] = r.value;
+        }
+      });
+      if (Object.keys(criterionInsights).length > 0) {
+        console.log(`[ProcessNow] Generated ${Object.keys(criterionInsights).length} criterion insights for ${submissionId}`);
+      }
 
       if (questionsResult.status === 'rejected') {
         console.error(`[ProcessNow] Questions generation FAILED for ${submissionId}:`, questionsResult.reason);
@@ -379,6 +413,7 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
         } : undefined,
         questions: questions.slice(0, 8).map(q => ({ id: q.id, question: q.question, category: q.category })),
         verificationFindings: findings.map(f => ({ id: f.id, statement: f.statement, status: f.verdict, explanation: f.explanation })),
+        criterionInsights: Object.keys(criterionInsights).length > 0 ? criterionInsights : undefined,
         status: 'ready',
         completedAt: Date.now(),
       });

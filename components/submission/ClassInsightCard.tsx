@@ -123,38 +123,44 @@ export default function ClassInsightCard({
   const StatusIcon = config.icon;
   const autoFetchedRef = useRef(false);
   
-  // A = video/submission ref - pick DIFFERENT segments for each criterion
-  // Evenly distributes across the entire video based on total number of criteria
-  const videoRefA = useMemo(() => {
+  // A = video refs - ONE UNIQUE segment per bullet, distributed across entire video
+  const videoRefsByBullet = useMemo(() => {
+    const refs: Array<{ id: 'A'; timestamp: string; timeMs: number; text: string; explanation: string }> = [];
     if (citationSegments && citationSegments.length > 0) {
       const numSegments = citationSegments.length;
-      const numCriteria = Math.max(totalCriteria, 1);
-      // Calculate segment index: distribute evenly across all segments
-      // criterionIndex 0 → near start, criterionIndex (n-1) → near end
-      const segmentIndex = Math.min(
-        Math.floor(((criterionIndex + 0.5) / numCriteria) * numSegments),
-        numSegments - 1
-      );
-      const seg = citationSegments[segmentIndex];
-      const timeMs = typeof seg.timestamp === 'number' ? seg.timestamp : parseTimestamp(String(seg.timestamp));
-      const timestamp = typeof seg.timestamp === 'string' ? seg.timestamp : (timeMs >= 0 ? `${Math.floor(timeMs / 60000)}:${String(Math.floor((timeMs % 60000) / 1000)).padStart(2, '0')}` : '0:00');
-      // Debug: verify different segments are selected
-      console.log(`[ClassInsightCard] criterion=${criterionIndex}/${numCriteria}, segmentIndex=${segmentIndex}/${numSegments}, timestamp=${timestamp}`);
-      return { id: 'A' as const, timestamp, timeMs, text: seg.text.slice(0, 80) + (seg.text.length > 80 ? '...' : ''), explanation: `Student said at ${timestamp}: "${seg.text.slice(0, 60)}${seg.text.length > 60 ? '...' : ''}"` };
-    }
-    if (evidence && evidence.length > 0) {
+      // Pre-compute up to 24 refs (one per bullet) - each points to a DIFFERENT part of the video
+      for (let bulletIdx = 0; bulletIdx < 24; bulletIdx++) {
+        const segmentIndex = Math.min(
+          Math.floor(((bulletIdx + 0.5) / 24) * numSegments),
+          numSegments - 1
+        );
+        const seg = citationSegments[segmentIndex];
+        const timeMs = typeof seg.timestamp === 'number' ? seg.timestamp : parseTimestamp(String(seg.timestamp));
+        const timestamp = typeof seg.timestamp === 'string' ? seg.timestamp : (timeMs >= 0 ? `${Math.floor(timeMs / 60000)}:${String(Math.floor((timeMs % 60000) / 1000)).padStart(2, '0')}` : '0:00');
+        refs.push({
+          id: 'A' as const,
+          timestamp,
+          timeMs,
+          text: seg.text.slice(0, 80) + (seg.text.length > 80 ? '...' : ''),
+          explanation: `Student said at ${timestamp}: "${seg.text.slice(0, 60)}${seg.text.length > 60 ? '...' : ''}"`,
+        });
+      }
+    } else if (evidence && evidence.length > 0) {
       const numEvidence = evidence.length;
-      const numCriteria = Math.max(totalCriteria, 1);
-      const idx = Math.min(
-        Math.floor(((criterionIndex + 0.5) / numCriteria) * numEvidence),
-        numEvidence - 1
-      );
-      const e = evidence[idx];
-      console.log(`[ClassInsightCard] criterion=${criterionIndex}/${numCriteria}, evidenceIdx=${idx}/${numEvidence}`);
-      return { id: 'A' as const, timestamp: e.timestamp, timeMs: parseTimestamp(e.timestamp), text: e.text.slice(0, 80) + (e.text.length > 80 ? '...' : ''), explanation: e.analysis || `Evidence at ${e.timestamp}` };
+      for (let bulletIdx = 0; bulletIdx < 24; bulletIdx++) {
+        const idx = Math.min(Math.floor(((bulletIdx + 0.5) / 24) * numEvidence), numEvidence - 1);
+        const e = evidence[idx];
+        refs.push({
+          id: 'A' as const,
+          timestamp: e.timestamp,
+          timeMs: parseTimestamp(e.timestamp),
+          text: e.text.slice(0, 80) + (e.text.length > 80 ? '...' : ''),
+          explanation: e.analysis || `Evidence at ${e.timestamp}`,
+        });
+      }
     }
-    return null;
-  }, [citationSegments, evidence, criterionIndex, totalCriteria]);
+    return refs;
+  }, [citationSegments, evidence]);
   
   // B = course/rubric ref
   const courseRefB = useMemo(() => {
@@ -289,8 +295,10 @@ export default function ClassInsightCard({
       }
     };
     
-    const renderVideoRef = (_letter: string, key: string) => {
-      const ref = videoRefA;
+    const getVideoRefForBullet = (bulletIdx: number) =>
+      videoRefsByBullet[bulletIdx] ?? videoRefsByBullet[videoRefsByBullet.length - 1] ?? null;
+
+    const renderVideoRef = (ref: { id: 'A'; timestamp: string; timeMs: number; text: string; explanation: string } | null, key: string) => {
       if (!ref) return null;
       const isOpen = openRef === `v-A-${key}`;
       const clipStart = ref.timeMs / 1000;
@@ -400,8 +408,8 @@ export default function ClassInsightCard({
       );
     };
     
-    const renderRefButton = (letter: string, key: string) => {
-      if (letter === 'A' && videoRefA) return renderVideoRef('A', key);
+    const renderRefButton = (letter: string, key: string, bulletIdx?: number) => {
+      if (letter === 'A') return renderVideoRef(bulletIdx !== undefined ? getVideoRefForBullet(bulletIdx) : getVideoRefForBullet(0), key);
       if (letter === 'B' && courseRefB) return renderCourseRef('B', key);
       return null;
     };
@@ -429,14 +437,16 @@ export default function ClassInsightCard({
             );
           }
           if (isBullet) {
+            const thisBulletIdx = bulletIndex - 1; // 0-based for first bullet
+            const bulletRef = getVideoRefForBullet(thisBulletIdx);
             return (
               <p key={i} className="text-surface-700 pl-4 flex items-start gap-1 flex-wrap items-baseline">
                 <span>• {renderText(line.slice(2))}</span>
                 <span className="inline-flex items-center gap-0.5 ml-1">
-                  {refLetters.map((l, idx) => renderRefButton(l, `${i}-${idx}`))}
+                  {refLetters.map((l, idx) => renderRefButton(l, `${i}-${idx}`, thisBulletIdx))}
                   {refLetters.length === 0 && (
                     <>
-                      {videoRefA && renderVideoRef('A', `${i}-v`)}
+                      {bulletRef && renderVideoRef(bulletRef, `${i}-v`)}
                       {courseRefB && renderCourseRef('B', `${i}-c`)}
                     </>
                   )}
@@ -457,7 +467,7 @@ export default function ClassInsightCard({
         })}
       </div>
     );
-  }, [videoRefA, courseRefB, videoUrl, onSeekToTime, openRef]);
+  }, [videoRefsByBullet, courseRefB, videoUrl, onSeekToTime, openRef]);
 
   return (
     <div className="space-y-4">

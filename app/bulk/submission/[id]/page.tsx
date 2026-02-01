@@ -195,6 +195,7 @@ export default function SubmissionDetailPage() {
   const [questionCount, setQuestionCount] = useState(5);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [selectedCriterionIndex, setSelectedCriterionIndex] = useState(0);
+  const [selectedSpotlightIndex, setSelectedSpotlightIndex] = useState<number | null>(null);
   const [branchingQuestionId, setBranchingQuestionId] = useState<string | null>(null);
   const [showMaterialModal, setShowMaterialModal] = useState<{
     name: string;
@@ -231,6 +232,9 @@ export default function SubmissionDetailPage() {
       const data = await res.json();
       if (data.success) {
         setSubmission(data.submission);
+        if (data.submission.criterionInsights && Object.keys(data.submission.criterionInsights).length > 0) {
+          setCriterionInsights(data.submission.criterionInsights);
+        }
         if (data.submission.batchId) {
           try {
             const batchRes = await fetch(`/api/bulk/status?batchId=${data.submission.batchId}`);
@@ -678,18 +682,23 @@ SCORE: ${criterionInfo || 'See rubric'}
 WHAT TO ANALYZE FOR "${criterionTitle}":
 ${criterionTitle === 'Content Knowledge' ? '- Did the student demonstrate understanding of the topic?\n- Were concepts explained accurately?\n- Did they integrate course material?' : ''}${criterionTitle === 'Structure' ? '- Was the presentation well-organized?\n- Were transitions smooth?\n- Did it have a clear beginning, middle, end?' : ''}${criterionTitle === 'Visual Aids' ? '- Were slides/visuals effective?\n- Was text readable and not too dense?\n- Did visuals support the content?' : ''}${criterionTitle === 'Delivery' ? '- How was their speaking pace and clarity?\n- Did they maintain eye contact?\n- Did they appear confident and engaged?' : ''}
 
-FORMAT YOUR RESPONSE:
-**Overview** (2-3 sentences specifically about their ${criterionTitle})
+FORMAT YOUR RESPONSE (vary structure - avoid repetitive templates):
+- Use different openings: "What stands out...", "A key strength here...", "Notably, the student..."
+- Vary transition words: Moreover, Specifically, In contrast, Notably
+- Mix bullet styles: sometimes lead with the quote, sometimes with the observation
+- Avoid starting every bullet with "The student" - vary phrasing
 
-**What worked well for ${criterionTitle}:**
-- [Specific strength with quote from presentation] A
-- [Another ${criterionTitle}-specific strength] B
+**Overview** (2-3 sentences - ${criterionTitle}-specific, varied tone)
 
-**Areas to develop for ${criterionTitle}:**
-- [Specific gap in ${criterionTitle}] A
-- [What the rubric expects for ${criterionTitle} that was missing] B
+**What worked well:**
+- [Strength - vary phrasing] A
+- [Another strength] B
 
-**Example of excellence for ${criterionTitle}:** One sentence showing what excellent ${criterionTitle} looks like.
+**Areas to develop:**
+- [Gap - be specific] A
+- [Rubric expectation] B
+
+**Example of excellence:** One sentence.
 
 RUBRIC SECTION FOR "${criterionTitle}":
 ${criterionRubricOnly || 'Evaluate based on the criterion name and general expectations.'}
@@ -1038,26 +1047,34 @@ RULES:
                         <p className="text-xs text-surface-500 mt-0.5">Key algorithmic-identified moments from the presentation.</p>
                       </div>
                       
-                      {/* Compact 10s clips - three cards side-by-side, label + description below */}
+                      {/* Compact 10s clips - three cards side-by-side, expand on click */}
                       <div className="grid grid-cols-3 gap-3">
                         {(submission.analysis?.keyClaims?.slice(0, 3) || sortedSegments.slice(0, 3)).map((item, idx) => {
                           const seg = sortedSegments[Math.min(idx * Math.floor(Math.max(1, sortedSegments.length) / 3), sortedSegments.length - 1)];
                           const timestamp = seg ? formatTimestamp(seg.timestamp) : `${idx}:00`;
                           const timestampMs = seg ? normalizeTimestamp(seg.timestamp) : idx * 60000;
-                          const text = 'claim' in item ? item.claim : ('text' in item ? item.text.slice(0, 100) : 'Key moment');
+                          const fullText = 'claim' in item ? item.claim : ('text' in item ? item.text : 'Key moment');
+                          const previewText = typeof fullText === 'string' ? fullText.slice(0, 80) + (fullText.length > 80 ? '...' : '') : 'Key moment';
                           const spotlightLabels = ['IMPACT MOMENT', 'AI INSIGHT', 'CRITIQUE POINT'];
-                          const spotlightDescriptions = [
-                            'Strong use of rhetorical questioning during the technical segment.',
-                            'Excellent engagement sustained during the value proposition summary. Confidence score: High.',
-                            'Pacing accelerated slightly. Suggest pausing for effect.',
-                          ];
                           const CLIP_DURATION_SEC = 10;
                           const clipStart = timestampMs / 1000;
                           const clipEnd = clipStart + CLIP_DURATION_SEC;
-                          const isCenter = idx === 1;
+                          const isSelected = selectedSpotlightIndex === idx;
+                          const isCenter = idx === 1 && !isSelected;
                           
                           return (
-                            <div key={idx} className={`flex flex-col ${isCenter ? 'ring-2 ring-primary-500 rounded-lg' : ''}`}>
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setSelectedSpotlightIndex(selectedSpotlightIndex === idx ? null : idx)}
+                              className={`flex flex-col text-left rounded-lg transition-all duration-200 ${
+                                isSelected 
+                                  ? 'col-span-3 ring-2 ring-primary-500 bg-primary-50/50' 
+                                  : isCenter 
+                                    ? 'ring-2 ring-primary-500' 
+                                    : 'hover:ring-2 hover:ring-primary-200'
+                              }`}
+                            >
                               {/* 10s clip - native controls with timeline hidden */}
                               <div className="relative w-full aspect-video max-h-40 rounded-t-lg overflow-hidden bg-surface-900">
                                 {videoUrl ? (
@@ -1104,17 +1121,16 @@ RULES:
                                   {timestamp}
                                 </div>
                               </div>
-                              {/* Label + description box (grey, beneath) */}
-                              <div className="p-2 bg-surface-50 rounded-b-lg border border-t-0 border-surface-200">
+                              {/* Label + description - full insight when selected */}
+                              <div className={`p-2 rounded-b-lg border border-t-0 border-surface-200 ${isSelected ? 'bg-primary-50/80' : 'bg-surface-50'}`}>
                                 <p className="text-[10px] font-bold text-primary-600 uppercase tracking-wide mb-1">
                                   {spotlightLabels[idx % spotlightLabels.length]}
                                 </p>
-                                <p className="text-xs text-surface-600 leading-snug line-clamp-2">
-                                  {spotlightDescriptions[idx % spotlightDescriptions.length]}
-                                  {typeof text === 'string' && text.length > 20 ? ` — "${text.slice(0, 35)}..."` : ''}
+                                <p className={`text-xs text-surface-600 leading-snug ${isSelected ? '' : 'line-clamp-2'}`}>
+                                  {typeof fullText === 'string' ? fullText : previewText}
                                 </p>
                               </div>
-                            </div>
+                            </button>
                           );
                         })}
                         {sortedSegments.length === 0 && (
@@ -1740,10 +1756,18 @@ RULES:
               filename={submission.originalFilename}
               uploadDate={formatDate(submission.createdAt)}
               fileSize={formatFileSize(submission.fileSize || 0)}
-              alerts={[
-                { type: 'pacing', label: 'Pacing Good' },
-                { type: 'volume', label: 'Low Volume', timeRange: '02:00-02:15' },
-              ]}
+              alerts={(() => {
+                const alerts: Array<{ type: 'pacing' | 'volume'; label: string; timeRange?: string }> = [];
+                if (speechMetrics) {
+                  const wpm = speechMetrics.speakingRateWpm;
+                  if (wpm >= 120 && wpm <= 180) alerts.push({ type: 'pacing', label: 'Pacing Good' });
+                  else if (wpm < 120) alerts.push({ type: 'pacing', label: 'Consider speaking a bit faster' });
+                  else alerts.push({ type: 'pacing', label: 'Consider slowing down for clarity' });
+                } else {
+                  alerts.push({ type: 'pacing', label: 'Pacing Good' });
+                }
+                return alerts;
+              })()}
               transcriptEntries={transcriptEntries}
               onTimeUpdate={handleVideoTimeUpdate}
               onDurationChange={setVideoDuration}

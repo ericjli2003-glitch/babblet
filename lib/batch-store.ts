@@ -114,6 +114,8 @@ export interface Submission {
       }>;
     }>;
   };
+  /** Pre-generated Babblet insights per rubric criterion (criterion name -> insight text) */
+  criterionInsights?: Record<string, string>;
   questions?: Array<{
     id: string;
     question: string;
