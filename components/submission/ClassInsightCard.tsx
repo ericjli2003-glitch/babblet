@@ -328,11 +328,6 @@ export default function ClassInsightCard({
             className="overflow-hidden"
           >
             <div className="px-5 pb-5 space-y-4">
-              {/* Feedback */}
-              <div className="pl-13">
-                <p className="text-sm text-surface-700 leading-relaxed">{feedback}</p>
-              </div>
-
               {/* Course Alignment */}
               {courseAlignment !== undefined && (
                 <div className="flex items-center gap-3 p-3 bg-surface-50 rounded-xl">
@@ -344,44 +339,6 @@ export default function ClassInsightCard({
                       className="h-full bg-primary-500 rounded-full"
                       style={{ width: `${courseAlignment}%` }}
                     />
-                  </div>
-                </div>
-              )}
-
-              {/* Evidence from Video */}
-              {evidence && evidence.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                    <PlayCircle className="w-3.5 h-3.5" />
-                    Evidence in Presentation
-                  </p>
-                  <div className="space-y-3">
-                    {evidence.map((e, idx) => (
-                      <div
-                        key={idx}
-                        className="p-3 bg-surface-50 rounded-lg border border-surface-100"
-                      >
-                        <div className="flex items-start gap-3">
-                          <button
-                            onClick={(ev) => {
-                              ev.stopPropagation();
-                              onSeekToTime?.(parseTimestamp(e.timestamp));
-                            }}
-                            className="px-2 py-1 bg-primary-100 text-primary-700 text-xs font-mono font-medium rounded hover:bg-primary-200 transition-colors flex-shrink-0"
-                          >
-                            {e.timestamp}
-                          </button>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-surface-700 italic mb-1">&ldquo;{e.text}&rdquo;</p>
-                            {e.analysis && (
-                              <p className="text-xs text-surface-500 mt-2 pl-3 border-l-2 border-primary-200">
-                                <span className="font-medium text-primary-600">Analysis:</span> {e.analysis}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
                   </div>
                 </div>
               )}
