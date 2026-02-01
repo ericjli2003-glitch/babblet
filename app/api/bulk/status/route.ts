@@ -126,11 +126,46 @@ export async function GET(request: NextRequest) {
     // The batch array is a cache that can get out of sync during race conditions
     // ALWAYS rebuild from the SET to ensure we never lose submissions
     // ============================================
-    const setIds = await kv.smembers(`batch_submissions:${batchId}`) as string[];
+    let setIds: string[] = [];
+    try {
+      setIds = await kv.smembers(`batch_submissions:${batchId}`) as string[];
+    } catch (e) {
+      console.log(`[Status] Failed to read SET for batch ${batchId}:`, e);
+    }
     const batchIds = batch.submissionIds || [];
     
     // Merge both sources - use Set to dedupe, but SET is authoritative
-    const submissionIds = Array.from(new Set([...setIds, ...batchIds]));
+    let submissionIds = Array.from(new Set([...setIds, ...batchIds]));
+    
+    // ============================================
+    // FALLBACK: If we found 0 submissions but batch.totalSubmissions > 0,
+    // the SET might have been lost. Use a scan as last resort.
+    // ============================================
+    if (submissionIds.length === 0 && batch.totalSubmissions > 0) {
+      console.log(`[Status] RECOVERY: batch ${batchId} claims ${batch.totalSubmissions} submissions but SET/array empty. Attempting scan recovery...`);
+      try {
+        // Scan for submission keys that might belong to this batch
+        const allSubmissionKeys = await kv.keys('submission:*');
+        for (const key of allSubmissionKeys.slice(0, 100)) { // Limit to 100 to avoid timeout
+          const subId = (key as string).replace('submission:', '');
+          const sub = await getSubmission(subId);
+          if (sub && sub.batchId === batchId) {
+            submissionIds.push(subId);
+          }
+        }
+        console.log(`[Status] RECOVERY: Found ${submissionIds.length} submissions via scan for batch ${batchId}`);
+        // Re-sync to SET and batch
+        if (submissionIds.length > 0) {
+          for (const id of submissionIds) {
+            await kv.sadd(`batch_submissions:${batchId}`, id);
+          }
+          await updateBatch(batchId, { submissionIds, totalSubmissions: submissionIds.length });
+          batch = await getBatch(batchId) || batch;
+        }
+      } catch (e) {
+        console.log(`[Status] RECOVERY failed:`, e);
+      }
+    }
     
     // ALWAYS sync batch record if there's ANY mismatch (count or IDs)
     const batchNeedsSync = submissionIds.length !== batchIds.length || 
@@ -172,11 +207,12 @@ export async function GET(request: NextRequest) {
     
     // ============================================
     // UPLOAD TRACKING: Clear expectedUploadCount when all files are uploaded
-    // This ensures the UI stops showing upload progress once complete
+    // OR when batch is already completed (don't show upload progress for finished batches)
     // ============================================
-    const uploadsComplete = batch.expectedUploadCount !== undefined && 
-                           batch.expectedUploadCount > 0 && 
-                           submissions.length >= batch.expectedUploadCount;
+    const uploadsComplete = (batch.expectedUploadCount !== undefined && 
+                            batch.expectedUploadCount > 0 && 
+                            submissions.length >= batch.expectedUploadCount) ||
+                           (batchStatus === 'completed');
     
     if (batch.totalSubmissions !== submissions.length || 
         batch.processedCount !== processedCount || 

@@ -415,9 +415,11 @@ export default function AssignmentDashboardPage() {
   // ============================================
   // UPLOAD TRACKING: Use stored expectedUploadCount from batch (persistent)
   // Falls back to URL param for backward compatibility during initial navigation
+  // NEVER show upload progress for completed batches
   // ============================================
   const expectedUploads = batch?.expectedUploadCount || urlExpectedUploads;
-  const uploadsInProgress = expectedUploads > 0 && submissions.length < expectedUploads;
+  const isCompleted = batch?.status === 'completed' || gradingStatus.status === 'completed';
+  const uploadsInProgress = !isCompleted && expectedUploads > 0 && submissions.length < expectedUploads;
   const uploadProgress = expectedUploads > 0 ? Math.round((submissions.length / expectedUploads) * 100) : 100;
 
   // Poll for updates (also poll when waiting for uploads or grading)
