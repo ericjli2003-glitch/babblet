@@ -1060,7 +1060,6 @@ RULES:
                           const clipStart = timestampMs / 1000;
                           const clipEnd = clipStart + CLIP_DURATION_SEC;
                           const isSelected = selectedSpotlightIndex === idx;
-                          const isCenter = idx === 1 && !isSelected;
                           
                           return (
                             <button
@@ -1070,9 +1069,7 @@ RULES:
                               className={`flex flex-col text-left rounded-lg transition-all duration-300 ${
                                 isSelected 
                                   ? 'ring-2 ring-primary-500 bg-primary-50/50 scale-105 z-10 shadow-lg' 
-                                  : isCenter 
-                                    ? 'ring-2 ring-primary-500' 
-                                    : 'hover:ring-2 hover:ring-primary-200 hover:scale-[1.02]'
+                                  : 'hover:ring-2 hover:ring-primary-200 hover:scale-[1.02]'
                               }`}
                             >
                               {/* 10s clip - enlarges slightly when selected */}
@@ -1081,10 +1078,10 @@ RULES:
                               }`}>
                                 {videoUrl ? (
                                   <video
+                                    data-spotlight-idx={idx}
                                     src={videoUrl}
                                     className="clip-video absolute inset-0 w-full h-full object-cover"
                                     controls
-                                    muted
                                     preload="metadata"
                                     playsInline
                                     disablePictureInPicture
@@ -1096,6 +1093,12 @@ RULES:
                                     onPlay={(e) => {
                                       const v = e.target as HTMLVideoElement;
                                       if (v.currentTime < clipStart || v.currentTime >= clipEnd) v.currentTime = clipStart;
+                                      // Pause all other spotlight videos
+                                      document.querySelectorAll('video[data-spotlight-idx]').forEach((vid) => {
+                                        if (vid !== v && vid instanceof HTMLVideoElement) {
+                                          vid.pause();
+                                        }
+                                      });
                                     }}
                                     onTimeUpdate={(e) => {
                                       const v = e.target as HTMLVideoElement;
@@ -1112,11 +1115,6 @@ RULES:
                                 ) : (
                                   <div className="absolute inset-0 bg-surface-700 flex items-center justify-center">
                                     <PlayCircle className="w-8 h-8 text-white/60" />
-                                  </div>
-                                )}
-                                {isCenter && (
-                                  <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-primary-500 text-white text-[9px] font-semibold rounded-full z-10">
-                                    LIVE CLIP
                                   </div>
                                 )}
                                 <div className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/70 rounded text-white text-[9px] font-mono z-10">

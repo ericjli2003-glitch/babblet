@@ -312,10 +312,10 @@ export default function ClassInsightCard({
                 setClipPlaying(false);
               }
             }}
-            className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 text-xs font-semibold text-blue-700 bg-blue-100 rounded-full hover:bg-blue-200 transition-colors mx-0.5"
+            className="text-[11px] font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors"
             title={`Student video @ ${ref.timestamp}`}
           >
-            A
+            [1]
           </button>
           {isOpen && (
             <>
@@ -388,10 +388,10 @@ export default function ClassInsightCard({
         <div key={key} className="relative inline-block">
           <button
             onClick={() => setOpenRef(isOpen ? null : `c-B-${key}`)}
-            className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 text-xs font-semibold text-orange-700 bg-orange-100 rounded-full hover:bg-orange-200 transition-colors mx-0.5"
+            className="text-[11px] font-medium text-orange-600 hover:text-orange-800 hover:underline transition-colors"
             title={`${ref.type === 'rubric' ? 'Rubric' : 'Course'} reference`}
           >
-            B
+            [2]
           </button>
           {isOpen && (
             <>
@@ -438,18 +438,20 @@ export default function ClassInsightCard({
           if (isBullet) {
             const thisBulletIdx = bulletIndex - 1; // 0-based for first bullet
             const bulletRef = getVideoRefForBullet(thisBulletIdx);
+            // Clean the line - remove any trailing A, B markers
+            const cleanLine = line.slice(2).replace(/\s*[AB]\s*$/g, '').trim();
             return (
-              <p key={i} className="text-surface-700 pl-4 flex items-start gap-1 flex-wrap items-baseline">
-                <span>• {renderText(line.slice(2))}</span>
-                <span className="inline-flex items-center gap-0.5 ml-1">
-                  {refLetters.map((l, idx) => renderRefButton(l, `${i}-${idx}`, thisBulletIdx))}
-                  {refLetters.length === 0 && (
-                    <>
-                      {bulletRef && renderVideoRef(bulletRef, `${i}-v`)}
-                      {courseRefB && renderCourseRef('B', `${i}-c`)}
-                    </>
-                  )}
-                </span>
+              <p key={i} className="text-surface-700 pl-4">
+                <span>• {renderText(cleanLine)}</span>
+                {' '}
+                {refLetters.map((l, idx) => renderRefButton(l, `${i}-${idx}`, thisBulletIdx))}
+                {refLetters.length === 0 && (
+                  <>
+                    {bulletRef && renderVideoRef(bulletRef, `${i}-v`)}
+                    {' '}
+                    {courseRefB && renderCourseRef('B', `${i}-c`)}
+                  </>
+                )}
               </p>
             );
           }
