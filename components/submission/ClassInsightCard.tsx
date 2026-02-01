@@ -386,7 +386,7 @@ export default function ClassInsightCard({
                 </div>
               )}
 
-              {/* Get More Insights - only show when no insights yet; once generated, do not regenerate */}
+              {/* Get More Insights button - only show when no insights yet */}
               {onRequestMoreInsights && !additionalInsights && (
                 <div className="pt-3 border-t border-surface-100">
                   <button
@@ -402,8 +402,12 @@ export default function ClassInsightCard({
                     {isLoadingInsights ? 'Generating insights...' : 'Get More Insights'}
                     {!isLoadingInsights && <ChevronRight className="w-3 h-3" />}
                   </button>
-                  
-                  {/* Additional Insights Panel */}
+                </div>
+              )}
+              
+              {/* Additional Insights Panel - show when insights exist */}
+              {onRequestMoreInsights && additionalInsights && (
+                <div className="pt-3 border-t border-surface-100">
                   <AnimatePresence>
                     {additionalInsights && (
                       <motion.div
