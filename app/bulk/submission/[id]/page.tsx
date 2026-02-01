@@ -1067,16 +1067,18 @@ RULES:
                               key={idx}
                               type="button"
                               onClick={() => setSelectedSpotlightIndex(selectedSpotlightIndex === idx ? null : idx)}
-                              className={`flex flex-col text-left rounded-lg transition-all duration-200 ${
+                              className={`flex flex-col text-left rounded-lg transition-all duration-300 ${
                                 isSelected 
-                                  ? 'col-span-3 ring-2 ring-primary-500 bg-primary-50/50' 
+                                  ? 'ring-2 ring-primary-500 bg-primary-50/50 scale-105 z-10 shadow-lg' 
                                   : isCenter 
                                     ? 'ring-2 ring-primary-500' 
-                                    : 'hover:ring-2 hover:ring-primary-200'
+                                    : 'hover:ring-2 hover:ring-primary-200 hover:scale-[1.02]'
                               }`}
                             >
-                              {/* 10s clip - native controls with timeline hidden */}
-                              <div className="relative w-full aspect-video max-h-40 rounded-t-lg overflow-hidden bg-surface-900">
+                              {/* 10s clip - enlarges slightly when selected */}
+                              <div className={`relative w-full rounded-t-lg overflow-hidden bg-surface-900 transition-all duration-300 ${
+                                isSelected ? 'aspect-[4/3]' : 'aspect-video max-h-40'
+                              }`}>
                                 {videoUrl ? (
                                   <video
                                     src={videoUrl}

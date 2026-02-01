@@ -123,17 +123,15 @@ export default function ClassInsightCard({
   const StatusIcon = config.icon;
   const autoFetchedRef = useRef(false);
   
-  // A = video refs - ONE UNIQUE segment per bullet, distributed across entire video
+  // A = video refs - ONE UNIQUE segment per bullet, cycling through ALL segments
   const videoRefsByBullet = useMemo(() => {
     const refs: Array<{ id: 'A'; timestamp: string; timeMs: number; text: string; explanation: string }> = [];
     if (citationSegments && citationSegments.length > 0) {
       const numSegments = citationSegments.length;
-      // Pre-compute up to 24 refs (one per bullet) - each points to a DIFFERENT part of the video
+      // Create refs that cycle through ALL segments - each bullet gets a different one
       for (let bulletIdx = 0; bulletIdx < 24; bulletIdx++) {
-        const segmentIndex = Math.min(
-          Math.floor(((bulletIdx + 0.5) / 24) * numSegments),
-          numSegments - 1
-        );
+        // Use modulo to cycle through all segments, ensuring variety
+        const segmentIndex = bulletIdx % numSegments;
         const seg = citationSegments[segmentIndex];
         const timeMs = typeof seg.timestamp === 'number' ? seg.timestamp : parseTimestamp(String(seg.timestamp));
         const timestamp = typeof seg.timestamp === 'string' ? seg.timestamp : (timeMs >= 0 ? `${Math.floor(timeMs / 60000)}:${String(Math.floor((timeMs % 60000) / 1000)).padStart(2, '0')}` : '0:00');
@@ -145,10 +143,11 @@ export default function ClassInsightCard({
           explanation: `Student said at ${timestamp}: "${seg.text.slice(0, 60)}${seg.text.length > 60 ? '...' : ''}"`,
         });
       }
+      console.log(`[ClassInsightCard] Created ${refs.length} refs from ${numSegments} segments. First: ${refs[0]?.timestamp}, Last segment: ${citationSegments[numSegments-1]?.timestamp}`);
     } else if (evidence && evidence.length > 0) {
       const numEvidence = evidence.length;
       for (let bulletIdx = 0; bulletIdx < 24; bulletIdx++) {
-        const idx = Math.min(Math.floor(((bulletIdx + 0.5) / 24) * numEvidence), numEvidence - 1);
+        const idx = bulletIdx % numEvidence;
         const e = evidence[idx];
         refs.push({
           id: 'A' as const,
