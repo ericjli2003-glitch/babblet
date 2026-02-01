@@ -320,12 +320,15 @@ export default function ClassInsightCard({
                 </div>
                 {videoUrl && (
                   <div className="rounded overflow-hidden bg-surface-900 mb-2 relative group">
+                    {/* Video with NO native controls - using clip-video class to hide all browser defaults */}
                     <video
                       ref={clipVideoRef}
                       src={videoUrl}
-                      className="w-full aspect-video object-cover"
+                      className="clip-video w-full aspect-video object-cover pointer-events-none"
                       muted
                       playsInline
+                      disablePictureInPicture
+                      controlsList="nodownload nofullscreen noremoteplayback"
                       onLoadedMetadata={(e) => {
                         const v = e.target as HTMLVideoElement;
                         v.currentTime = clipStart;
@@ -352,10 +355,10 @@ export default function ClassInsightCard({
                         }
                       }}
                     />
-                    {/* Custom play/pause overlay */}
+                    {/* Custom play/pause overlay - this captures all clicks */}
                     <button
                       onClick={handleClipPlayPause}
-                      className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-colors"
+                      className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-colors cursor-pointer"
                     >
                       {clipPlaying ? (
                         <Pause className="w-10 h-10 text-white drop-shadow-lg" />
