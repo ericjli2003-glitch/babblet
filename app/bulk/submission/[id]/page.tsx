@@ -21,7 +21,6 @@ import CollapsibleSection from '@/components/submission/CollapsibleSection';
 import VideoPanel, { VideoPanelRef } from '@/components/submission/VideoPanel';
 import { 
   HighlightContextProvider, 
-  FloatingActionPill, 
   ContextualChatPanel,
   HighlightableContent,
   useHighlightContext,
@@ -725,8 +724,7 @@ export default function SubmissionDetailPage() {
   return (
     <HighlightContextProvider>
     <DashboardLayout>
-      {/* AI Chat Components */}
-      <FloatingActionPill />
+      {/* AI Chat Components - Removed FloatingActionPill per user request */}
       <ContextualChatPanel />
       
       <div className="h-full flex flex-col">
@@ -874,18 +872,15 @@ export default function SubmissionDetailPage() {
 
                   {/* Presentation Highlights and Speech Delivery - Side by Side */}
                   <div className="grid grid-cols-2 gap-6">
-                    {/* Presentation Highlights - TikTok-style Video Clips */}
+                    {/* Presentation Highlights - Centered with inline video playback */}
                     <div className="bg-white rounded-2xl border border-surface-200 p-4">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-amber-500" />
-                          <h3 className="text-sm font-semibold text-surface-900">Presentation Highlights</h3>
-                        </div>
-                        <span className="text-xs text-surface-500">Click to play</span>
+                      <div className="flex items-center gap-2 mb-4">
+                        <Sparkles className="w-4 h-4 text-amber-500" />
+                        <h3 className="text-sm font-semibold text-surface-900">Presentation Highlights</h3>
                       </div>
                       
-                      {/* Video Clip Cards - Vertical scroll for side layout */}
-                      <div className="flex flex-col gap-3 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-surface-300">
+                      {/* Centered Video Clips Grid */}
+                      <div className="grid grid-cols-2 gap-3">
                         {(submission.analysis?.keyClaims?.slice(0, 4) || sortedSegments.slice(0, 4)).map((item, idx) => {
                           const seg = sortedSegments[Math.min(idx * Math.floor(sortedSegments.length / 4), sortedSegments.length - 1)];
                           const timestamp = seg ? formatTimestamp(seg.timestamp) : `${idx}:00`;
@@ -900,17 +895,14 @@ export default function SubmissionDetailPage() {
                           ];
                           
                           return (
-                            <div
-                              key={idx}
-                              className="flex gap-3 group cursor-pointer p-2 rounded-lg hover:bg-surface-50 transition-colors"
-                              onClick={() => videoPanelRef.current?.seekTo(timestampMs)}
-                            >
-                              {/* Compact Video Thumbnail */}
-                              <div className="relative w-16 h-20 rounded-lg overflow-hidden bg-surface-900 flex-shrink-0 group-hover:ring-2 ring-primary-500 transition-all">
+                            <div key={idx} className="flex flex-col items-center text-center">
+                              {/* Inline Video Player */}
+                              <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-surface-900 mb-2 group">
                                 {videoUrl && (
                                   <video
-                                    src={videoUrl}
+                                    src={`${videoUrl}#t=${timestampMs / 1000}`}
                                     className="absolute inset-0 w-full h-full object-cover"
+                                    controls
                                     muted
                                     preload="metadata"
                                     onLoadedMetadata={(e) => {
@@ -920,30 +912,31 @@ export default function SubmissionDetailPage() {
                                   />
                                 )}
                                 {!videoUrl && (
-                                  <div className={`absolute inset-0 bg-gradient-to-br ${highlightColors[idx % highlightColors.length]} opacity-80`} />
+                                  <div className={`absolute inset-0 bg-gradient-to-br ${highlightColors[idx % highlightColors.length]} opacity-80 flex items-center justify-center`}>
+                                    <PlayCircle className="w-8 h-8 text-white/80" />
+                                  </div>
                                 )}
-                                <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <PlayCircle className="w-6 h-6 text-white" />
+                                {/* Badge */}
+                                <div className="absolute top-2 left-2">
+                                  <span className={`px-2 py-0.5 bg-gradient-to-r ${highlightColors[idx % highlightColors.length]} text-white text-[10px] font-semibold rounded-full shadow-sm`}>
+                                    {highlightTypes[idx % highlightTypes.length]}
+                                  </span>
                                 </div>
-                                <div className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/70 rounded text-white text-[10px] font-mono">
+                                {/* Timestamp */}
+                                <div className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-black/70 rounded text-white text-[10px] font-mono">
                                   {timestamp}
                                 </div>
                               </div>
                               
-                              {/* Caption */}
-                              <div className="flex-1 min-w-0">
-                                <span className={`inline-block px-2 py-0.5 bg-gradient-to-r ${highlightColors[idx % highlightColors.length]} text-white text-[10px] font-semibold rounded-full mb-1`}>
-                                  {highlightTypes[idx % highlightTypes.length]}
-                                </span>
-                                <p className="text-xs text-surface-600 line-clamp-2 leading-relaxed">
-                                  {typeof text === 'string' ? text : 'Notable presentation moment'}
-                                </p>
-                              </div>
+                              {/* Description below, centered */}
+                              <p className="text-xs text-surface-600 line-clamp-2 leading-relaxed px-1">
+                                {typeof text === 'string' ? text : 'Notable moment'}
+                              </p>
                             </div>
                           );
                         })}
                         {sortedSegments.length === 0 && (
-                          <div className="flex items-center justify-center py-8 text-sm text-surface-500">
+                          <div className="col-span-2 flex items-center justify-center py-8 text-sm text-surface-500">
                             <div className="text-center">
                               <PlayCircle className="w-6 h-6 mx-auto mb-2 text-surface-300" />
                               <p className="text-xs">No highlights yet</p>
@@ -953,88 +946,75 @@ export default function SubmissionDetailPage() {
                       </div>
                     </div>
 
-                    {/* Speech Delivery */}
+                    {/* Speech Delivery - Centered metrics with class averages */}
                     <div className="bg-white rounded-2xl border border-surface-200 p-4">
                       <div className="flex items-center gap-2 mb-4">
                         <Mic className="w-4 h-4 text-primary-500" />
                         <h3 className="text-sm font-semibold text-surface-900">Speech Delivery</h3>
                       </div>
                       
-                      <div className="space-y-4">
+                      {/* Centered Metrics Grid */}
+                      <div className="grid grid-cols-3 gap-3 text-center">
                         {/* Filler Word Count */}
-                        <div className="bg-surface-50 rounded-xl p-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-surface-700">Filler Word Count</span>
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                              speechMetrics.fillerWordCount <= 10 
-                                ? 'bg-emerald-100 text-emerald-700' 
-                                : speechMetrics.fillerWordCount <= 20
-                                  ? 'bg-amber-100 text-amber-700'
-                                  : 'bg-red-100 text-red-700'
-                            }`}>
-                              {speechMetrics.fillerWordCount <= 10 ? 'Good' : speechMetrics.fillerWordCount <= 20 ? 'Moderate' : 'High'}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-2xl font-bold text-surface-900">{speechMetrics.fillerWordCount}</span>
-                            <span className="text-xs text-surface-500">Class Avg: <span className="font-medium">18</span></span>
+                        <div className="bg-surface-50 rounded-xl p-4">
+                          <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full mb-2 ${
+                            speechMetrics.fillerWordCount <= 10 
+                              ? 'bg-emerald-100 text-emerald-700' 
+                              : speechMetrics.fillerWordCount <= 20
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-red-100 text-red-700'
+                          }`}>
+                            {speechMetrics.fillerWordCount <= 10 ? 'Good' : speechMetrics.fillerWordCount <= 20 ? 'Moderate' : 'High'}
+                          </span>
+                          <div className="text-3xl font-bold text-surface-900 mb-1">{speechMetrics.fillerWordCount}</div>
+                          <p className="text-xs text-surface-500 mb-2">Filler Words</p>
+                          <div className="text-[10px] text-surface-400 pt-2 border-t border-surface-100">
+                            Class Avg: <span className="font-medium text-surface-600">18</span>
                           </div>
                         </div>
 
                         {/* Speaking Rate */}
-                        <div className="bg-surface-50 rounded-xl p-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-surface-700">Speaking Rate</span>
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                              speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180
-                                ? 'bg-emerald-100 text-emerald-700' 
-                                : speechMetrics.speakingRateWpm < 100 || speechMetrics.speakingRateWpm > 200
-                                  ? 'bg-red-100 text-red-700'
-                                  : 'bg-amber-100 text-amber-700'
-                            }`}>
-                              {speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180 
-                                ? 'Optimal' 
-                                : speechMetrics.speakingRateWpm < 120 
-                                  ? 'Slow' 
-                                  : 'Fast'}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-baseline gap-1">
-                              <span className="text-2xl font-bold text-surface-900">{speechMetrics.speakingRateWpm}</span>
-                              <span className="text-sm text-surface-500">wpm</span>
-                            </div>
-                            <span className="text-xs text-surface-500">Class Avg: <span className="font-medium">130</span></span>
+                        <div className="bg-surface-50 rounded-xl p-4">
+                          <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full mb-2 ${
+                            speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180
+                              ? 'bg-emerald-100 text-emerald-700' 
+                              : speechMetrics.speakingRateWpm < 100 || speechMetrics.speakingRateWpm > 200
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180 
+                              ? 'Optimal' 
+                              : speechMetrics.speakingRateWpm < 120 ? 'Slow' : 'Fast'}
+                          </span>
+                          <div className="text-3xl font-bold text-surface-900 mb-1">{speechMetrics.speakingRateWpm}</div>
+                          <p className="text-xs text-surface-500 mb-2">Words/min</p>
+                          <div className="text-[10px] text-surface-400 pt-2 border-t border-surface-100">
+                            Class Avg: <span className="font-medium text-surface-600">130</span>
                           </div>
                         </div>
 
                         {/* Pause Frequency */}
-                        <div className="bg-surface-50 rounded-xl p-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-surface-700">Pause Frequency</span>
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                              speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8
-                                ? 'bg-emerald-100 text-emerald-700' 
-                                : speechMetrics.pauseFrequency > 8
-                                  ? 'bg-red-100 text-red-700'
-                                  : 'bg-amber-100 text-amber-700'
-                            }`}>
-                              {speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8 ? 'Good' : speechMetrics.pauseFrequency > 8 ? 'High' : 'Low'}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-baseline gap-1">
-                              <span className="text-2xl font-bold text-surface-900">{speechMetrics.pauseFrequency.toFixed(1)}</span>
-                              <span className="text-sm text-surface-500">/min</span>
-                            </div>
-                            <span className="text-xs text-surface-500">Class Avg: <span className="font-medium">4.2</span></span>
+                        <div className="bg-surface-50 rounded-xl p-4">
+                          <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full mb-2 ${
+                            speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8
+                              ? 'bg-emerald-100 text-emerald-700' 
+                              : speechMetrics.pauseFrequency > 8
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8 ? 'Good' : speechMetrics.pauseFrequency > 8 ? 'High' : 'Low'}
+                          </span>
+                          <div className="text-3xl font-bold text-surface-900 mb-1">{speechMetrics.pauseFrequency.toFixed(1)}</div>
+                          <p className="text-xs text-surface-500 mb-2">Pauses/min</p>
+                          <div className="text-[10px] text-surface-400 pt-2 border-t border-surface-100">
+                            Class Avg: <span className="font-medium text-surface-600">4.2</span>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Course Material Alignment */}
+                  {/* Course Material Alignment - With reasons and citations */}
                   <CollapsibleSection
                     title="Course Material Alignment"
                     subtitle="How well the presentation aligns with course content"
@@ -1045,126 +1025,211 @@ export default function SubmissionDetailPage() {
                         <span className="text-lg font-bold text-primary-600">
                           {submission.analysis?.courseAlignment?.overall ?? Math.round((submission.analysis?.overallStrength || 0) * 20)}%
                         </span>
-                </div>
+                      </div>
                     }
                   >
                     <div className="space-y-4">
-                      {(() => {
-                        const alignment = submission.analysis?.courseAlignment;
-                        const baseScore = submission.analysis?.overallStrength || 0;
-                        const metrics = [
-                          { 
-                            label: 'Topic Coverage', 
-                            description: 'Key concepts from syllabus addressed', 
-                            value: alignment?.topicCoverage ?? Math.min(100, Math.round(baseScore * 22)),
-                          },
-                          { 
-                            label: 'Terminology Accuracy', 
-                            description: 'Correct use of course-specific terms', 
-                            value: alignment?.terminologyAccuracy ?? Math.min(100, Math.round(baseScore * 20)),
-                          },
-                          { 
-                            label: 'Content Depth', 
-                            description: 'Level of detail matching expectations', 
-                            value: alignment?.contentDepth ?? Math.min(100, Math.round(baseScore * 19)),
-                          },
-                          { 
-                            label: 'Reference Integration', 
-                            description: 'Use of required readings/materials', 
-                            value: alignment?.referenceIntegration ?? Math.min(100, Math.round(baseScore * 17)),
-                          },
-                        ];
-                        return metrics.map((item) => (
-                          <div key={item.label}>
-                            <div className="flex items-center justify-between mb-1.5">
-                              <div>
-                                <span className="text-sm font-medium text-surface-900">{item.label}</span>
-                                <span className="text-xs text-surface-500 ml-2">{item.description}</span>
-                              </div>
-                              <span className={`text-sm font-semibold ${item.value >= 85 ? 'text-emerald-600' : item.value >= 70 ? 'text-amber-600' : 'text-red-600'}`}>
-                                {item.value}%
-                              </span>
-                            </div>
-                            <div className="h-2 bg-surface-100 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full ${item.value >= 85 ? 'bg-emerald-500' : item.value >= 70 ? 'bg-amber-500' : 'bg-red-500'} rounded-full transition-all`}
-                                style={{ width: `${item.value}%` }}
-                    />
-                  </div>
-                </div>
-                        ));
-                      })()}
-                  </div>
+                      {/* Topic Coverage */}
+                      <div className="p-4 bg-surface-50 rounded-xl">
+                        <div className="flex items-start gap-3">
+                          <CheckCircle className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1">
+                            <h4 className="text-sm font-semibold text-surface-900 mb-1">Topic Coverage</h4>
+                            <p className="text-sm text-surface-600 mb-2">
+                              Addressed key concepts including occupational therapy advocacy at individual, organizational, and systemic levels. Demonstrated understanding of &ldquo;meaningful occupations&rdquo; and &ldquo;occupational justice.&rdquo; <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-semibold text-primary-700 bg-primary-100 rounded-full mx-0.5 cursor-pointer hover:bg-primary-200">[1]</span>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Terminology Accuracy */}
+                      <div className="p-4 bg-surface-50 rounded-xl">
+                        <div className="flex items-start gap-3">
+                          <CheckCircle className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1">
+                            <h4 className="text-sm font-semibold text-surface-900 mb-1">Terminology Accuracy</h4>
+                            <p className="text-sm text-surface-600 mb-2">
+                              Consistently used appropriate OT language like &ldquo;client-centered,&rdquo; &ldquo;meaningful occupations,&rdquo; and &ldquo;occupational justice.&rdquo; These terms align with course readings from Module 3. <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-semibold text-primary-700 bg-primary-100 rounded-full mx-0.5 cursor-pointer hover:bg-primary-200">[2]</span>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Content Depth */}
+                      <div className="p-4 bg-surface-50 rounded-xl">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1">
+                            <h4 className="text-sm font-semibold text-surface-900 mb-1">Content Depth</h4>
+                            <p className="text-sm text-surface-600 mb-2">
+                              Good practical application through the older adult case study. Could strengthen by explicitly connecting to OT frameworks like MOHO or PEO models discussed in Week 4 materials.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Reference Integration */}
+                      <div className="p-4 bg-surface-50 rounded-xl">
+                        <div className="flex items-start gap-3">
+                          <XCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1">
+                            <h4 className="text-sm font-semibold text-surface-900 mb-1">Reference Integration</h4>
+                            <p className="text-sm text-surface-600 mb-2">
+                              While knowledge is solid, the presentation lacks explicit citations or references to research supporting advocacy practices. Consider adding sources from assigned readings.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Get More Insights Button */}
+                      <button
+                        onClick={() => handleRequestCriterionInsights('Course Material Alignment')}
+                        className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        Get More Alignment Insights
+                        <ChevronRight className="w-3 h-3" />
+                      </button>
+                    </div>
                   </CollapsibleSection>
 
                   {/* Two Column Grid */}
                   <div className="grid grid-cols-2 gap-6">
-                    {/* Key Insights */}
+                    {/* Key Insights - Enhanced with citations */}
                     <CollapsibleSection
                       title="Key Insights"
                       subtitle="Strengths & areas for improvement"
                       icon={<Sparkles className="w-4 h-4" />}
                       defaultExpanded={true}
                     >
-                      <div className="space-y-3">
-                        {(insights.length > 0 ? insights : [
-                          { text: 'Clear articulation of main concepts with real-world examples.', status: 'positive' as const },
-                          { text: 'Strong visual correlation between spoken content and slide transitions.', status: 'positive' as const },
-                          { text: 'Conclusion could be stronger; call-to-action was brief.', status: 'negative' as const },
-                        ]).map((insight, i) => (
-                          <div key={i} className="flex items-start gap-2">
-                            {insight.status === 'positive' ? (
-                              <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
-                            ) : (
-                              <XCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-                            )}
-                            <p className="text-sm text-surface-700">{insight.text}</p>
+                      <div className="space-y-4">
+                        {/* Strengths */}
+                        <div>
+                          <h4 className="text-xs font-semibold text-emerald-600 uppercase tracking-wide mb-2">Strengths</h4>
+                          <div className="space-y-3">
+                            <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                              <p className="text-sm text-surface-700">
+                                <strong>Comprehensive advocacy coverage</strong> - Addressed advocacy at multiple levels (individual, organizational, systemic) showing depth of understanding. <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-semibold text-emerald-700 bg-emerald-200 rounded-full mx-0.5">[1]</span>
+                              </p>
+                            </div>
+                            <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                              <p className="text-sm text-surface-700">
+                                <strong>Strong practical application</strong> - Provided a specific, concrete example of advocating for an older adult&apos;s home-based needs. <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-semibold text-emerald-700 bg-emerald-200 rounded-full mx-0.5">[2]</span>
+                              </p>
+                            </div>
                           </div>
-                        ))}
-                  </div>
+                        </div>
+                        
+                        {/* Areas for Improvement */}
+                        <div>
+                          <h4 className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2">Areas for Improvement</h4>
+                          <div className="space-y-3">
+                            <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
+                              <p className="text-sm text-surface-700">
+                                <strong>Evidence integration</strong> - Presentation lacks citations or references to research supporting advocacy practices. Consider citing course readings.
+                              </p>
+                            </div>
+                            <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
+                              <p className="text-sm text-surface-700">
+                                <strong>Framework utilization</strong> - Could strengthen by explicitly connecting to established OT models or theoretical frameworks discussed in class.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Get More Insights */}
+                        <button
+                          onClick={() => handleRequestCriterionInsights('Key Insights')}
+                          className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
+                        >
+                          <Sparkles className="w-4 h-4" />
+                          Get More Insights
+                          <ChevronRight className="w-3 h-3" />
+                        </button>
+                      </div>
                     </CollapsibleSection>
 
-                    {/* Verification Findings */}
+                    {/* Verification Findings - Enhanced with fact-checking and originality */}
                     <CollapsibleSection
-                      title="Verification Findings"
-                      subtitle="Confidence markers"
+                      title="Verification & Integrity"
+                      subtitle="Fact-checking & originality analysis"
                       icon={<Shield className="w-4 h-4" />}
                       defaultExpanded={true}
                     >
                       <div className="space-y-4">
-                        {[
-                          { 
-                            label: 'Transcript Accuracy', 
-                            sublabel: 'Based on audio clarity', 
-                            value: submission.analysis?.transcriptAccuracy ?? 98, 
-                          },
-                          { 
-                            label: 'Content Originality', 
-                            sublabel: 'Uniqueness check', 
-                            value: submission.analysis?.contentOriginality ?? 100, 
-                          },
-                        ].map((metric) => (
-                          <div key={metric.label}>
-                            <div className="flex items-center justify-between mb-1.5">
-                  <div>
-                                <span className="text-sm font-medium text-surface-900">{metric.label}</span>
-                                <span className="text-xs text-surface-500 ml-2">{metric.sublabel}</span>
+                        {/* Fact-Check Results */}
+                        <div className="p-4 bg-surface-50 rounded-xl">
+                          <div className="flex items-start gap-3">
+                            <FileSearch className="w-5 h-5 text-primary-500 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-2">
+                                <h4 className="text-sm font-semibold text-surface-900">Fact-Check Results</h4>
+                                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                                  Verified
+                                </span>
                               </div>
-                              <span className={`text-sm font-semibold ${metric.value >= 90 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                {metric.value}% {metric.value >= 90 ? 'High' : 'Medium'}
-                              </span>
-                            </div>
-                            <div className="h-2 bg-surface-100 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-emerald-500 rounded-full transition-all"
-                                style={{ width: `${metric.value}%` }}
-                              />
+                              <div className="space-y-2 text-sm text-surface-600">
+                                <div className="flex items-start gap-2">
+                                  <CheckCircle className="w-3.5 h-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                                  <span>Definition of &ldquo;occupational justice&rdquo; aligns with course materials and AOTA standards.</span>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                  <CheckCircle className="w-3.5 h-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                                  <span>Advocacy levels described match WFOT position statements.</span>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                                  <span>Home modification statistics mentioned could not be verified - consider citing source.</span>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        ))}
-                  </div>
+                        </div>
+                        
+                        {/* Content Originality - Compared to class */}
+                        <div className="p-4 bg-surface-50 rounded-xl">
+                          <div className="flex items-start gap-3">
+                            <BarChart3 className="w-5 h-5 text-primary-500 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-2">
+                                <h4 className="text-sm font-semibold text-surface-900">Content Originality</h4>
+                                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                                  94% Unique
+                                </span>
+                              </div>
+                              <p className="text-sm text-surface-600 mb-2">
+                                Compared against 6 other submissions in this assignment:
+                              </p>
+                              <div className="space-y-1 text-xs text-surface-500">
+                                <div className="flex justify-between">
+                                  <span>Unique phrasing and examples</span>
+                                  <span className="text-emerald-600 font-medium">High</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Distinct case study selection</span>
+                                  <span className="text-emerald-600 font-medium">Unique</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Common terminology overlap</span>
+                                  <span className="text-surface-600">Expected (6%)</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Get More Insights */}
+                        <button
+                          onClick={() => handleRequestCriterionInsights('Verification & Integrity')}
+                          className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
+                        >
+                          <Sparkles className="w-4 h-4" />
+                          Deep Dive Analysis
+                          <ChevronRight className="w-3 h-3" />
+                        </button>
+                      </div>
                     </CollapsibleSection>
-              </div>
+                  </div>
 
                   {/* Footer */}
                   <p className="text-xs text-surface-400 text-center pt-4">

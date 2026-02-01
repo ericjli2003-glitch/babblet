@@ -5,6 +5,12 @@ import { generateQuestionsFromTranscript, isOpenAIConfigured } from '@/lib/opena
 import { generateQuestionsWithClaude, generateBranchQuestions, isClaudeConfigured } from '@/lib/claude';
 import { broadcastQuestions } from '@/lib/pusher';
 import { getCourseDocuments } from '@/lib/context-store';
+import { 
+  isWebSearchConfigured, 
+  searchCurrentEvents, 
+  extractSearchTopics, 
+  formatSearchContext 
+} from '@/lib/web-search';
 import type { GeneratedQuestion, QuestionCategory, QuestionDifficulty, AnalysisSummary } from '@/lib/types';
 
 // Force dynamic rendering (required for POST handlers on Vercel)
@@ -105,6 +111,31 @@ export async function POST(request: NextRequest) {
       console.log('[generate-questions] Slide content provided:', slideContent.keyPoints?.length || 0, 'key points');
     }
 
+    // Search for current events/news to make questions more relevant
+    let currentEventsContext = '';
+    if (isWebSearchConfigured()) {
+      try {
+        console.log('[generate-questions] Searching for current events...');
+        const searchTopics = extractSearchTopics(transcript);
+        
+        if (searchTopics.length > 0) {
+          console.log('[generate-questions] Search topics:', searchTopics);
+          // Search for the first relevant topic
+          const searchResults = await searchCurrentEvents(searchTopics[0], 3);
+          
+          if (searchResults.length > 0) {
+            currentEventsContext = formatSearchContext(searchResults);
+            console.log('[generate-questions] Found', searchResults.length, 'current events');
+          }
+        }
+      } catch (searchError) {
+        console.error('[generate-questions] Web search failed:', searchError);
+        // Continue without search results
+      }
+    } else {
+      console.log('[generate-questions] Web search not configured (set TAVILY_API_KEY or SERPER_API_KEY for current events)');
+    }
+
     let questions: GeneratedQuestion[];
 
     // Handle branching from an existing question
@@ -126,10 +157,11 @@ export async function POST(request: NextRequest) {
     // Prefer Babblet AI, fall back to alternatives, then mock
     else if (isClaudeConfigured()) {
       console.log('[generate-questions] Calling Babblet AI for question generation...');
-      // Add course materials to settings
+      // Add course materials and current events to settings
       const enhancedSettings = {
         ...settings,
         courseMaterials,
+        currentEventsContext, // Include real-time news context for relevant questions
       };
       questions = await generateQuestionsWithClaude(transcript, analysisContext, slideContent, enhancedSettings);
       console.log('[generate-questions] Babblet AI returned', questions.length, 'questions');

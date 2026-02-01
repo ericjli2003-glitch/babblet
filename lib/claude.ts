@@ -68,6 +68,8 @@ interface QuestionGenSettings {
   targetCategories?: string[];
   // Course materials for grounding questions
   courseMaterials?: CourseMaterial[];
+  // Current events context from web search for real-world relevance
+  currentEventsContext?: string;
 }
 
 function normalizeDifficulty(value: unknown): GeneratedQuestion['difficulty'] {
@@ -414,6 +416,19 @@ EXTERNAL SOURCE REQUIREMENT:
 `;
   }
 
+  // Build current events section for real-world relevance
+  let currentEventsSection = '';
+  if (settings?.currentEventsContext) {
+    currentEventsSection = `
+${settings.currentEventsContext}
+CURRENT EVENTS GUIDANCE:
+- Use these real-world developments to make questions more relevant and timely
+- Create "application" questions that connect the student's topic to current events
+- Include "newsReference" in questions that reference current events: { "title": "...", "source": "...", "date": "..." }
+- This helps students see real-world connections and prepares them for current discussions in the field
+`;
+  }
+
   // Build existing questions section
   let existingQuestionsSection = '';
   if (settings?.existingQuestions?.length) {
@@ -465,6 +480,7 @@ ANALYSIS CONTEXT:
 ${slideContextSection}
 ${courseMaterialsSection}
 ${existingQuestionsSection}
+${currentEventsSection}
 
 Return ONLY questions that are genuinely valuable. If nothing new warrants a question, return an empty array.
 
