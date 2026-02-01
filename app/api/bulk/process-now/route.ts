@@ -60,8 +60,21 @@ async function transcribeFromUrl(url: string): Promise<{
   const channel = result?.results?.channels?.[0];
   const alternative = channel?.alternatives?.[0];
   
-  // Extract duration from Deepgram metadata (in seconds)
-  const durationSeconds = result?.metadata?.duration || 0;
+  // Extract duration from Deepgram - try multiple locations
+  // 1. metadata.duration (standard location)
+  // 2. Calculate from last word's end time
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const metadata = result?.metadata as any;
+  let durationSeconds: number = metadata?.duration || 0;
+  
+  // Fallback: calculate from last word if metadata doesn't have duration
+  if (!durationSeconds && alternative?.words && alternative.words.length > 0) {
+    const lastWord = alternative.words[alternative.words.length - 1];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    durationSeconds = (lastWord as any)?.end || 0;
+  }
+  
+  console.log(`[Deepgram] Duration extracted: ${durationSeconds}s`);
   
   if (!alternative) return { transcript: '', segments: [], durationSeconds };
 
@@ -79,6 +92,14 @@ async function transcribeFromUrl(url: string): Promise<{
         });
       });
     });
+  }
+
+  // Final fallback: if still no duration, calculate from last segment
+  if (!durationSeconds && segments.length > 0) {
+    const lastSegment = segments[segments.length - 1];
+    // Estimate: last segment start + ~5 seconds for that segment
+    durationSeconds = (lastSegment.timestamp / 1000) + 5;
+    console.log(`[Deepgram] Duration estimated from segments: ${durationSeconds}s`);
   }
 
   return { transcript, segments, durationSeconds };
