@@ -1670,45 +1670,6 @@ Do NOT repeat the basic feedback already given. Go deeper. Be specific about wha
                                 </div>
                               </div>
                               
-                              {/* Feedback */}
-                              <div className="p-4 bg-surface-50 rounded-xl">
-                                <h4 className="text-sm font-semibold text-surface-700 mb-2">Feedback</h4>
-                                <p className="text-sm text-surface-600 leading-relaxed">{c.feedback || c.rationale || 'No detailed feedback available.'}</p>
-                              </div>
-                              
-                              {/* Evidence in Presentation */}
-                              <div>
-                                <h4 className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2">
-                                  <PlayCircle className="w-4 h-4 text-primary-500" />
-                                  Evidence in Presentation
-                                </h4>
-                                <div className="space-y-3">
-                                  {(submission.transcriptSegments?.slice(selectedCriterionIndex * 2, selectedCriterionIndex * 2 + 2) || []).map((seg, idx) => (
-                                    <div key={idx} className="p-3 bg-surface-50 rounded-lg border border-surface-100">
-                                      <div className="flex items-start gap-3">
-                                        <button
-                                          onClick={() => videoPanelRef.current?.seekTo(typeof seg.timestamp === 'number' ? seg.timestamp : parseFloat(seg.timestamp) * 1000)}
-                                          className="px-2 py-1 bg-primary-100 text-primary-700 text-xs font-mono font-medium rounded hover:bg-primary-200 transition-colors flex-shrink-0"
-                                        >
-                                          {formatTimestamp(seg.timestamp)}
-                                        </button>
-                                        <div className="flex-1">
-                                          <p className="text-sm text-surface-700 italic">&ldquo;{seg.text.slice(0, 120)}{seg.text.length > 120 ? '...' : ''}&rdquo;</p>
-                                          <p className="text-xs text-surface-500 mt-2">
-                                            <span className="font-medium text-primary-600">Analysis:</span> This segment demonstrates the student&apos;s approach to {c.criterion.toLowerCase()}.
-                                          </p>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ))}
-                                  {(!submission.transcriptSegments || submission.transcriptSegments.length === 0) && (
-                                    <div className="p-4 bg-surface-50 rounded-lg text-center text-sm text-surface-500">
-                                      No transcript segments available for this criterion.
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              
                               {/* Auto-generated Insights */}
                               <div className="pt-4 border-t border-surface-100">
                                 <HighlightableContent
