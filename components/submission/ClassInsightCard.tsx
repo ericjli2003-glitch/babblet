@@ -34,6 +34,8 @@ interface ClassInsightCardProps {
   courseReferences?: Array<{ id: string; title: string; excerpt: string; type: 'course' | 'rubric'; explanation?: string }>;
   /** Video URL for preview in reference popover */
   videoUrl?: string | null;
+  /** Index of criterion (0,1,2,3...) to pick different video segments for each criterion */
+  criterionIndex?: number;
 }
 
 function parseTimestamp(ts: string): number {
@@ -104,6 +106,7 @@ export default function ClassInsightCard({
   citationSegments,
   courseReferences,
   videoUrl,
+  criterionIndex = 0,
 }: ClassInsightCardProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
@@ -117,20 +120,27 @@ export default function ClassInsightCard({
   const StatusIcon = config.icon;
   const autoFetchedRef = useRef(false);
   
-  // A = video/submission ref (single representative moment)
+  // A = video/submission ref - pick DIFFERENT segments for each criterion
   const videoRefA = useMemo(() => {
     if (citationSegments && citationSegments.length > 0) {
-      const seg = citationSegments[Math.floor(citationSegments.length / 2)]; // Middle of video
+      // Distribute segments across criteria: criterion 0 -> early, 1 -> mid-early, 2 -> mid-late, 3 -> late
+      const total = citationSegments.length;
+      const segmentIndex = Math.min(
+        Math.floor(((criterionIndex + 0.5) / 4) * total), // Spread across 4 quarters
+        total - 1
+      );
+      const seg = citationSegments[segmentIndex];
       const timeMs = typeof seg.timestamp === 'number' ? seg.timestamp : parseTimestamp(String(seg.timestamp));
       const timestamp = typeof seg.timestamp === 'string' ? seg.timestamp : (timeMs >= 0 ? `${Math.floor(timeMs / 60000)}:${String(Math.floor((timeMs % 60000) / 1000)).padStart(2, '0')}` : '0:00');
       return { id: 'A' as const, timestamp, timeMs, text: seg.text.slice(0, 80) + (seg.text.length > 80 ? '...' : ''), explanation: `Student said at ${timestamp}: "${seg.text.slice(0, 60)}${seg.text.length > 60 ? '...' : ''}"` };
     }
     if (evidence && evidence.length > 0) {
-      const e = evidence[0];
+      const idx = Math.min(criterionIndex, evidence.length - 1);
+      const e = evidence[idx];
       return { id: 'A' as const, timestamp: e.timestamp, timeMs: parseTimestamp(e.timestamp), text: e.text.slice(0, 80) + (e.text.length > 80 ? '...' : ''), explanation: e.analysis || `Evidence at ${e.timestamp}` };
     }
     return null;
-  }, [citationSegments, evidence]);
+  }, [citationSegments, evidence, criterionIndex]);
   
   // B = course/rubric ref
   const courseRefB = useMemo(() => {
@@ -246,13 +256,14 @@ export default function ClassInsightCard({
       return cleanText;
     };
     
-    // A = video ref: popover with video preview, Go to button, explanation
+    // A = video ref: popover with 8-second clip preview
+    const CLIP_DURATION = 8; // seconds
     const renderVideoRef = (_letter: string, key: string) => {
       const ref = videoRefA;
       if (!ref) return null;
       const isOpen = openRef === `v-A-${key}`;
       const clipStart = ref.timeMs / 1000;
-      const clipEnd = clipStart + 8;
+      const clipEnd = clipStart + CLIP_DURATION;
       return (
         <div key={key} className="relative inline-block">
           <button
@@ -266,25 +277,50 @@ export default function ClassInsightCard({
             <>
               <div className="fixed inset-0 z-40" onClick={() => setOpenRef(null)} aria-hidden="true" />
               <div ref={openRefRef} className="absolute left-0 top-full mt-1 z-50 w-72 rounded-lg border border-surface-200 bg-white shadow-lg p-3">
-                <p className="text-xs font-semibold text-surface-900 mb-1">Student video @ {ref.timestamp}</p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-semibold text-surface-900">Clip @ {ref.timestamp}</p>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">{CLIP_DURATION}s clip</span>
+                </div>
                 {videoUrl && (
-                  <div className="rounded overflow-hidden bg-surface-900 mb-2">
+                  <div className="rounded overflow-hidden bg-surface-900 mb-2 relative">
                     <video
-                      src={`${videoUrl}#t=${clipStart},${clipEnd}`}
+                      src={videoUrl}
                       className="w-full aspect-video object-cover"
                       controls
                       muted
                       playsInline
+                      onLoadedMetadata={(e) => {
+                        const v = e.target as HTMLVideoElement;
+                        v.currentTime = clipStart;
+                      }}
+                      onPlay={(e) => {
+                        const v = e.target as HTMLVideoElement;
+                        if (v.currentTime < clipStart || v.currentTime >= clipEnd) {
+                          v.currentTime = clipStart;
+                        }
+                      }}
+                      onTimeUpdate={(e) => {
+                        const v = e.target as HTMLVideoElement;
+                        if (v.currentTime >= clipEnd - 0.2) {
+                          v.pause();
+                          v.currentTime = clipStart;
+                        }
+                      }}
+                      onSeeked={(e) => {
+                        const v = e.target as HTMLVideoElement;
+                        if (v.currentTime < clipStart || v.currentTime >= clipEnd) {
+                          v.currentTime = clipStart;
+                        }
+                      }}
                     />
                   </div>
                 )}
                 <p className="text-xs text-surface-600 mb-2 line-clamp-2">&quot;{ref.text}&quot;</p>
-                <p className="text-xs text-surface-500 mb-2">{ref.explanation}</p>
                 <button
                   onClick={() => { onSeekToTime?.(ref.timeMs); setOpenRef(null); }}
                   className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded"
                 >
-                  <PlayCircle className="w-3.5 h-3.5" /> Go to
+                  <PlayCircle className="w-3.5 h-3.5" /> Go to full video
                 </button>
               </div>
             </>

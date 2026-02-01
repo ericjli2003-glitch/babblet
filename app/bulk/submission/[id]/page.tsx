@@ -1684,6 +1684,7 @@ RULES:
                                       { id: 'B', title: c.criterion, excerpt: (c.feedback || c.rationale || 'Rubric criterion').slice(0, 150), type: 'rubric' as const, explanation: `What the rubric expects for ${c.criterion}: ${(c.feedback || c.rationale || '').slice(0, 120)}` },
                                     ]}
                                     videoUrl={videoUrl}
+                                    criterionIndex={selectedCriterionIndex}
                                     onInsightsGenerated={(criterionTitle, insights) => {
                                       setCriterionInsights(prev => 
                                         insights ? { ...prev, [criterionTitle]: insights } : (() => { const { [criterionTitle]: _, ...rest } = prev; return rest; })()
