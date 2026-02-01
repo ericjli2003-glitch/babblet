@@ -611,29 +611,35 @@ export default function SubmissionDetailPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: `Provide DEEP, criterion-specific insights for the rubric category "${criterionTitle}".
+        message: `Analyze student performance for the "${criterionTitle}" criterion.
 
-FOCUS ENTIRELY ON THIS CRITERION: "${criterionTitle}"
+CRITERION: "${criterionTitle}"
 ${criterionInfo}
 
-STRUCTURE YOUR RESPONSE AS:
-1. **Opening paragraph** (2-3 sentences): Summarize how the student performed on THIS criterion specifically. Be direct and evaluative.
+Write naturally, like a thoughtful TA giving feedback in office hours. Be specific and helpful.
 
-2. **Key observations** (3-5 bullets): Each bullet should be specific and grounded in evidence:
-   - Quote the transcript directly when relevant
-   - Include timestamps, durations, or counts where applicable
-   - Connect observations to what the rubric expects for "${criterionTitle}"
+FORMAT:
+**Overview** (2-3 sentences about their ${criterionTitle} performance)
 
-3. **Closing paragraph** (2-3 sentences): Actionable recommendations for improving performance on THIS criterion.
+**What worked well:**
+- [Specific observation with transcript quote] [1]
+- [Another strength tied to rubric expectations] [2]
 
-GROUNDING ORDER:
-1. First: Align insights to the SPECIFIC rubric requirements for "${criterionTitle}"
-2. Second: Connect to course content and learning objectives
+**Areas to develop:**
+- [Gap identified + specific example of what would be better] [1]
+- [Missing element the rubric expects + concrete suggestion] [2]
+
+**Example of excellence:** Provide 1-2 sentences showing what a strong response would look like for this criterion, based on the rubric and course content.
+
+MANDATORY RULES:
+1. Every bullet MUST end with a reference like [1] or [2] linking to transcript/course material
+2. Be SPECIFIC to "${criterionTitle}" - not generic feedback
+3. Quote the student's actual words when possible
+4. Suggest concrete examples, not vague improvements
+5. Reference what the rubric specifically expects for this criterion
 ${rubricSection}
 
-CITATION REQUIREMENT: End each bullet and paragraph with [1], [2] references to transcript moments or course materials.
-
-Do NOT repeat the basic feedback already given. Go deeper. Be specific about what worked, what didn't, and exactly how to improve.`,
+Sound like a helpful human, not a grading robot.`,
         context: {
           highlightedText: criterionTitle,
           sourceType: 'rubric',

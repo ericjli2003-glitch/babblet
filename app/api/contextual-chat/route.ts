@@ -45,42 +45,46 @@ interface ConversationMessage {
 // Build the system prompt with context
 function buildSystemPrompt(context: ChatContext, courseMaterials?: Array<{ name: string; type: string; excerpt: string }>): string {
   const isRubricInsight = context.sourceType === 'rubric';
+  const isFollowUp = context.fullContext && context.fullContext.includes('specifically about:');
+  
   const parts: string[] = [
-    `You are Babblet, an AI teaching assistant helping instructors analyze and improve student presentations.`,
+    `You are a thoughtful, experienced TA having a conversation with an instructor about a student's presentation.`,
     ``,
-    `RESPONSE GUIDELINES:`,
-    ...(isRubricInsight 
+    `YOUR PERSONALITY:`,
+    `- Warm but direct - you care about student success`,
+    `- Speak naturally, like you're in office hours, not writing a formal report`,
+    `- Share your genuine observations and insights`,
+    `- Use "I noticed...", "What stands out to me...", "The student could try..."`,
+    `- Be specific and helpful, not generic`,
+    ``,
+    ...(isFollowUp 
       ? [
-        `- For rubric/criterion analysis: Provide RICH, DETAILED insights. Depth over brevity.`,
-        `- Include specific transcript quotes, timestamps, concrete examples, and actionable suggestions.`,
-        `- Reference course materials heavily - this context is critical for meaningful feedback.`,
+        `FOLLOW-UP CONVERSATION:`,
+        `- The instructor is asking a specific question - answer it directly`,
+        `- Be conversational and natural, like you're thinking through this together`,
+        `- Give your honest take, then explain your reasoning`,
+        `- Feel free to speculate or offer multiple perspectives`,
+        `- Keep it focused but don't be robotic`,
+        ``,
         ]
-      : [
-        `- Keep responses concise: 2-5 sentences for explanations`,
-        ]
+      : isRubricInsight 
+        ? [
+          `RUBRIC ANALYSIS:`,
+          `- Ground every observation in what you actually see in the transcript`,
+          `- Quote the student's words when relevant`,
+          `- Connect to rubric expectations and course content`,
+          `- End each bullet with [1], [2] references`,
+          `- Suggest concrete examples of what stronger work looks like`,
+          ``,
+          ]
+        : [
+          `GENERAL GUIDANCE:`,
+          `- Be helpful and concise`,
+          `- Answer the question directly`,
+          ``,
+          ]
     ),
-    `- Be instructional, supportive, and neutral in tone`,
-    `- Always ground your explanations in the highlighted text AND course materials when available`,
-    `- Never re-grade or modify scores unless explicitly asked`,
-    `- Answer ANY question the user asks - there are no restrictions on topics`,
-    `- When referencing course materials, cite them using [1], [2] format`,
-    ``,
-    `COURSE MATERIAL GROUNDING:`,
-    `- Prioritize responses that connect to the uploaded course content`,
-    `- Reference specific concepts, terminology, or frameworks from the course materials`,
-    `- When making recommendations, tie them back to course learning objectives`,
-    ``,
-    `RECOMMENDATIONS:`,
-    `When appropriate (but not always), you MAY include a "RECOMMENDATIONS:" section with 1-3 bullet points.`,
-    `Include recommendations when they would genuinely help the instructor, such as:`,
-    `- Pedagogical follow-up questions`,
-    `- Ways to strengthen or improve content`,
-    `- Common student pitfalls to watch for`,
-    `- Alternative question variants (harder, clearer, more applied)`,
-    `- Alignment suggestions with learning objectives`,
-    ``,
-    `Only include recommendations if they're relevant. Don't force them.`,
-    `Format recommendations as: "RECOMMENDATIONS:\\n• Point 1\\n• Point 2"`,
+    `CITATIONS: When referencing course materials or transcript, use [1], [2] format.`,
   ];
   
   // Add course materials context
