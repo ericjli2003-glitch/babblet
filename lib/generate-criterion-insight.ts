@@ -120,44 +120,51 @@ export async function generateCriterionInsight(params: {
     ? `\n\nCOURSE MATERIALS:\n${courseMaterials.map((m, i) => `[${i + 1}] ${m.name}: ${m.excerpt.slice(0, 400)}...`).join('\n\n')}`
     : '';
 
-  const systemPrompt = `You are a thoughtful TA giving rubric feedback. Be specific, varied, and non-generic.
+  const systemPrompt = `You are a thoughtful TA writing feedback for an instructor reviewing a student's presentation. Use third-person language—refer to "the student" or "the presentation", never "you" or "your".
 
 CRITICAL: Rubric criterion = "${criterionTitle}". Analyze ONLY this criterion.
 RUBRIC SECTION:
 ${criterionRubricOnly}
 
 VARIATION: ${variation.intro}. ${variation.struct}.
+- Use third-person: "The student demonstrates...", "The presentation shows...", "This section lacks..."
+- NEVER use "you" or "your"—this feedback is for instructors, not students
 - Vary sentence structure and opening phrases
 - Use different transition words (Moreover, Notably, In contrast, Specifically)
-- Avoid repetitive "The student..." - mix in "What works here...", "One strength...", "A gap..."
+- Mix in "What works here...", "One strength...", "A gap...", "The student could..."
 - Quote the transcript directly when relevant
-- Reference the FULL presentation: use moments from the beginning, middle, AND end of the transcript when they fit (not just the start)
+- Reference the FULL presentation: use moments from the beginning, middle, AND end of the transcript—not just intro/conclusion. Pick quotes from throughout the video that best support each point.
 - End each bullet with A (video moment) and B (rubric/course reference) when possible—one citation from the video and one from class content per bullet. Pick the moment that best supports that bullet; order does not need to be chronological.
 - Do not write (A) or (B) in parentheses. Use only the letters A and B at the end of bullets, e.g. "…quote… A B"`;
 
-  const userMessage = `Analyze "${criterionTitle}" for this student presentation.
+  const userMessage = `Analyze "${criterionTitle}" for this student's presentation. Write feedback for an instructor—use third-person language only.
 
 SCORE CONTEXT: ${criterionInfo}
 FOCUS: ${expectationsForCriterion}
 
-TRANSCRIPT (quote specific moments from beginning, middle, and end):
+FULL TRANSCRIPT (quote specific moments from beginning, middle, AND end—use the entire video, not just intro/conclusion):
 ${fullTranscript.slice(0, 16000)}${fullTranscript.length > 16000 ? '...' : ''}
 ${courseContext}
 
 Provide:
-**Overview** (2-3 sentences, ${variation.intro.toLowerCase()})
+**Overview** (2-3 sentences, ${variation.intro.toLowerCase()}, third-person)
 
 **What worked well:**
-- [Specific strength with quote] A B
-- [Another strength] A B
+- [Specific strength with quote from ANY part of the video] A B
+- [Another strength—can be from middle or end of presentation] A B
 
 **Areas to develop:**
-- [Specific gap] A B
+- [Specific gap with example from the transcript] A B
 - [Rubric expectation missing] A B
 
-**Example of excellence:** One sentence.
+**Example of excellence:** One sentence describing what strong performance looks like.
 
-RULES: End each bullet with A B (video moment + rubric/course ref). Do not use (A) or (B)—only the letters A and B. Be specific. Vary phrasing. No generic feedback.`;
+RULES:
+- Use third-person only: "The student...", "The presentation...", never "you/your"
+- Quote from throughout the entire transcript, not just intro/conclusion
+- End each bullet with A B (video moment + rubric/course ref)
+- Do not use (A) or (B)—only the letters A and B
+- Be specific. Vary phrasing. No generic feedback.`;
 
   const client = getClient();
   const response = await client.messages.create({

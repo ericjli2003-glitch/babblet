@@ -119,9 +119,33 @@ export default function ClassInsightCard({
   const [branches, setBranches] = useState<BranchInsight[]>([]);
   const [showBranchInput, setShowBranchInput] = useState(false);
   const [branchQuery, setBranchQuery] = useState('');
+  // Track used questions so we can rotate them
+  const [usedQuestions, setUsedQuestions] = useState<Set<string>>(new Set());
   const config = statusConfig[status];
   const StatusIcon = config.icon;
   const autoFetchedRef = useRef(false);
+  
+  // All available questions - rotate through these
+  const ALL_QUESTIONS = useMemo(() => [
+    'How could the student strengthen this section?',
+    'Which rubric criterion does this relate to?',
+    'What would excellent look like here?',
+    'What specific evidence supports this assessment?',
+    'How does this compare to course expectations?',
+    'What feedback would help the student improve?',
+    'Are there any missed opportunities in this section?',
+    'What concepts could the student explore further?',
+    'How well does this align with learning objectives?',
+  ], []);
+  
+  // Get 3 questions that haven't been used yet, cycling through if all used
+  const availableQuestions = useMemo(() => {
+    const unused = ALL_QUESTIONS.filter(q => !usedQuestions.has(q));
+    if (unused.length >= 3) return unused.slice(0, 3);
+    // If we've used most questions, cycle back but prioritize unused
+    const cycled = [...unused, ...ALL_QUESTIONS.filter(q => usedQuestions.has(q))];
+    return cycled.slice(0, 3);
+  }, [ALL_QUESTIONS, usedQuestions]);
   
   // A = video refs — use entire video length: all segments are used so every ref can point anywhere (start to end)
   // Interleave indices from both ends (0, n-1, 1, n-2, ...) so refs feel "wherever best" and cover full video
@@ -623,17 +647,15 @@ export default function ClassInsightCard({
                   </p>
                   {!showBranchInput && (
                     <div className="flex flex-wrap gap-1.5 mb-2">
-                      {[
-                        'How could they strengthen this section?',
-                        'Which rubric criterion does this relate to?',
-                        'What would excellent look like here?',
-                      ].map((q) => (
+                      {availableQuestions.map((q) => (
                         <button
                           key={q}
                           type="button"
                           onClick={() => {
                             setBranchQuery(q);
                             setShowBranchInput(true);
+                            // Mark this question as used so it rotates out
+                            setUsedQuestions(prev => new Set([...prev, q]));
                           }}
                           className="text-[11px] px-2 py-1 rounded-md bg-primary-50 text-primary-700 hover:bg-primary-100 border border-primary-200 transition-colors text-left"
                         >
