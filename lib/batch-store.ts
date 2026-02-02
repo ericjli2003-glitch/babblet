@@ -127,6 +127,8 @@ export interface Submission {
     question: string;
     category: string;
   }>;
+  /** Pre-generated Babblet insights per rubric criterion (criterion name -> insight text) */
+  criterionInsights?: Record<string, string>;
   verificationFindings?: Array<{
     id: string;
     statement: string;
