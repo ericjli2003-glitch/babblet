@@ -1244,88 +1244,121 @@ RULES:
                     </div>
                   </div>
 
-                  {/* Course Material Alignment - Restructured with Key Insights & Verification */}
+                  {/* Evidence Mapping - Course Material Alignment */}
                   <CollapsibleSection
-                    title="Course Material Alignment"
-                    subtitle="How the presentation connects to class content"
-                    icon={<BookOpen className="w-4 h-4" />}
+                    title="Evidence Mapping"
+                    subtitle="Student evidence mapped to course materials"
+                    icon={<FileSearch className="w-4 h-4" />}
                     defaultExpanded={true}
-                    headerRight={<span className="text-lg font-bold text-primary-600">{Math.round(normalizedScore)}%</span>}
                   >
-                    <div className="space-y-4">
-                      {/* Key Insights - Strengths and Improvements */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <h4 className="text-xs font-semibold text-emerald-600 uppercase tracking-wide mb-2 flex items-center gap-1">
-                            <ThumbsUp className="w-3 h-3" /> Strengths
-                          </h4>
-                          <div className="space-y-1.5">
-                            {(rubric?.strengths?.length ? rubric.strengths : [
-                              'Demonstrated solid understanding of core concepts.',
-                              'Clear structure with logical flow.',
-                            ]).slice(0, 3).map((s, i) => (
-                              <div key={i} className="p-2 bg-emerald-50 rounded-lg border border-emerald-100">
-                                <p className="text-xs text-surface-700">{typeof s === 'string' ? s : (s as { text: string }).text}</p>
+                    <div className="space-y-3">
+                      {effectiveCriteria.map((c, idx) => {
+                        const pct = c.maxScore ? Math.round((c.score / c.maxScore) * 100) : c.score;
+                        // Get a relevant segment for this criterion
+                        const segmentIndex = Math.min(
+                          Math.floor((idx / Math.max(effectiveCriteria.length, 1)) * sortedSegments.length),
+                          sortedSegments.length - 1
+                        );
+                        const evidenceSegment = sortedSegments[segmentIndex];
+                        const timestamp = evidenceSegment ? formatTimestamp(evidenceSegment.timestamp) : '--';
+                        const timestampMs = evidenceSegment ? normalizeTimestamp(evidenceSegment.timestamp) : 0;
+                        const quote = evidenceSegment?.text?.slice(0, 150) || c.feedback?.slice(0, 150) || 'Evidence from presentation';
+                        
+                        return (
+                          <div key={idx} className="border border-surface-200 rounded-lg p-3 bg-white hover:border-primary-300 transition-colors">
+                            <div className="grid grid-cols-2 gap-4">
+                              {/* Left: Course Material / Rubric Criterion */}
+                              <div>
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-7 h-7 rounded bg-primary-100 flex items-center justify-center">
+                                      <BookOpen className="w-3.5 h-3.5 text-primary-600" />
+                                    </div>
+                                    <div>
+                                      <h4 className="text-xs font-bold text-surface-900 uppercase tracking-wide">{c.criterion}</h4>
+                                      <p className="text-[10px] text-surface-500">Rubric Criterion</p>
+                                    </div>
+                                  </div>
+                                  <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
+                                    pct >= 80 ? 'bg-emerald-100 text-emerald-700' : pct >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                                  }`}>
+                                    {pct >= 80 ? 'Strong' : pct >= 60 ? 'Moderate' : 'Developing'} ({pct}%)
+                                  </span>
+                                </div>
+                                <p className="text-xs text-surface-600 leading-relaxed">{c.feedback || c.rationale || 'See rubric for details.'}</p>
+                                {batchInfo?.courseId && (
+                                  <div className="mt-2 pt-2 border-t border-surface-100">
+                                    <p className="text-[10px] text-primary-600 mb-1">📚 Referenced: Course Materials</p>
+                                    <p className="text-[9px] text-surface-500">Based on uploaded {batchInfo.courseName || 'course'} content</p>
+                                  </div>
+                                )}
                               </div>
-                            ))}
-                          </div>
-                        </div>
-                        <div>
-                          <h4 className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2 flex items-center gap-1">
-                            <AlertCircle className="w-3 h-3" /> Areas to Develop
-                          </h4>
-                          <div className="space-y-1.5">
-                            {(rubric?.improvements?.length ? rubric.improvements : [
-                              'Consider adding citations or references to research.',
-                              'Could strengthen by connecting to established frameworks discussed in class.',
-                            ]).slice(0, 3).map((s, i) => (
-                              <div key={i} className="p-2 bg-amber-50 rounded-lg border border-amber-100">
-                                <p className="text-xs text-surface-700">{typeof s === 'string' ? s : (s as { text: string }).text}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
 
-                      {/* Verification & Identity */}
+                              {/* Right: Student Evidence from Video */}
+                              <div className="bg-blue-50/30 rounded-lg p-2.5 border border-blue-100">
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <p className="text-[10px] font-bold text-blue-700 uppercase tracking-wide">Student Evidence ({timestamp})</p>
+                                  {evidenceSegment && (
+                                    <button
+                                      onClick={() => videoPanelRef.current?.seekTo(timestampMs)}
+                                      className="flex items-center gap-1 px-2 py-0.5 bg-blue-600 text-white rounded text-[9px] font-medium hover:bg-blue-700 transition-colors"
+                                    >
+                                      <PlayCircle className="w-2.5 h-2.5" /> Go to Clip
+                                    </button>
+                                  )}
+                                </div>
+                                <p className="text-xs text-surface-700 leading-relaxed italic">
+                                  &quot;{quote}{quote.length >= 150 ? '...' : ''}&quot;
+                                </p>
+                                {evidenceSegment && (
+                                  <p className="text-[9px] text-surface-500 mt-1.5">
+                                    Aligns with {c.criterion} expectations from rubric and course framework
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Verification & Key Claims */}
                       {submission.verificationFindings && submission.verificationFindings.length > 0 && (
-                        <div className="pt-3 border-t border-surface-100">
-                          <h4 className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2 flex items-center gap-1">
-                            <Shield className="w-3 h-3" /> Claim Verification
+                        <div className="pt-2 mt-2 border-t border-surface-100">
+                          <h4 className="text-xs font-semibold text-surface-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                            <Shield className="w-3.5 h-3.5 text-blue-600" /> Claim Verification
                           </h4>
                           <div className="grid grid-cols-2 gap-2">
-                            {submission.verificationFindings.slice(0, 4).map((f, i) => (
+                            {submission.verificationFindings.slice(0, 6).map((f, i) => (
                               <div 
                                 key={i} 
-                                className={`p-2 rounded-lg border ${
+                                className={`p-2 rounded-lg border text-left ${
                                   f.status === 'VERIFIED' ? 'bg-emerald-50 border-emerald-200' :
                                   f.status === 'NEEDS_EVIDENCE' ? 'bg-amber-50 border-amber-200' :
                                   'bg-red-50 border-red-200'
                                 }`}
                               >
-                                <p className="text-[10px] font-medium mb-1 text-surface-600">{f.statement}</p>
-                                <p className="text-[9px] text-surface-500">{f.status}</p>
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  {f.status === 'VERIFIED' ? (
+                                    <CheckCircle className="w-3 h-3 text-emerald-600" />
+                                  ) : f.status === 'NEEDS_EVIDENCE' ? (
+                                    <AlertCircle className="w-3 h-3 text-amber-600" />
+                                  ) : (
+                                    <XCircle className="w-3 h-3 text-red-600" />
+                                  )}
+                                  <span className={`text-[9px] font-bold uppercase ${
+                                    f.status === 'VERIFIED' ? 'text-emerald-700' :
+                                    f.status === 'NEEDS_EVIDENCE' ? 'text-amber-700' :
+                                    'text-red-700'
+                                  }`}>
+                                    {f.status === 'VERIFIED' ? 'Match Found' : f.status === 'NEEDS_EVIDENCE' ? 'Needs Evidence' : 'Unverified'}
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-surface-700 leading-snug">{f.statement}</p>
                               </div>
                             ))}
                           </div>
                         </div>
                       )}
-
-                      {/* Rubric Criteria Performance */}
-                      <div className="pt-3 border-t border-surface-100">
-                        <h4 className="text-xs font-semibold text-primary-600 uppercase tracking-wide mb-2">Rubric Performance</h4>
-                        <div className="space-y-1">
-                          {effectiveCriteria.map((c, idx) => {
-                            const pct = c.maxScore ? Math.round((c.score / c.maxScore) * 100) : c.score;
-                            return (
-                              <div key={idx} className="flex items-start justify-between gap-2 py-1 text-xs">
-                                <span className="text-surface-700">{c.criterion}</span>
-                                <span className="font-semibold text-primary-600 shrink-0">{pct}%</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
                     </div>
                   </CollapsibleSection>
 
