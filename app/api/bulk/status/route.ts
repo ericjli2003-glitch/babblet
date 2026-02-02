@@ -211,26 +211,41 @@ export async function GET(request: NextRequest) {
                       : 'processing';
     
     // ============================================
-    // UPLOAD TRACKING: Clear expectedUploadCount when all files are uploaded
-    // This ensures the UI stops showing upload progress once complete
+    // UPLOAD TRACKING: Clear expectedUploadCount when:
+    // 1. All files are uploaded, OR
+    // 2. Uploads are stale (expected > 0, received 0, batch older than 5 min)
+    // This ensures the UI stops showing upload progress once complete or stale
     // ============================================
     const uploadsComplete = batch.expectedUploadCount !== undefined && 
                            batch.expectedUploadCount > 0 && 
                            submissions.length >= batch.expectedUploadCount;
     
+    // Detect stale uploads: expected > 0, but 0 received and batch is older than 5 minutes
+    const STALE_UPLOAD_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+    const uploadsStale = batch.expectedUploadCount !== undefined &&
+                        batch.expectedUploadCount > 0 &&
+                        submissions.length === 0 &&
+                        (Date.now() - batch.createdAt) > STALE_UPLOAD_THRESHOLD_MS;
+    
+    if (uploadsStale) {
+      console.log(`[Status] Clearing stale expectedUploadCount: batch ${batchId} expected ${batch.expectedUploadCount} but received 0 after ${Math.round((Date.now() - batch.createdAt) / 1000)}s`);
+    }
+    
+    const shouldClearExpectedCount = uploadsComplete || uploadsStale;
+    
     if (batch.totalSubmissions !== submissions.length || 
         batch.processedCount !== processedCount || 
         batch.failedCount !== failedCount ||
         batch.status !== batchStatus ||
-        uploadsComplete) {
-      console.log(`[Status] Syncing batch stats: total ${batch.totalSubmissions}->${submissions.length}, processed ${batch.processedCount}->${processedCount}, status ${batch.status}->${batchStatus}, uploadsComplete=${uploadsComplete}`);
+        shouldClearExpectedCount) {
+      console.log(`[Status] Syncing batch stats: total ${batch.totalSubmissions}->${submissions.length}, processed ${batch.processedCount}->${processedCount}, status ${batch.status}->${batchStatus}, uploadsComplete=${uploadsComplete}, uploadsStale=${uploadsStale}`);
       batch = await updateBatch(batchId, {
         totalSubmissions: submissions.length,
         processedCount,
         failedCount,
         status: batchStatus,
-        // Clear expected count once all files are uploaded
-        ...(uploadsComplete ? { expectedUploadCount: undefined } : {}),
+        // Clear expected count once all files are uploaded OR uploads are stale
+        ...(shouldClearExpectedCount ? { expectedUploadCount: undefined } : {}),
       }) || batch;
     }
 

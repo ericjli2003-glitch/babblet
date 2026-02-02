@@ -11,7 +11,16 @@ export async function POST(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const batchId = searchParams.get('batchId');
-    const count = parseInt(searchParams.get('count') || '0', 10);
+    
+    // Support both query param and JSON body for count
+    let count: number;
+    const queryCount = searchParams.get('count');
+    if (queryCount !== null) {
+      count = parseInt(queryCount, 10);
+    } else {
+      const body = await request.json().catch(() => ({}));
+      count = body.expectedUploadCount ?? 0;
+    }
 
     if (!batchId) {
       return NextResponse.json({ error: 'batchId is required' }, { status: 400 });
@@ -22,14 +31,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
     }
 
-    // Only update if new count is higher (don't accidentally decrease)
     const currentCount = batch.expectedUploadCount || 0;
-    if (count > currentCount) {
-      await updateBatch(batchId, { expectedUploadCount: count });
-      console.log(`[UpdateExpected] Updated batch ${batchId} expectedUploadCount: ${currentCount} -> ${count}`);
+    
+    // Allow setting to 0 (cancel) or increasing (add more files)
+    // Only block decreasing to non-zero values
+    if (count === 0 || count > currentCount) {
+      const newCount = count === 0 ? undefined : count;
+      await updateBatch(batchId, { expectedUploadCount: newCount });
+      console.log(`[UpdateExpected] Updated batch ${batchId} expectedUploadCount: ${currentCount} -> ${count === 0 ? 'cleared' : count}`);
+      return NextResponse.json({ success: true, expectedUploadCount: newCount ?? 0 });
     }
 
-    return NextResponse.json({ success: true, expectedUploadCount: Math.max(count, currentCount) });
+    return NextResponse.json({ success: true, expectedUploadCount: currentCount });
   } catch (error) {
     console.error('[UpdateExpected] Error:', error);
     return NextResponse.json(

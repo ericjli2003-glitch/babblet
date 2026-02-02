@@ -675,9 +675,31 @@ export default function AssignmentDashboardPage() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-5 h-5 text-primary-600 animate-spin" />
-                <span className="text-sm font-medium text-primary-700">{uploadProgress}%</span>
+              <div className="flex items-center gap-3">
+                {/* Cancel button for stuck uploads */}
+                <button
+                  onClick={async () => {
+                    if (!confirm('Cancel pending uploads? You can upload files again later.')) return;
+                    try {
+                      await fetch(`/api/bulk/update-expected?batchId=${batchId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ expectedUploadCount: 0 }),
+                      });
+                      // Refresh the page to clear state
+                      window.location.reload();
+                    } catch (err) {
+                      console.error('Failed to cancel uploads:', err);
+                    }
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium text-surface-600 bg-white border border-surface-200 rounded-lg hover:bg-surface-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-5 h-5 text-primary-600 animate-spin" />
+                  <span className="text-sm font-medium text-primary-700">{uploadProgress}%</span>
+                </div>
               </div>
             </div>
             <div className="h-2 bg-primary-100 rounded-full overflow-hidden">
