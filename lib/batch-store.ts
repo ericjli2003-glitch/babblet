@@ -61,6 +61,12 @@ export interface Submission {
     logicalGaps: Array<{ id: string; description: string; severity: string }>;
     missingEvidence: Array<{ id: string; description: string }>;
     overallStrength: number;
+    speechMetrics?: {
+      fillerWordCount: number;
+      speakingRateWpm: number;
+      pauseFrequency: number;
+      wordCount?: number;
+    };
   };
   rubricEvaluation?: {
     overallScore: number;

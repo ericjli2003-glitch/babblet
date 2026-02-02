@@ -123,15 +123,15 @@ export default function ClassInsightCard({
   const StatusIcon = config.icon;
   const autoFetchedRef = useRef(false);
   
-  // A = video refs - ONE UNIQUE segment per bullet, cycling through ALL segments
+  // A = video refs - ONE UNIQUE segment per bullet, spread evenly across entire video (no repeat)
   const videoRefsByBullet = useMemo(() => {
     const refs: Array<{ id: 'A'; timestamp: string; timeMs: number; text: string; explanation: string }> = [];
     if (citationSegments && citationSegments.length > 0) {
       const numSegments = citationSegments.length;
-      // Create refs that cycle through ALL segments - each bullet gets a different one
       for (let bulletIdx = 0; bulletIdx < 24; bulletIdx++) {
-        // Use modulo to cycle through all segments, ensuring variety
-        const segmentIndex = bulletIdx % numSegments;
+        const segmentIndex = numSegments <= 1
+          ? 0
+          : Math.min(Math.round((bulletIdx / 23) * (numSegments - 1)), numSegments - 1);
         const seg = citationSegments[segmentIndex];
         const timeMs = typeof seg.timestamp === 'number' ? seg.timestamp : parseTimestamp(String(seg.timestamp));
         const timestamp = typeof seg.timestamp === 'string' ? seg.timestamp : (timeMs >= 0 ? `${Math.floor(timeMs / 60000)}:${String(Math.floor((timeMs % 60000) / 1000)).padStart(2, '0')}` : '0:00');
@@ -143,11 +143,10 @@ export default function ClassInsightCard({
           explanation: `Student said at ${timestamp}: "${seg.text.slice(0, 60)}${seg.text.length > 60 ? '...' : ''}"`,
         });
       }
-      console.log(`[ClassInsightCard] Created ${refs.length} refs from ${numSegments} segments. First: ${refs[0]?.timestamp}, Last segment: ${citationSegments[numSegments-1]?.timestamp}`);
     } else if (evidence && evidence.length > 0) {
       const numEvidence = evidence.length;
       for (let bulletIdx = 0; bulletIdx < 24; bulletIdx++) {
-        const idx = bulletIdx % numEvidence;
+        const idx = numEvidence <= 1 ? 0 : Math.min(Math.round((bulletIdx / 23) * (numEvidence - 1)), numEvidence - 1);
         const e = evidence[idx];
         refs.push({
           id: 'A' as const,
@@ -161,16 +160,18 @@ export default function ClassInsightCard({
     return refs;
   }, [citationSegments, evidence]);
   
-  // B = course/rubric ref
+  // B = course/rubric ref — format: "This part of [source] aligns with the insight because: [why]"
   const courseRefB = useMemo(() => {
     const ref = courseReferences?.[0];
     if (!ref) return null;
+    const sourceLabel = ref.type === 'rubric' ? 'the rubric' : 'course material';
+    const why = ref.explanation?.trim() || `This ${ref.type} expectation applies to this criterion.`;
     return {
       id: 'B' as const,
       title: ref.title,
       excerpt: ref.excerpt.slice(0, 120) + (ref.excerpt.length > 120 ? '...' : ''),
       type: ref.type,
-      explanation: ref.explanation || `Relevant ${ref.type} expectation for this criterion.`,
+      explanation: `This part of ${sourceLabel} aligns with the insight because: ${why}`,
     };
   }, [courseReferences]);
   
@@ -396,7 +397,7 @@ export default function ClassInsightCard({
           {isOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setOpenRef(null)} aria-hidden="true" />
-              <div className="absolute left-0 top-full mt-1 z-50 w-72 rounded-lg border border-surface-200 bg-white shadow-lg p-3">
+              <div className="absolute left-0 top-full mt-1 z-50 w-80 rounded-lg border border-surface-200 bg-white shadow-lg p-3">
                 <p className="text-xs font-semibold text-surface-900 mb-1">{ref.type === 'rubric' ? 'Rubric' : 'Course'}: {ref.title}</p>
                 <p className="text-xs text-surface-600 mb-2">&quot;{ref.excerpt}&quot;</p>
                 <p className="text-xs text-surface-500">{ref.explanation}</p>
@@ -580,6 +581,27 @@ export default function ClassInsightCard({
                   <p className="text-[10px] font-medium text-surface-500 uppercase tracking-wide mb-2">
                     Want to dig deeper?
                   </p>
+                  {!showBranchInput && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {[
+                        'How could they strengthen this section?',
+                        'Which rubric criterion does this relate to?',
+                        'What would excellent look like here?',
+                      ].map((q) => (
+                        <button
+                          key={q}
+                          type="button"
+                          onClick={() => {
+                            setBranchQuery(q);
+                            setShowBranchInput(true);
+                          }}
+                          className="text-[11px] px-2 py-1 rounded-md bg-primary-50 text-primary-700 hover:bg-primary-100 border border-primary-200 transition-colors text-left"
+                        >
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <AnimatePresence mode="wait">
                     {showBranchInput ? (
                       <motion.div

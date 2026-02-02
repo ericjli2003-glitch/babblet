@@ -214,6 +214,12 @@ export default function SubmissionDetailPage() {
     rubricCriteria?: string;
   } | null>(null);
   const [otherSubmissionsCount, setOtherSubmissionsCount] = useState<number>(0);
+  const [classSpeechStats, setClassSpeechStats] = useState<{
+    fillerWordAvg: number | null;
+    wpmAvg: number | null;
+    pausesPerMinAvg: number | null;
+    count: number;
+  } | null>(null);
   const [criterionInsights, setCriterionInsights] = useState<Record<string, string>>({});
   const [alignmentMoreInsights, setAlignmentMoreInsights] = useState<string | null>(null);
   const [keyMoreInsights, setKeyMoreInsights] = useState<string | null>(null);
@@ -253,6 +259,20 @@ export default function SubmissionDetailPage() {
               // For Content Originality: count other submissions in batch
               const subs = batchData.submissions || [];
               setOtherSubmissionsCount(Math.max(0, subs.length - 1));
+              // Fetch class-level speech stats for "Class Avg" in Speech Delivery
+              fetch(`/api/bulk/batch-speech-stats?batchId=${data.submission.batchId}`)
+                .then((r) => r.json())
+                .then((stats) => {
+                  if (stats.success && stats.count > 0) {
+                    setClassSpeechStats({
+                      fillerWordAvg: stats.fillerWordAvg ?? null,
+                      wpmAvg: stats.wpmAvg ?? null,
+                      pausesPerMinAvg: stats.pausesPerMinAvg ?? null,
+                      count: stats.count,
+                    });
+                  }
+                })
+                .catch(() => {});
             }
           } catch (e) {
             console.log('Could not load batch info:', e);
@@ -1167,7 +1187,11 @@ RULES:
                           <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.fillerWordCount}</div>
                           <p className="text-[10px] text-surface-500 mb-0.5">Filler Words</p>
                           <p className="text-[9px] text-surface-600 leading-tight">
-                            Class Avg: <span className="font-medium">18</span> — Lower filler use improves clarity.
+                            {classSpeechStats?.fillerWordAvg != null ? (
+                              <>Class Avg: <span className="font-medium">{classSpeechStats.fillerWordAvg}</span> — Lower filler use improves clarity.</>
+                            ) : (
+                              <>Lower filler use improves clarity.</>
+                            )}
                           </p>
                         </div>
 
@@ -1187,7 +1211,11 @@ RULES:
                           <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.speakingRateWpm}</div>
                           <p className="text-[10px] text-surface-500 mb-0.5">Words/min</p>
                           <p className="text-[9px] text-surface-600 leading-tight">
-                            Class Avg: <span className="font-medium">130</span> — Ideal range 120–180 for comprehension.
+                            {classSpeechStats?.wpmAvg != null ? (
+                              <>Class Avg: <span className="font-medium">{classSpeechStats.wpmAvg}</span> — Ideal range 120–180 for comprehension.</>
+                            ) : (
+                              <>Ideal range 120–180 for comprehension.</>
+                            )}
                           </p>
                         </div>
 
@@ -1205,7 +1233,11 @@ RULES:
                           <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.pauseFrequency.toFixed(1)}</div>
                           <p className="text-[10px] text-surface-500 mb-0.5">Pauses/min</p>
                           <p className="text-[9px] text-surface-600 leading-tight">
-                            Class Avg: <span className="font-medium">4.2</span> — Strategic pauses aid emphasis.
+                            {classSpeechStats?.pausesPerMinAvg != null ? (
+                              <>Class Avg: <span className="font-medium">{classSpeechStats.pausesPerMinAvg}</span> — Strategic pauses aid emphasis.</>
+                            ) : (
+                              <>Strategic pauses aid emphasis.</>
+                            )}
                           </p>
                         </div>
                       </div>
@@ -1698,8 +1730,8 @@ RULES:
                                     initialInsights={criterionInsights[c.criterion] || null}
                                     citationSegments={sortedSegments.map(seg => ({ timestamp: normalizeTimestamp(seg.timestamp), text: seg.text }))}
                                     courseReferences={[
-                                      // B = rubric for THIS criterion (explains which part of class content)
-                                      { id: 'B', title: c.criterion, excerpt: (c.feedback || c.rationale || 'Rubric criterion').slice(0, 150), type: 'rubric' as const, explanation: `What the rubric expects for ${c.criterion}: ${(c.feedback || c.rationale || '').slice(0, 120)}` },
+                                      // B = rubric for THIS criterion — excerpt = this part of source; explanation = why it aligns
+                                      { id: 'B', title: c.criterion, excerpt: (c.feedback || c.rationale || 'Rubric criterion').slice(0, 200), type: 'rubric' as const, explanation: (c.rationale || c.feedback || `This criterion applies to the insight above.`).slice(0, 200) },
                                     ]}
                                     videoUrl={videoUrl}
                                     criterionIndex={selectedCriterionIndex}
