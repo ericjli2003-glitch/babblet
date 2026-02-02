@@ -123,19 +123,19 @@ export default function ClassInsightCard({
   const StatusIcon = config.icon;
   const autoFetchedRef = useRef(false);
   
-  // A = video refs — cover full video (including end), non-sequential so refs feel "wherever best" not in order
-  // Build segment indices by interleaving from both ends (0, n-1, 1, n-2, ...) so we hit start and end and vary order
+  // A = video refs — use entire video length: all segments are used so every ref can point anywhere (start to end)
+  // Interleave indices from both ends (0, n-1, 1, n-2, ...) so refs feel "wherever best" and cover full video
   const videoRefsByBullet = useMemo(() => {
     const refs: Array<{ id: 'A'; timestamp: string; timeMs: number; text: string; explanation: string }> = [];
     if (citationSegments && citationSegments.length > 0) {
       const numSegments = citationSegments.length;
-      // Interleaved indices: [0, last, 1, last-1, 2, ...] so we definitely include start and end, and order is mixed
       const interleaved: number[] = [];
       for (let i = 0; i < numSegments; i++) {
         if (i % 2 === 0) interleaved.push(Math.floor(i / 2));
         else interleaved.push(numSegments - 1 - Math.floor(i / 2));
       }
-      for (let slot = 0; slot < 24; slot++) {
+      const numSlots = Math.max(24, numSegments);
+      for (let slot = 0; slot < numSlots; slot++) {
         const segmentIndex = interleaved[slot % interleaved.length];
         const seg = citationSegments[segmentIndex];
         const timeMs = typeof seg.timestamp === 'number' ? seg.timestamp : parseTimestamp(String(seg.timestamp));
@@ -155,7 +155,8 @@ export default function ClassInsightCard({
         if (i % 2 === 0) interleaved.push(Math.floor(i / 2));
         else interleaved.push(numEvidence - 1 - Math.floor(i / 2));
       }
-      for (let slot = 0; slot < 24; slot++) {
+      const numSlots = Math.max(24, numEvidence);
+      for (let slot = 0; slot < numSlots; slot++) {
         const idx = interleaved[slot % interleaved.length];
         const e = evidence[idx];
         refs.push({
@@ -334,7 +335,7 @@ export default function ClassInsightCard({
           {isOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => { setOpenRef(null); setClipPlaying(false); }} aria-hidden="true" />
-              <div ref={openRefRef} className="absolute left-0 top-full mt-1 z-50 w-72 rounded-lg border border-surface-200 bg-white shadow-lg p-3">
+              <div ref={openRefRef} className="absolute left-0 top-full mt-1 z-50 w-72 max-h-64 overflow-y-auto rounded-lg border border-surface-200 bg-white shadow-lg p-3">
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-xs font-semibold text-surface-900">Clip @ {ref.timestamp}</p>
                   <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">{CLIP_DURATION}s clip</span>
@@ -415,7 +416,7 @@ export default function ClassInsightCard({
           {isOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setOpenRef(null)} aria-hidden="true" />
-              <div className="absolute left-0 top-full mt-1 z-50 w-72 rounded-lg border border-surface-200 bg-white shadow-lg p-3">
+              <div className="absolute left-0 top-full mt-1 z-50 w-72 max-h-64 overflow-y-auto rounded-lg border border-surface-200 bg-white shadow-lg p-3">
                 <p className="text-xs font-semibold text-surface-900 mb-1.5">{ref.type === 'rubric' ? 'Rubric' : 'Course'}: {ref.title}</p>
                 <p className="text-xs text-surface-600 mb-2">{ref.explanation}</p>
                 {ref.documentUrl && (
@@ -535,7 +536,7 @@ export default function ClassInsightCard({
       
       {/* Insights Panel - show when insights exist */}
       {additionalInsights && (
-        <div className="p-4 bg-gradient-to-r from-primary-50 to-blue-50 border border-primary-100 rounded-xl">
+        <div className="relative overflow-hidden p-4 bg-gradient-to-r from-primary-50 to-blue-50 border border-primary-100 rounded-xl">
           {/* Header with hide/delete controls */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-1.5">
