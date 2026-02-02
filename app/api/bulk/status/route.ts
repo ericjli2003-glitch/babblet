@@ -182,12 +182,23 @@ export async function GET(request: NextRequest) {
     }
     
     console.log(`[Status] BatchId=${batchId} Found ${submissionIds.length} submission IDs (batch: ${batchIds.length}, set: ${setIds.length})`);
+    console.log(`[Status] Submission IDs: ${submissionIds.join(', ')}`);
     
     // Fetch all submissions
     const submissionResults = await Promise.all(submissionIds.map(id => getSubmission(id)));
+    const nullCount = submissionResults.filter(r => r === null).length;
+    if (nullCount > 0) {
+      console.error(`[Status] WARNING: ${nullCount} of ${submissionIds.length} submissions returned NULL from getSubmission()`);
+      // Log which IDs are null
+      submissionIds.forEach((id, idx) => {
+        if (!submissionResults[idx]) {
+          console.error(`[Status] NULL submission: ${id}`);
+        }
+      });
+    }
     const submissions = submissionResults.filter(Boolean) as NonNullable<Awaited<ReturnType<typeof getSubmission>>>[];
     
-    console.log(`[Status] Returning ${submissions.length} submissions`);
+    console.log(`[Status] Returning ${submissions.length} submissions (${nullCount} were null)`);
     
     // Compute grading status from actual submission data (SINGLE SOURCE OF TRUTH)
     const submissionData = submissions.map(s => ({
