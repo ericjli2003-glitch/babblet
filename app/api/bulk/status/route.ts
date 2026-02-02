@@ -143,23 +143,36 @@ export async function GET(request: NextRequest) {
     // ============================================
     if (submissionIds.length === 0 && batch.totalSubmissions > 0) {
       console.log(`[Status] RECOVERY: batch ${batchId} claims ${batch.totalSubmissions} submissions but SET/array empty. Attempting scan recovery...`);
+      console.log(`[Status] Batch record: submissionIds=${JSON.stringify(batchIds)}, totalSubmissions=${batch.totalSubmissions}, processedCount=${batch.processedCount}`);
       try {
-        // Scan for submission keys that might belong to this batch
+        // Scan ALL submission keys - no limit since we need to find them
         const allSubmissionKeys = await kv.keys('submission:*');
-        for (const key of allSubmissionKeys.slice(0, 100)) { // Limit to 100 to avoid timeout
+        console.log(`[Status] RECOVERY: Scanning ${allSubmissionKeys.length} total submission keys...`);
+        let foundCount = 0;
+        for (const key of allSubmissionKeys) {
           const subId = (key as string).replace('submission:', '');
           const sub = await getSubmission(subId);
           if (sub && sub.batchId === batchId) {
             submissionIds.push(subId);
+            foundCount++;
+            console.log(`[Status] RECOVERY: Found submission ${subId} (${sub.studentName})`);
           }
+          // Stop if we've found enough
+          if (foundCount >= batch.totalSubmissions) break;
         }
         console.log(`[Status] RECOVERY: Found ${submissionIds.length} submissions via scan for batch ${batchId}`);
         // Re-sync to SET and batch
         if (submissionIds.length > 0) {
+          console.log(`[Status] RECOVERY: Re-syncing ${submissionIds.length} submissions to SET and batch record`);
           for (const id of submissionIds) {
             await kv.sadd(`batch_submissions:${batchId}`, id);
           }
           await updateBatch(batchId, { submissionIds, totalSubmissions: submissionIds.length });
+          batch = await getBatch(batchId) || batch;
+        } else {
+          // No submissions found - batch record is stale
+          console.log(`[Status] RECOVERY: No submissions found. Resetting batch stats to 0.`);
+          await updateBatch(batchId, { submissionIds: [], totalSubmissions: 0, processedCount: 0, failedCount: 0 });
           batch = await getBatch(batchId) || batch;
         }
       } catch (e) {
@@ -182,23 +195,12 @@ export async function GET(request: NextRequest) {
     }
     
     console.log(`[Status] BatchId=${batchId} Found ${submissionIds.length} submission IDs (batch: ${batchIds.length}, set: ${setIds.length})`);
-    console.log(`[Status] Submission IDs: ${submissionIds.join(', ')}`);
     
     // Fetch all submissions
     const submissionResults = await Promise.all(submissionIds.map(id => getSubmission(id)));
-    const nullCount = submissionResults.filter(r => r === null).length;
-    if (nullCount > 0) {
-      console.error(`[Status] WARNING: ${nullCount} of ${submissionIds.length} submissions returned NULL from getSubmission()`);
-      // Log which IDs are null
-      submissionIds.forEach((id, idx) => {
-        if (!submissionResults[idx]) {
-          console.error(`[Status] NULL submission: ${id}`);
-        }
-      });
-    }
     const submissions = submissionResults.filter(Boolean) as NonNullable<Awaited<ReturnType<typeof getSubmission>>>[];
     
-    console.log(`[Status] Returning ${submissions.length} submissions (${nullCount} were null)`);
+    console.log(`[Status] Returning ${submissions.length} submissions`);
     
     // Compute grading status from actual submission data (SINGLE SOURCE OF TRUTH)
     const submissionData = submissions.map(s => ({
