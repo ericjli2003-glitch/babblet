@@ -61,12 +61,6 @@ export interface Submission {
     logicalGaps: Array<{ id: string; description: string; severity: string }>;
     missingEvidence: Array<{ id: string; description: string }>;
     overallStrength: number;
-    speechMetrics?: {
-      fillerWordCount: number;
-      speakingRateWpm: number;
-      pauseFrequency: number;
-      wordCount?: number;
-    };
   };
   rubricEvaluation?: {
     overallScore: number;
@@ -120,8 +114,6 @@ export interface Submission {
       }>;
     }>;
   };
-  /** Pre-generated Babblet insights per rubric criterion (criterion name -> insight text) */
-  criterionInsights?: Record<string, string>;
   questions?: Array<{
     id: string;
     question: string;
@@ -166,8 +158,6 @@ export interface Submission {
     presentationType: 'screen_share' | 'webcam_only' | 'mixed';
     summary: string;
   };
-  // Video duration in seconds (from transcription)
-  duration?: number;
   // Timing
   createdAt: number;
   startedAt?: number;
@@ -187,11 +177,6 @@ export interface Batch {
   // Settings (legacy - for batches without context)
   rubricCriteria?: string;
   rubricTemplateId?: string;
-  // ============================================
-  // SUBMISSION IDS: Stored directly in batch for atomic reads
-  // This avoids eventual consistency issues with separate Redis sets
-  // ============================================
-  submissionIds?: string[];
   // ============================================
   // UPLOAD TRACKING: Persistent expected upload count
   // Set when batch is created, cleared when all files are uploaded
@@ -297,16 +282,15 @@ export async function getAllBatches(): Promise<Batch[]> {
 }
 
 export async function deleteBatch(batchId: string): Promise<void> {
-  // Get batch to find submission IDs
-  const batch = await getBatch(batchId);
-  const submissionIds = batch?.submissionIds || [];
+  // Get all submissions for this batch
+  const submissionIds = await kv.smembers(`${BATCH_SUBMISSIONS_PREFIX}${batchId}`);
   
   // Delete each submission
-  for (const subId of submissionIds) {
+  for (const subId of submissionIds || []) {
     await kv.del(`${SUBMISSION_PREFIX}${subId}`);
   }
 
-  // Delete legacy batch submissions set
+  // Delete batch submissions set
   await kv.del(`${BATCH_SUBMISSIONS_PREFIX}${batchId}`);
 
   // Remove from all batches
@@ -323,16 +307,7 @@ export async function deleteSubmission(submissionId: string): Promise<boolean> {
     return false;
   }
 
-  // Remove from batch's submissionIds array
-  const batch = await getBatch(submission.batchId);
-  if (batch && batch.submissionIds) {
-    await updateBatch(submission.batchId, {
-      submissionIds: batch.submissionIds.filter(id => id !== submissionId),
-      totalSubmissions: Math.max(0, (batch.totalSubmissions || 1) - 1),
-    });
-  }
-
-  // Also remove from legacy set
+  // Remove from batch's submission set
   await kv.srem(`${BATCH_SUBMISSIONS_PREFIX}${submission.batchId}`, submissionId);
 
   // Delete the submission
@@ -371,57 +346,14 @@ export async function createSubmission(params: {
     createdAt: Date.now(),
   };
 
-  // Save submission first (this is idempotent)
+  // Save submission
   await kv.set(`${SUBMISSION_PREFIX}${submission.id}`, submission);
 
   // ============================================
-  // SUBMISSION IDS: Use atomic Redis SET as source of truth
-  // The SET operation (sadd) is atomic and handles concurrent adds correctly
-  // We'll rebuild batch.submissionIds from the SET when needed
+  // SUBMISSION COUNT: The set is the source of truth for count
+  // APIs should count from set membership, not totalSubmissions field
   // ============================================
-  
-  // Add to the atomic Redis SET first (this never loses data)
   await kv.sadd(`${BATCH_SUBMISSIONS_PREFIX}${params.batchId}`, submission.id);
-  
-  // ============================================
-  // BATCH UPDATE: Retry loop to handle concurrent updates
-  // If another process updated the batch between our read and write,
-  // we re-read and retry to ensure our submission ID is included
-  // ============================================
-  const MAX_RETRIES = 5;
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const batch = await getBatch(params.batchId);
-    if (!batch) {
-      console.error(`[BatchStore] Batch ${params.batchId} not found on attempt ${attempt + 1}`);
-      break;
-    }
-    
-    const currentIds = batch.submissionIds || [];
-    
-    // Already includes our submission - we're done
-    if (currentIds.includes(submission.id)) {
-      break;
-    }
-    
-    // Get all IDs from the atomic SET to ensure we don't lose any
-    const setIds = await kv.smembers(`${BATCH_SUBMISSIONS_PREFIX}${params.batchId}`) as string[];
-    
-    // Merge: include all IDs from both sources
-    const mergedIds = Array.from(new Set([...currentIds, ...setIds, submission.id]));
-    
-    try {
-      await updateBatch(params.batchId, {
-        submissionIds: mergedIds,
-        totalSubmissions: mergedIds.length,
-      });
-      console.log(`[BatchStore] Updated batch ${params.batchId} with ${mergedIds.length} submissions (attempt ${attempt + 1})`);
-      break;
-    } catch (err) {
-      console.warn(`[BatchStore] Retry ${attempt + 1}/${MAX_RETRIES} updating batch ${params.batchId}:`, err);
-      // Small delay before retry with exponential backoff
-      await new Promise(r => setTimeout(r, 50 * Math.pow(2, attempt)));
-    }
-  }
 
   // Add to processing queue
   await kv.rpush(QUEUE_KEY, submission.id);
@@ -452,25 +384,20 @@ export async function updateSubmission(
 }
 
 export async function getBatchSubmissions(batchId: string): Promise<Submission[]> {
-  // ============================================
-  // SUBMISSION IDS: Merge from batch record AND Redis SET
-  // The SET is atomic and never loses data during parallel uploads
-  // This ensures we find all submissions even if batch array is stale
-  // ============================================
-  const batch = await getBatch(batchId);
-  const batchIds = batch?.submissionIds || [];
-  const setIds = await kv.smembers(`${BATCH_SUBMISSIONS_PREFIX}${batchId}`) as string[];
-  
-  // Merge both sources
-  const submissionIds = Array.from(new Set([...batchIds, ...setIds]));
-  
-  if (submissionIds.length === 0) return [];
+  const submissionIds = await kv.smembers(`${BATCH_SUBMISSIONS_PREFIX}${batchId}`);
+  // #region agent log
+  (()=>{const d={location:'lib/batch-store.ts:getBatchSubmissions',message:'getBatchSubmissions entry',data:{batchId,setSize:submissionIds?.length??0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'};fetch('http://127.0.0.1:7242/ingest/4d4a084e-4174-46b3-8733-338fa5664bc9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).catch(()=>{});try{const p=require('path'),fs=require('fs'),lp=p.join(process.cwd(),'.cursor','debug.log');fs.mkdirSync(p.dirname(lp),{recursive:true});fs.appendFileSync(lp,JSON.stringify(d)+'\n');}catch(_){}})();
+  // #endregion
+  if (!submissionIds || submissionIds.length === 0) return [];
 
   const submissions: Submission[] = [];
   for (const id of submissionIds) {
-    const sub = await getSubmission(id);
+    const sub = await getSubmission(id as string);
     if (sub) submissions.push(sub);
   }
+  // #region agent log
+  (()=>{const d={location:'lib/batch-store.ts:getBatchSubmissions',message:'getBatchSubmissions exit',data:{batchId,submissionsLength:submissions.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'};fetch('http://127.0.0.1:7242/ingest/4d4a084e-4174-46b3-8733-338fa5664bc9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).catch(()=>{});try{const p=require('path'),fs=require('fs'),lp=p.join(process.cwd(),'.cursor','debug.log');fs.mkdirSync(p.dirname(lp),{recursive:true});fs.appendFileSync(lp,JSON.stringify(d)+'\n');}catch(_){}})();
+  // #endregion
 
   // Sort by studentName
   return submissions.sort((a, b) => a.studentName.localeCompare(b.studentName));

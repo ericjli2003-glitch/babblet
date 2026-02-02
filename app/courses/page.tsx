@@ -761,10 +761,10 @@ function CoursesContent() {
 
   const loadCoursesAndBatches = async () => {
     try {
-      // Fetch courses and batches in parallel
+      // Fetch courses and batches in parallel (no-store so list and detail stay in sync)
       const [coursesRes, batchesRes] = await Promise.all([
-        fetch('/api/context/courses'),
-        fetch('/api/bulk/batches'),
+        fetch('/api/context/courses', { cache: 'no-store' }),
+        fetch('/api/bulk/batches', { cache: 'no-store' }),
       ]);
       
       const coursesData = await coursesRes.json();

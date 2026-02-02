@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, Send, Loader2, Lightbulb, MessageSquare, 
-  RotateCcw, Sparkles, FileText, Mic, BookOpen, AlertCircle, ExternalLink
+  RotateCcw, Sparkles, FileText, Mic, BookOpen, AlertCircle, ExternalLink, ChevronRight, Target, Clock
 } from 'lucide-react';
 import { useHighlightContext, HighlightSourceType } from '@/lib/hooks/useHighlightContext';
 
@@ -130,9 +130,27 @@ export default function ContextualChatPanel() {
           </button>
         </div>
         
-        {/* Context Badge */}
+        {/* Context Badge with Path */}
         {currentHighlight && (
           <div className="px-4 py-2 bg-surface-50 border-b border-surface-100">
+            {/* Path breadcrumb - shows location in content */}
+            {(currentHighlight.rubricCriterion || currentHighlight.timestamp || currentHighlight.sourceId) && (
+              <div className="flex items-center gap-1.5 mb-2 text-[10px] text-surface-400">
+                <span className="uppercase tracking-wide">{sourceConfig.label}</span>
+                {currentHighlight.rubricCriterion && (
+                  <>
+                    <ChevronRight className="w-3 h-3" />
+                    <span className="font-medium text-surface-600">{currentHighlight.rubricCriterion}</span>
+                  </>
+                )}
+                {currentHighlight.timestamp && (
+                  <>
+                    <ChevronRight className="w-3 h-3" />
+                    <span className="font-medium text-surface-600">@ {currentHighlight.timestamp}</span>
+                  </>
+                )}
+              </div>
+            )}
             <div className="flex items-start gap-2">
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${sourceConfig.color}`}>
                 {sourceConfig.icon}
@@ -180,7 +198,7 @@ export default function ContextualChatPanel() {
             </div>
           )}
           
-          {chatMessages.map((message) => (
+          {chatMessages.map((message, msgIdx) => (
             <div
               key={message.id}
               className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -192,6 +210,27 @@ export default function ContextualChatPanel() {
                     : 'bg-surface-100 text-surface-900'
                 }`}
               >
+                {/* Source context tag on first assistant message */}
+                {message.role === 'assistant' && msgIdx === 1 && currentHighlight && (
+                  <div className="flex flex-wrap gap-1.5 mb-2 pb-2 border-b border-surface-200/50">
+                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${sourceConfig.color}`}>
+                      {sourceConfig.icon}
+                      {sourceConfig.label}
+                    </span>
+                    {currentHighlight.rubricCriterion && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700">
+                        <Target className="w-2.5 h-2.5" />
+                        {currentHighlight.rubricCriterion}
+                      </span>
+                    )}
+                    {currentHighlight.timestamp && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700">
+                        <Clock className="w-2.5 h-2.5" />
+                        {currentHighlight.timestamp}
+                      </span>
+                    )}
+                  </div>
+                )}
                 <div className="text-sm leading-relaxed whitespace-pre-wrap">
                   {message.role === 'assistant' 
                     ? renderContentWithCitations(message.content, message.materialReferences)

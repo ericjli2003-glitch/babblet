@@ -5,6 +5,58 @@ import { getAllBatches, getBatch, deleteBatch, getBatchSubmissions, getSubmissio
 import { deleteFile, isR2Configured } from '@/lib/r2';
 import { kv } from '@vercel/kv';
 
+// ============================================
+// SUBMISSION VISIBILITY: Single source of truth
+// All submissions with a valid submission.id are counted and displayed.
+// Processing state is represented at UI level, not by filtering rows.
+// This recovery logic matches /api/bulk/status for consistency.
+// ============================================
+async function recoverBatchSubmissions(batchId: string, existingIds: Set<string>) {
+  const recovered: string[] = [];
+
+  // Try 1: Check the queue for queued submissions
+  const queueItems = await kv.lrange('submission_queue', 0, -1) as string[];
+  console.log(`[Batches] Queue has ${queueItems?.length || 0} items for recovery`);
+  
+  for (const subId of queueItems || []) {
+    if (existingIds.has(subId)) continue;
+    const sub = await getSubmission(subId as string);
+    if (sub && sub.batchId === batchId) {
+      await kv.sadd(`batch_submissions:${batchId}`, subId);
+      recovered.push(subId as string);
+      existingIds.add(subId);
+    }
+  }
+
+  // Try 2: Scan for orphaned submission keys
+  let cursor = 0;
+  let scanCount = 0;
+  const maxScans = 20; // Match status route for consistency
+
+  do {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result: [number, string[]] = await kv.scan(cursor, { match: 'submission:*', count: 100 }) as any;
+    cursor = result[0];
+    const keys = result[1];
+
+    for (const key of keys) {
+      const subId = key.replace('submission:', '');
+      if (existingIds.has(subId)) continue;
+      
+      const sub = await getSubmission(subId);
+      if (sub && sub.batchId === batchId) {
+        await kv.sadd(`batch_submissions:${batchId}`, subId);
+        recovered.push(subId);
+        existingIds.add(subId);
+      }
+    }
+
+    scanCount++;
+  } while (cursor !== 0 && scanCount < maxScans);
+
+  return recovered;
+}
+
 // GET /api/bulk/batches - List all batches
 export async function GET() {
   try {
@@ -12,30 +64,41 @@ export async function GET() {
     const hydrated = await Promise.all(
       batches.map(async (batch) => {
         // ============================================
-        // SUBMISSION IDS: Redis SET is the ONLY source of truth
-        // The batch array is a cache that can get out of sync
-        // ALWAYS merge from SET to ensure we never lose submissions
+        // SUBMISSION VISIBILITY: Single source of truth
+        // Count is based on existence of submission records, not status.
+        // This matches /api/bulk/status for consistency between pages.
         // ============================================
-        const setIds = await kv.smembers(`batch_submissions:${batch.id}`) as string[];
-        const batchIds = batch.submissionIds || [];
-        const submissionIds = Array.from(new Set([...setIds, ...batchIds]));
         
-        // Sync batch record if there's any mismatch
-        const batchNeedsSync = submissionIds.length !== batchIds.length || 
-          !submissionIds.every(id => batchIds.includes(id));
-        if (batchNeedsSync && submissionIds.length > 0) {
-          console.log(`[Batches] Syncing batch ${batch.id}: had ${batchIds.length}, SET has ${setIds.length}, merged to ${submissionIds.length}`);
-          await kv.set(`batch:${batch.id}`, {
-            ...batch,
-            submissionIds: submissionIds,
-            totalSubmissions: submissionIds.length,
-            updatedAt: Date.now(),
-          });
-        }
+        // Get raw submission IDs from the KV set
+        let submissionIds = await kv.smembers(`batch_submissions:${batch.id}`) as string[];
+        // #region agent log
+        (()=>{const d={location:'api/bulk/batches/route.ts:batches-map',message:'Batches GET per batch',data:{batchId:batch.id,batchName:batch.name,setSize:submissionIds.length,batchTotalSubmissions:batch.totalSubmissions},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'};fetch('http://127.0.0.1:7242/ingest/4d4a084e-4174-46b3-8733-338fa5664bc9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).catch(()=>{});try{const p=require('path'),fs=require('fs'),lp=p.join(process.cwd(),'.cursor','debug.log');fs.mkdirSync(p.dirname(lp),{recursive:true});fs.appendFileSync(lp,JSON.stringify(d)+'\n');}catch(_){}})();
+        // #endregion
         
         // Fetch all submissions (regardless of status)
-        const submissions = (await Promise.all(submissionIds.map(id => getSubmission(id)))).filter(Boolean);
-        const validSubmissions = submissions;
+        let submissions = (await Promise.all(submissionIds.map(id => getSubmission(id)))).filter(Boolean);
+        
+        // ALWAYS try to recover if batch claims more submissions than we found
+        // This ensures consistency with the detail page (status route)
+        if (batch.totalSubmissions > submissions.length || submissions.length === 0) {
+          console.log(`[Batches] Recovery needed for ${batch.id}. Batch claims ${batch.totalSubmissions}, found ${submissions.length}`);
+          const existingIds = new Set(submissions.map(s => s!.id));
+          const recovered = await recoverBatchSubmissions(batch.id, existingIds);
+          
+          if (recovered.length > 0) {
+            // Re-fetch to include recovered submissions
+            submissionIds = await kv.smembers(`batch_submissions:${batch.id}`) as string[];
+            submissions = (await Promise.all(submissionIds.map(id => getSubmission(id)))).filter(Boolean);
+            console.log(`[Batches] After recovery: ${submissions.length} submissions`);
+          }
+        }
+        
+        // De-duplicate in case recovery added duplicates
+        const deduped = new Map(submissions.map(s => [s!.id, s]));
+        const validSubmissions = Array.from(deduped.values()).filter(Boolean);
+        // #region agent log
+        (()=>{const d={location:'api/bulk/batches/route.ts:after-dedup',message:'Batches GET after recovery/dedup',data:{batchId:batch.id,validSubmissionsLength:validSubmissions.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'};fetch('http://127.0.0.1:7242/ingest/4d4a084e-4174-46b3-8733-338fa5664bc9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).catch(()=>{});try{const p=require('path'),fs=require('fs'),lp=p.join(process.cwd(),'.cursor','debug.log');fs.mkdirSync(p.dirname(lp),{recursive:true});fs.appendFileSync(lp,JSON.stringify(d)+'\n');}catch(_){}})();
+        // #endregion
         
         // ============================================
         // GRADING STATUS: Single source of truth
@@ -95,7 +158,9 @@ export async function GET() {
       })
     );
 
-    return NextResponse.json({ success: true, batches: hydrated });
+    return NextResponse.json({ success: true, batches: hydrated }, {
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+    });
   } catch (error) {
     console.error('[Batches] Error:', error);
     return NextResponse.json(

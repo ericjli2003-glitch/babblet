@@ -491,39 +491,41 @@ export async function POST(request: NextRequest) {
     let queueLength = await getQueueLength();
     console.log(`[ProcessNow] Initial queue length: ${queueLength}, batchId: ${batchId || 'none'}`);
 
-    // If queue is empty but batchId provided, re-queue any stuck submissions from that batch
-    if (queueLength === 0 && batchId) {
-      console.log(`[ProcessNow] Queue empty, checking for stuck submissions in batch ${batchId}`);
+    // ============================================
+    // PROCESSING CONTINUITY: Always check for stuck submissions when batchId provided
+    // Submissions in 'transcribing' or 'analyzing' may be from a previous
+    // worker that died. Reset them to 'queued' so they can be reprocessed.
+    // This runs regardless of queue length to recover from worker crashes.
+    // ============================================
+    if (batchId) {
       const submissions = await getBatchSubmissions(batchId);
       
-      // Find submissions in 'queued' state (not picked up yet)
-      const queuedSubmissions = submissions.filter(s => s.status === 'queued');
-      
-      // ============================================
-      // PROCESSING CONTINUITY: Also recover stuck submissions
-      // Submissions in 'transcribing' or 'analyzing' may be from a previous
-      // worker that died. Reset them to 'queued' so they can be reprocessed.
-      // ============================================
+      // Find stuck submissions (worker crashed during processing)
       const stuckSubmissions = submissions.filter(s => 
         s.status === 'transcribing' || s.status === 'analyzing'
       );
 
       if (stuckSubmissions.length > 0) {
-        console.log(`[ProcessNow] Found ${stuckSubmissions.length} stuck (transcribing/analyzing) submissions, resetting to queued`);
+        console.log(`[ProcessNow] Found ${stuckSubmissions.length} stuck submissions, resetting to queued`);
         for (const sub of stuckSubmissions) {
           await updateSubmission(sub.id, { status: 'queued' });
           await requeue(sub.id);
         }
+        // Refresh queue length after recovery
+        queueLength = await getQueueLength();
       }
 
-      if (queuedSubmissions.length > 0) {
-        console.log(`[ProcessNow] Found ${queuedSubmissions.length} queued submissions, re-queuing`);
-        for (const sub of queuedSubmissions) {
-          await requeue(sub.id);
+      // Also check for 'queued' submissions not in the actual queue (edge case)
+      if (queueLength === 0) {
+        const queuedSubmissions = submissions.filter(s => s.status === 'queued');
+        if (queuedSubmissions.length > 0) {
+          console.log(`[ProcessNow] Queue empty but ${queuedSubmissions.length} submissions in queued state, re-adding to queue`);
+          for (const sub of queuedSubmissions) {
+            await requeue(sub.id);
+          }
+          queueLength = queuedSubmissions.length;
         }
       }
-      
-      queueLength = queuedSubmissions.length + stuckSubmissions.length;
     }
 
     if (queueLength === 0) {
