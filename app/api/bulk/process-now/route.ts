@@ -57,24 +57,26 @@ async function transcribeFromUrl(url: string): Promise<{
 
   if (error) throw new Error(`Deepgram error: ${error.message}`);
 
+  // Log the full result structure for debugging
+  console.log(`[Deepgram] Result keys: ${result ? Object.keys(result).join(', ') : 'null'}`);
+  console.log(`[Deepgram] Metadata: ${JSON.stringify(result?.metadata || {}).slice(0, 500)}`);
+
   const channel = result?.results?.channels?.[0];
   const alternative = channel?.alternatives?.[0];
   
-  // Extract duration from Deepgram - try multiple locations
-  // 1. metadata.duration (standard location)
-  // 2. Calculate from last word's end time
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const metadata = result?.metadata as any;
-  let durationSeconds: number = metadata?.duration || 0;
+  // Extract duration from Deepgram metadata (it's definitely there according to SDK types)
+  let durationSeconds: number = result?.metadata?.duration || 0;
+  
+  console.log(`[Deepgram] metadata.duration = ${result?.metadata?.duration}, type = ${typeof result?.metadata?.duration}`);
   
   // Fallback: calculate from last word if metadata doesn't have duration
   if (!durationSeconds && alternative?.words && alternative.words.length > 0) {
     const lastWord = alternative.words[alternative.words.length - 1];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    durationSeconds = (lastWord as any)?.end || 0;
+    durationSeconds = lastWord?.end || 0;
+    console.log(`[Deepgram] Fallback to lastWord.end: ${durationSeconds}s`);
   }
   
-  console.log(`[Deepgram] Duration extracted: ${durationSeconds}s`);
+  console.log(`[Deepgram] Final duration: ${durationSeconds}s`);
   
   if (!alternative) return { transcript: '', segments: [], durationSeconds };
 
