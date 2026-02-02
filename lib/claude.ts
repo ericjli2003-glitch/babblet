@@ -1094,10 +1094,17 @@ INSTRUCTOR-PROVIDED RUBRIC (AUTHORITATIVE - follow this exactly):
 ${customRubric}
 
 You MUST:
-1. Extract the rubric into discrete criteria with their defined scoring levels
-2. Score each criterion using ONLY the scale defined in the rubric
-3. Never add criteria not present in the rubric
-4. Never score outside the rubric's defined bounds`;
+1. Extract ALL criteria from the rubric above
+2. Score each criterion based on THIS SPECIFIC TRANSCRIPT'S performance
+3. Use ONLY the scoring scale defined in the rubric (e.g., if rubric says 0-20 points, use that range)
+4. ACTUALLY EVALUATE the content - different students will perform differently
+5. If the student MEETS the rubric requirements well → score toward the HIGH end
+6. If the student PARTIALLY meets requirements → score in the MIDDLE range
+7. If the student MISSES key requirements → score toward the LOW end
+8. Never add criteria not in the rubric
+9. Never give the same score to different submissions - scores should reflect actual performance differences
+
+CRITICAL: Read the transcript and score what you actually see. Don't use template scores.`;
   } else if (customCriteria && customCriteria.length > 0) {
     rubricContext = `
 STRUCTURED EVALUATION CRITERIA (AUTHORITATIVE):
@@ -1152,10 +1159,16 @@ ${guidanceContext}
 EVALUATION RULES:
 1. The rubric is the SOLE source of truth for criteria and scoring
 2. Ground EVERY piece of feedback in specific transcript quotes
-3. Write feedback as you would to your own student
-4. Be specific about what was done well AND what to improve
-5. Explain WHY something is a strength or weakness
-6. Suggest concrete next steps for improvement`;
+3. CRITICAL: Each student's score should VARY based on their actual performance - don't give similar scores to different presentations
+4. ACTUALLY READ the transcript carefully and score what you see, not a template response
+5. If a student does something well → HIGH score for that criterion
+6. If a student misses expectations → LOW score for that criterion
+7. Write feedback as you would to your own student
+8. Be specific about what was done well AND what to improve
+9. Explain WHY something is a strength or weakness with evidence from the transcript
+10. Suggest concrete next steps for improvement
+
+CRITICAL: Different transcripts show different levels of performance. Your scores MUST reflect these differences.`;
 
   const analysisContext = analysis ? `
 PRIOR ANALYSIS (for reference):
@@ -1163,13 +1176,18 @@ PRIOR ANALYSIS (for reference):
 - Logical Gaps: ${analysis.logicalGaps.map(g => g.description).slice(0, 3).join('; ')}
 - Missing Evidence: ${analysis.missingEvidence.map(e => e.description).slice(0, 3).join('; ')}` : '';
 
-  const userPrompt = `Evaluate this student presentation:
+  const userPrompt = `Evaluate this SPECIFIC student presentation based on what they ACTUALLY said:
 
-TRANSCRIPT:
+IMPORTANT: This is ONE student's work. Score it based on THIS transcript's quality, not a generic template.
+- If they demonstrate strong understanding → give HIGH scores
+- If they miss key concepts or lack depth → give LOW scores  
+- Different students will have DIFFERENT scores - that's expected and correct
+
+STUDENT'S ACTUAL TRANSCRIPT:
 ${transcript.slice(0, config.api.maxTranscriptForQuestions)}
 ${analysisContext}
 
-Provide your evaluation following the rubric exactly. Be specific and instructional.
+Read the transcript carefully. Evaluate what THIS student actually demonstrated. Be honest about strengths AND weaknesses.
 
 JSON format:
 {

@@ -85,7 +85,7 @@ export const config = {
         /** Max tokens for verification */
         verificationMaxTokens: 1200,
         /** Max tokens for evaluation/rubric */
-        evaluationMaxTokens: 1000,
+        evaluationMaxTokens: 4000,
         /** Max tokens for summary */
         summaryMaxTokens: 500,
         /** Max transcript length to send to LLM */
