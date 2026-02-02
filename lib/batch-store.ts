@@ -50,6 +50,7 @@ export interface Submission {
   errorMessage?: string;
   // Results (populated after processing)
   transcript?: string;
+  duration?: number; // Video duration in seconds
   transcriptSegments?: Array<{
     id: string;
     text: string;
