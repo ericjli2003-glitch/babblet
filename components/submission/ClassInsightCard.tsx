@@ -275,7 +275,11 @@ export default function ClassInsightCard({
     };
     
     const stripCitations = (text: string): string => {
-      return text.replace(/\b[AB]\b(?=\s|$)/gi, '').replace(/\[[AB]\]|\{[AB]\}/gi, '').trim();
+      return text
+        .replace(/\b[AB]\b(?=\s|$)/gi, '')
+        .replace(/\[[AB]\]|\{[AB]\}/gi, '')
+        .replace(/\s*\([AB]\)\s*/gi, ' ')  // remove (A) and (B) from response text
+        .trim();
     };
     
     const renderText = (text: string) => {
@@ -389,9 +393,10 @@ export default function ClassInsightCard({
       );
     };
     
-    // Ref counter: [1], [2], [3] for video clips; next number for course/rubric (no [1][1][1])
+    // Ref counter: [1], [2], [3] for video clips; course ref reuses same number when same source
     let refCounter = 0;
     const nextRefNum = () => { refCounter += 1; return refCounter; };
+    let courseRefDisplayNum: number | undefined; // same number for same class content ref
 
     // B = course/rubric ref: short explanation + link to source doc
     const renderCourseRef = (displayNum: number, _letter: string, key: string) => {
@@ -437,7 +442,10 @@ export default function ClassInsightCard({
         const num = nextRefNum();
         return renderVideoRef(ref, key, num);
       }
-      if (letter === 'B' && courseRefB) return renderCourseRef(nextRefNum(), 'B', key);
+      if (letter === 'B' && courseRefB) {
+        if (courseRefDisplayNum === undefined) courseRefDisplayNum = nextRefNum();
+        return renderCourseRef(courseRefDisplayNum, 'B', key);
+      }
       return null;
     };
     
@@ -466,14 +474,20 @@ export default function ClassInsightCard({
           if (isBullet) {
             const thisBulletIdx = bulletIndex - 1; // 0-based for first bullet
             const bulletRef = getVideoRefForBullet(thisBulletIdx);
-            // Clean the line - remove any trailing A, B markers
+            const hasVideo = refLetters.some((l) => l === 'A');
+            const hasCourse = refLetters.some((l) => l === 'B');
+            // Clean the line - remove any trailing A, B markers and (A) (B)
             const cleanLine = line.slice(2).replace(/\s*[AB]\s*$/g, '').trim();
             return (
               <p key={i} className="text-surface-700">
                 <span>• {renderText(cleanLine)}</span>
                 {refLetters.map((l, idx) => renderRefButton(l, `${i}-${idx}`, thisBulletIdx, idx))}
-                {refLetters.length === 0 && bulletRef && renderVideoRef(bulletRef, `${i}-v`, nextRefNum())}
-                {refLetters.length === 0 && courseRefB && renderCourseRef(nextRefNum(), 'B', `${i}-c`)}
+                {/* Ensure each bullet has both video and course citation when available */}
+                {!hasVideo && bulletRef && renderVideoRef(bulletRef, `${i}-v`, nextRefNum())}
+                {!hasCourse && courseRefB && (() => {
+                  if (courseRefDisplayNum === undefined) courseRefDisplayNum = nextRefNum();
+                  return renderCourseRef(courseRefDisplayNum, 'B', `${i}-c`);
+                })()}
               </p>
             );
           }

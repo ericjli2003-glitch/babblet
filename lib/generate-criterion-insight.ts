@@ -132,7 +132,8 @@ VARIATION: ${variation.intro}. ${variation.struct}.
 - Avoid repetitive "The student..." - mix in "What works here...", "One strength...", "A gap..."
 - Quote the transcript directly when relevant
 - Reference the FULL presentation: use moments from the beginning, middle, AND end of the transcript when they fit (not just the start)
-- End each bullet with A (video moment) or B (rubric/course reference). Pick the moment that best supports that bullet—order does not need to be chronological`;
+- End each bullet with A (video moment) and B (rubric/course reference) when possible—one citation from the video and one from class content per bullet. Pick the moment that best supports that bullet; order does not need to be chronological.
+- Do not write (A) or (B) in parentheses. Use only the letters A and B at the end of bullets, e.g. "…quote… A B"`;
 
   const userMessage = `Analyze "${criterionTitle}" for this student presentation.
 
@@ -147,16 +148,16 @@ Provide:
 **Overview** (2-3 sentences, ${variation.intro.toLowerCase()})
 
 **What worked well:**
-- [Specific strength with quote] A
-- [Another strength] B
+- [Specific strength with quote] A B
+- [Another strength] A B
 
 **Areas to develop:**
-- [Specific gap] A
-- [Rubric expectation missing] B
+- [Specific gap] A B
+- [Rubric expectation missing] A B
 
 **Example of excellence:** One sentence.
 
-RULES: End each bullet with A or B. Be specific. Vary phrasing. No generic feedback.`;
+RULES: End each bullet with A B (video moment + rubric/course ref). Do not use (A) or (B)—only the letters A and B. Be specific. Vary phrasing. No generic feedback.`;
 
   const client = getClient();
   const response = await client.messages.create({
