@@ -655,7 +655,7 @@ export default function ClassInsightCard({
                             setBranchQuery(q);
                             setShowBranchInput(true);
                             // Mark this question as used so it rotates out
-                            setUsedQuestions(prev => new Set([...prev, q]));
+                            setUsedQuestions(prev => new Set([...Array.from(prev), q]));
                           }}
                           className="text-[11px] px-2 py-1 rounded-md bg-primary-50 text-primary-700 hover:bg-primary-100 border border-primary-200 transition-colors text-left"
                         >
