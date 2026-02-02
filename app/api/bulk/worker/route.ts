@@ -36,6 +36,7 @@ function getDeepgram() {
 async function transcribeFromUrl(url: string): Promise<{
   transcript: string;
   segments: Array<{ id: string; text: string; timestamp: number; speaker?: string }>;
+  durationSeconds: number;
 }> {
   const deepgram = getDeepgram();
   
@@ -59,8 +60,15 @@ async function transcribeFromUrl(url: string): Promise<{
   const channel = result?.results?.channels?.[0];
   const alternative = channel?.alternatives?.[0];
   
+  // Video duration from Deepgram metadata (seconds)
+  let durationSeconds: number = result?.metadata?.duration || 0;
+  if (!durationSeconds && alternative?.words?.length) {
+    const lastWord = alternative.words[alternative.words.length - 1];
+    durationSeconds = lastWord?.end || 0;
+  }
+  
   if (!alternative) {
-    return { transcript: '', segments: [] };
+    return { transcript: '', segments: [], durationSeconds };
   }
 
   const transcript = alternative.transcript || '';
@@ -95,7 +103,13 @@ async function transcribeFromUrl(url: string): Promise<{
     }
   }
 
-  return { transcript, segments };
+  // Fallback: estimate duration from last segment
+  if (!durationSeconds && segments.length > 0) {
+    const last = segments[segments.length - 1];
+    durationSeconds = last.timestamp / 1000 + 5;
+  }
+
+  return { transcript, segments, durationSeconds };
 }
 
 async function processSubmission(submissionId: string, batchId: string): Promise<void> {
@@ -121,17 +135,18 @@ async function processSubmission(submissionId: string, batchId: string): Promise
     // Transcribe using URL
     console.log(`[Worker] Transcribing ${submissionId}...`);
     const transcribeStart = Date.now();
-    const { transcript, segments } = await transcribeFromUrl(downloadUrl);
-    console.log(`[Worker] Transcription complete for ${submissionId} in ${Date.now() - transcribeStart}ms`);
+    const { transcript, segments, durationSeconds } = await transcribeFromUrl(downloadUrl);
+    console.log(`[Worker] Transcription complete for ${submissionId} in ${Date.now() - transcribeStart}ms, duration=${durationSeconds}s`);
 
     if (!transcript || transcript.trim().length < 10) {
       throw new Error('Transcription returned empty or too short');
     }
 
-    // Update with transcript
+    // Update with transcript and video duration
     await updateSubmission(submissionId, {
       transcript,
       transcriptSegments: segments,
+      duration: durationSeconds,
       status: 'analyzing',
     });
 
