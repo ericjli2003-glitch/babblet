@@ -30,8 +30,8 @@ interface ClassInsightCardProps {
   onRequestMoreInsights?: (criterionTitle: string) => Promise<string>;
   /** Transcript segments for A, B video refs (student submission) */
   citationSegments?: Array<{ timestamp: string | number; text: string }>;
-  /** Course/rubric references for A, B */
-  courseReferences?: Array<{ id: string; title: string; excerpt: string; type: 'course' | 'rubric'; explanation?: string }>;
+  /** Course/rubric references: short explanation + optional link to source doc */
+  courseReferences?: Array<{ id: string; title: string; excerpt?: string; type: 'course' | 'rubric'; explanation?: string; documentUrl?: string }>;
   /** Video URL for preview in reference popover */
   videoUrl?: string | null;
   /** Index of criterion (0,1,2,3...) to pick different video segments for each criterion */
@@ -160,18 +160,17 @@ export default function ClassInsightCard({
     return refs;
   }, [citationSegments, evidence]);
   
-  // B = course/rubric ref — format: "This part of [source] aligns with the insight because: [why]"
+  // B = course/rubric ref — short explanation only; link to source doc if provided
   const courseRefB = useMemo(() => {
     const ref = courseReferences?.[0];
     if (!ref) return null;
-    const sourceLabel = ref.type === 'rubric' ? 'the rubric' : 'course material';
-    const why = ref.explanation?.trim() || `This ${ref.type} expectation applies to this criterion.`;
+    const explanation = ref.explanation?.trim() || (ref.type === 'rubric' ? 'This rubric criterion applies to the insight above.' : 'This course material relates to the insight.');
     return {
       id: 'B' as const,
       title: ref.title,
-      excerpt: ref.excerpt.slice(0, 120) + (ref.excerpt.length > 120 ? '...' : ''),
       type: ref.type,
-      explanation: `This part of ${sourceLabel} aligns with the insight because: ${why}`,
+      explanation,
+      documentUrl: ref.documentUrl,
     };
   }, [courseReferences]);
   
@@ -298,7 +297,7 @@ export default function ClassInsightCard({
     const getVideoRefForBullet = (bulletIdx: number) =>
       videoRefsByBullet[bulletIdx] ?? videoRefsByBullet[videoRefsByBullet.length - 1] ?? null;
 
-    const renderVideoRef = (ref: { id: 'A'; timestamp: string; timeMs: number; text: string; explanation: string } | null, key: string) => {
+    const renderVideoRef = (ref: { id: 'A'; timestamp: string; timeMs: number; text: string; explanation: string } | null, key: string, displayNum: number) => {
       if (!ref) return null;
       const isOpen = openRef === `v-A-${key}`;
       const clipStart = ref.timeMs / 1000;
@@ -316,7 +315,7 @@ export default function ClassInsightCard({
             className="text-[11px] font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors"
             title={`Student video @ ${ref.timestamp}`}
           >
-            [1]
+            [{displayNum}]
           </button>
           {isOpen && (
             <>
@@ -380,8 +379,12 @@ export default function ClassInsightCard({
       );
     };
     
-    // B = course ref: popover with excerpt + explanation
-    const renderCourseRef = (_letter: string, key: string) => {
+    // Ref counter: [1], [2], [3] for video clips; next number for course/rubric (no [1][1][1])
+    let refCounter = 0;
+    const nextRefNum = () => { refCounter += 1; return refCounter; };
+
+    // B = course/rubric ref: short explanation + link to source doc
+    const renderCourseRef = (displayNum: number, _letter: string, key: string) => {
       const ref = courseRefB;
       if (!ref) return null;
       const isOpen = openRef === `c-B-${key}`;
@@ -392,15 +395,24 @@ export default function ClassInsightCard({
             className="text-[11px] font-medium text-orange-600 hover:text-orange-800 hover:underline transition-colors"
             title={`${ref.type === 'rubric' ? 'Rubric' : 'Course'} reference`}
           >
-            [2]
+            [{displayNum}]
           </button>
           {isOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setOpenRef(null)} aria-hidden="true" />
-              <div className="absolute left-0 top-full mt-1 z-50 w-80 rounded-lg border border-surface-200 bg-white shadow-lg p-3">
-                <p className="text-xs font-semibold text-surface-900 mb-1">{ref.type === 'rubric' ? 'Rubric' : 'Course'}: {ref.title}</p>
-                <p className="text-xs text-surface-600 mb-2">&quot;{ref.excerpt}&quot;</p>
-                <p className="text-xs text-surface-500">{ref.explanation}</p>
+              <div className="absolute left-0 top-full mt-1 z-50 w-72 rounded-lg border border-surface-200 bg-white shadow-lg p-3">
+                <p className="text-xs font-semibold text-surface-900 mb-1.5">{ref.type === 'rubric' ? 'Rubric' : 'Course'}: {ref.title}</p>
+                <p className="text-xs text-surface-600 mb-2">{ref.explanation}</p>
+                {ref.documentUrl && (
+                  <a
+                    href={ref.documentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 rounded border border-primary-200"
+                  >
+                    <ExternalLink className="w-3 h-3" /> View source
+                  </a>
+                )}
               </div>
             </>
           )}
@@ -410,11 +422,12 @@ export default function ClassInsightCard({
     
     const renderRefButton = (letter: string, key: string, bulletIdx?: number, refIndexWithinLine?: number) => {
       if (letter === 'A') {
-        // Each [1] within a line gets a different segment (bulletIdx * 3 + refIndex to spread them out)
         const globalRefIdx = (bulletIdx ?? 0) * 3 + (refIndexWithinLine ?? 0);
-        return renderVideoRef(getVideoRefForBullet(globalRefIdx), key);
+        const ref = getVideoRefForBullet(globalRefIdx);
+        const num = nextRefNum();
+        return renderVideoRef(ref, key, num);
       }
-      if (letter === 'B' && courseRefB) return renderCourseRef('B', key);
+      if (letter === 'B' && courseRefB) return renderCourseRef(nextRefNum(), 'B', key);
       return null;
     };
     
@@ -449,8 +462,8 @@ export default function ClassInsightCard({
               <p key={i} className="text-surface-700">
                 <span>• {renderText(cleanLine)}</span>
                 {refLetters.map((l, idx) => renderRefButton(l, `${i}-${idx}`, thisBulletIdx, idx))}
-                {refLetters.length === 0 && bulletRef && renderVideoRef(bulletRef, `${i}-v`)}
-                {refLetters.length === 0 && courseRefB && renderCourseRef('B', `${i}-c`)}
+                {refLetters.length === 0 && bulletRef && renderVideoRef(bulletRef, `${i}-v`, nextRefNum())}
+                {refLetters.length === 0 && courseRefB && renderCourseRef(nextRefNum(), 'B', `${i}-c`)}
               </p>
             );
           }

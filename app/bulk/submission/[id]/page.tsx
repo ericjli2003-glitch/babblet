@@ -221,6 +221,7 @@ export default function SubmissionDetailPage() {
     count: number;
   } | null>(null);
   const [criterionInsights, setCriterionInsights] = useState<Record<string, string>>({});
+  const [courseDocuments, setCourseDocuments] = useState<Array<{ id: string; name: string; type: string }>>([]);
   const [alignmentMoreInsights, setAlignmentMoreInsights] = useState<string | null>(null);
   const [keyMoreInsights, setKeyMoreInsights] = useState<string | null>(null);
   const [verificationMoreInsights, setVerificationMoreInsights] = useState<string | null>(null);
@@ -270,6 +271,16 @@ export default function SubmissionDetailPage() {
                       pausesPerMinAvg: stats.pausesPerMinAvg ?? null,
                       count: stats.count,
                     });
+                  }
+                })
+                .catch(() => {});
+            }
+            if (batchData.batch?.courseId) {
+              fetch(`/api/context/documents?courseId=${batchData.batch.courseId}`)
+                .then((r) => r.json())
+                .then((docData) => {
+                  if (docData.documents?.length) {
+                    setCourseDocuments(docData.documents.map((d: { id: string; name: string; type: string }) => ({ id: d.id, name: d.name, type: d.type })));
                   }
                 })
                 .catch(() => {});
@@ -1287,9 +1298,35 @@ RULES:
                                 </div>
                                 <p className="text-xs text-surface-600 leading-relaxed">{c.feedback || c.rationale || 'See rubric for details.'}</p>
                                 {batchInfo?.courseId && (
-                                  <div className="mt-2 pt-2 border-t border-surface-100">
-                                    <p className="text-[10px] text-primary-600 mb-1">📚 Referenced: Course Materials</p>
-                                    <p className="text-[9px] text-surface-500">Based on uploaded {batchInfo.courseName || 'course'} content</p>
+                                  <div className="mt-2 pt-2 border-t border-surface-100 relative group">
+                                    <p className="text-[10px] text-primary-600 mb-1 cursor-help">📚 Course Materials</p>
+                                    {/* Hover popover: show materials + link to source */}
+                                    <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-50 w-72 rounded-lg border border-surface-200 bg-white shadow-lg p-3">
+                                      <p className="text-xs font-semibold text-surface-900 mb-2">Referenced materials</p>
+                                      {courseDocuments.length > 0 ? (
+                                        <ul className="space-y-1.5 mb-3 max-h-32 overflow-y-auto">
+                                          {courseDocuments.slice(0, 8).map((doc) => (
+                                            <li key={doc.id} className="text-[11px] text-surface-700">
+                                              {doc.name}
+                                              <span className="text-surface-400 ml-1">({doc.type.replace('_', ' ')})</span>
+                                            </li>
+                                          ))}
+                                          {courseDocuments.length > 8 && (
+                                            <li className="text-[10px] text-surface-500">+{courseDocuments.length - 8} more</li>
+                                          )}
+                                        </ul>
+                                      ) : (
+                                        <p className="text-[11px] text-surface-500 mb-3">Based on uploaded {batchInfo.courseName || 'course'} content</p>
+                                      )}
+                                      <Link
+                                        href={`/courses/${batchInfo.courseId}/content`}
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 rounded border border-primary-200 transition-colors"
+                                      >
+                                        <BookOpen className="w-3.5 h-3.5" />
+                                        View course materials
+                                      </Link>
+                                    </div>
+                                    <p className="text-[9px] text-surface-500">Hover to see materials · Click link to open</p>
                                   </div>
                                 )}
                               </div>
@@ -1810,8 +1847,8 @@ RULES:
                                     initialInsights={criterionInsights[c.criterion] || null}
                                     citationSegments={sortedSegments.map(seg => ({ timestamp: normalizeTimestamp(seg.timestamp), text: seg.text }))}
                                     courseReferences={[
-                                      // B = rubric for THIS criterion — excerpt = this part of source; explanation = why it aligns
-                                      { id: 'B', title: c.criterion, excerpt: (c.feedback || c.rationale || 'Rubric criterion').slice(0, 200), type: 'rubric' as const, explanation: (c.rationale || c.feedback || `This criterion applies to the insight above.`).slice(0, 200) },
+                                      // Short explanation + link to course materials
+                                      { id: 'B', title: c.criterion, type: 'rubric' as const, explanation: (c.rationale || c.feedback || `This rubric criterion applies to the insight above.`).slice(0, 150), documentUrl: batchInfo?.courseId ? `/courses/${batchInfo.courseId}/content` : undefined },
                                     ]}
                                     videoUrl={videoUrl}
                                     criterionIndex={selectedCriterionIndex}
