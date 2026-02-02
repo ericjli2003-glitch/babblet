@@ -131,15 +131,16 @@ VARIATION: ${variation.intro}. ${variation.struct}.
 - Use different transition words (Moreover, Notably, In contrast, Specifically)
 - Avoid repetitive "The student..." - mix in "What works here...", "One strength...", "A gap..."
 - Quote the transcript directly when relevant
-- End each bullet with A (video moment) or B (rubric/course reference)`;
+- Reference the FULL presentation: use moments from the beginning, middle, AND end of the transcript when they fit (not just the start)
+- End each bullet with A (video moment) or B (rubric/course reference). Pick the moment that best supports that bullet—order does not need to be chronological`;
 
   const userMessage = `Analyze "${criterionTitle}" for this student presentation.
 
 SCORE CONTEXT: ${criterionInfo}
 FOCUS: ${expectationsForCriterion}
 
-TRANSCRIPT (quote specific moments):
-${fullTranscript.slice(0, 12000)}${fullTranscript.length > 12000 ? '...' : ''}
+TRANSCRIPT (quote specific moments from beginning, middle, and end):
+${fullTranscript.slice(0, 16000)}${fullTranscript.length > 16000 ? '...' : ''}
 ${courseContext}
 
 Provide:

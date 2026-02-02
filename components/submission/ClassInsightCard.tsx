@@ -123,15 +123,20 @@ export default function ClassInsightCard({
   const StatusIcon = config.icon;
   const autoFetchedRef = useRef(false);
   
-  // A = video refs - ONE UNIQUE segment per bullet, spread evenly across entire video (no repeat)
+  // A = video refs — cover full video (including end), non-sequential so refs feel "wherever best" not in order
+  // Build segment indices by interleaving from both ends (0, n-1, 1, n-2, ...) so we hit start and end and vary order
   const videoRefsByBullet = useMemo(() => {
     const refs: Array<{ id: 'A'; timestamp: string; timeMs: number; text: string; explanation: string }> = [];
     if (citationSegments && citationSegments.length > 0) {
       const numSegments = citationSegments.length;
-      for (let bulletIdx = 0; bulletIdx < 24; bulletIdx++) {
-        const segmentIndex = numSegments <= 1
-          ? 0
-          : Math.min(Math.round((bulletIdx / 23) * (numSegments - 1)), numSegments - 1);
+      // Interleaved indices: [0, last, 1, last-1, 2, ...] so we definitely include start and end, and order is mixed
+      const interleaved: number[] = [];
+      for (let i = 0; i < numSegments; i++) {
+        if (i % 2 === 0) interleaved.push(Math.floor(i / 2));
+        else interleaved.push(numSegments - 1 - Math.floor(i / 2));
+      }
+      for (let slot = 0; slot < 24; slot++) {
+        const segmentIndex = interleaved[slot % interleaved.length];
         const seg = citationSegments[segmentIndex];
         const timeMs = typeof seg.timestamp === 'number' ? seg.timestamp : parseTimestamp(String(seg.timestamp));
         const timestamp = typeof seg.timestamp === 'string' ? seg.timestamp : (timeMs >= 0 ? `${Math.floor(timeMs / 60000)}:${String(Math.floor((timeMs % 60000) / 1000)).padStart(2, '0')}` : '0:00');
@@ -145,8 +150,13 @@ export default function ClassInsightCard({
       }
     } else if (evidence && evidence.length > 0) {
       const numEvidence = evidence.length;
-      for (let bulletIdx = 0; bulletIdx < 24; bulletIdx++) {
-        const idx = numEvidence <= 1 ? 0 : Math.min(Math.round((bulletIdx / 23) * (numEvidence - 1)), numEvidence - 1);
+      const interleaved: number[] = [];
+      for (let i = 0; i < numEvidence; i++) {
+        if (i % 2 === 0) interleaved.push(Math.floor(i / 2));
+        else interleaved.push(numEvidence - 1 - Math.floor(i / 2));
+      }
+      for (let slot = 0; slot < 24; slot++) {
+        const idx = interleaved[slot % interleaved.length];
         const e = evidence[idx];
         refs.push({
           id: 'A' as const,
