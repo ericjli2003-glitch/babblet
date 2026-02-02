@@ -478,16 +478,20 @@ export default function ClassInsightCard({
             const hasCourse = refLetters.some((l) => l === 'B');
             // Clean the line - remove any trailing A, B markers and (A) (B)
             const cleanLine = line.slice(2).replace(/\s*[AB]\s*$/g, '').trim();
+            const refNodes = [
+              ...refLetters.map((l, idx) => renderRefButton(l, `${i}-${idx}`, thisBulletIdx, idx)),
+              !hasVideo && bulletRef && renderVideoRef(bulletRef, `${i}-v`, nextRefNum()),
+              !hasCourse && courseRefB && (() => {
+                if (courseRefDisplayNum === undefined) courseRefDisplayNum = nextRefNum();
+                return renderCourseRef(courseRefDisplayNum, 'B', `${i}-c`);
+              })(),
+            ].filter(Boolean);
             return (
               <p key={i} className="text-surface-700">
-                <span>• {renderText(cleanLine)}</span>
-                {refLetters.map((l, idx) => renderRefButton(l, `${i}-${idx}`, thisBulletIdx, idx))}
-                {/* Ensure each bullet has both video and course citation when available */}
-                {!hasVideo && bulletRef && renderVideoRef(bulletRef, `${i}-v`, nextRefNum())}
-                {!hasCourse && courseRefB && (() => {
-                  if (courseRefDisplayNum === undefined) courseRefDisplayNum = nextRefNum();
-                  return renderCourseRef(courseRefDisplayNum, 'B', `${i}-c`);
-                })()}
+                <span>• {renderText(cleanLine)}{refNodes.length > 0 ? '\u00A0' : null}</span>
+                <span className="whitespace-nowrap inline-flex items-center gap-x-0.5 align-baseline">
+                  {refNodes}
+                </span>
               </p>
             );
           }
