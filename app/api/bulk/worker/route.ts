@@ -184,6 +184,22 @@ async function processSubmission(submissionId: string, batchId: string): Promise
       const analysis = await analyzeWithClaude(transcript, presentationContext || undefined);
       console.log(`[Worker] Analysis complete for ${submissionId} in ${Date.now() - analyzeStart}ms`);
       
+      // Compute speech metrics from transcript
+      const words = transcript.split(/\s+/).filter(w => w.length > 0);
+      const fillerWords = ['um', 'uh', 'like', 'you know', 'so', 'actually', 'basically', 'literally', 'just', 'really'];
+      const fillerWordCount = words.filter(w => fillerWords.includes(w.toLowerCase().replace(/[.,!?;:]/g, ''))).length;
+      const durationMinutes = (durationSeconds || 180) / 60;
+      const speakingRateWpm = durationMinutes > 0 ? Math.round(words.length / durationMinutes) : 0;
+      const pauseCount = (transcript.match(/\.\s+[A-Z]/g) || []).length + (transcript.match(/\n/g) || []).length;
+      const pauseFrequency = durationMinutes > 0 ? Math.round((pauseCount / durationMinutes) * 10) / 10 : 0;
+      
+      const speechMetrics = {
+        fillerWordCount,
+        speakingRateWpm,
+        pauseFrequency,
+        wordCount: words.length,
+      };
+      
       // 2. Run rubric eval, questions, and verification in PARALLEL
       const claims = analysis.keyClaims.slice(0, config.limits.maxClaimsForVerification).map(c => c.claim);
       
@@ -235,6 +251,7 @@ async function processSubmission(submissionId: string, batchId: string): Promise
             description: e.description,
           })),
           overallStrength: analysis.overallStrength,
+          speechMetrics,
         },
         rubricEvaluation: {
           overallScore: rubricEvaluation.overallScore,

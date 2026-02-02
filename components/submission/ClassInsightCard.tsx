@@ -408,8 +408,12 @@ export default function ClassInsightCard({
       );
     };
     
-    const renderRefButton = (letter: string, key: string, bulletIdx?: number) => {
-      if (letter === 'A') return renderVideoRef(bulletIdx !== undefined ? getVideoRefForBullet(bulletIdx) : getVideoRefForBullet(0), key);
+    const renderRefButton = (letter: string, key: string, bulletIdx?: number, refIndexWithinLine?: number) => {
+      if (letter === 'A') {
+        // Each [1] within a line gets a different segment (bulletIdx * 3 + refIndex to spread them out)
+        const globalRefIdx = (bulletIdx ?? 0) * 3 + (refIndexWithinLine ?? 0);
+        return renderVideoRef(getVideoRefForBullet(globalRefIdx), key);
+      }
       if (letter === 'B' && courseRefB) return renderCourseRef('B', key);
       return null;
     };
@@ -442,17 +446,11 @@ export default function ClassInsightCard({
             // Clean the line - remove any trailing A, B markers
             const cleanLine = line.slice(2).replace(/\s*[AB]\s*$/g, '').trim();
             return (
-              <p key={i} className="text-surface-700 pl-4">
+              <p key={i} className="text-surface-700">
                 <span>• {renderText(cleanLine)}</span>
-                {' '}
-                {refLetters.map((l, idx) => renderRefButton(l, `${i}-${idx}`, thisBulletIdx))}
-                {refLetters.length === 0 && (
-                  <>
-                    {bulletRef && renderVideoRef(bulletRef, `${i}-v`)}
-                    {' '}
-                    {courseRefB && renderCourseRef('B', `${i}-c`)}
-                  </>
-                )}
+                {refLetters.map((l, idx) => renderRefButton(l, `${i}-${idx}`, thisBulletIdx, idx))}
+                {refLetters.length === 0 && bulletRef && renderVideoRef(bulletRef, `${i}-v`)}
+                {refLetters.length === 0 && courseRefB && renderCourseRef('B', `${i}-c`)}
               </p>
             );
           }

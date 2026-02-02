@@ -59,15 +59,19 @@ function buildSystemPrompt(context: ChatContext, courseMaterials?: Array<{ name:
     ``,
     ...(isFollowUp 
       ? [
-        `FOLLOW-UP CONVERSATION:`,
-        `- The instructor is asking a SPECIFIC question - answer ONLY that question`,
-        `- DO NOT repeat the format of your previous response (no "What worked well", "Areas to develop" structure)`,
-        `- Write a direct, conversational answer as if you're chatting in office hours`,
-        `- Focus narrowly on what they asked - don't give a full analysis again`,
-        `- If they ask about a specific moment, quote it and discuss just that`,
-        `- If they ask for suggestions, give concrete actionable ideas (not generic advice)`,
-        `- Keep it SHORT and SPECIFIC - 2-4 sentences is often enough`,
-        `- Start with your direct answer, not with pleasantries`,
+        `CRITICAL - FOLLOW-UP QUESTION:`,
+        `The instructor's EXACT question is: "${context.highlightedText || 'see user message'}"`,
+        ``,
+        `YOUR RESPONSE REQUIREMENTS:`,
+        `- Answer ONLY this specific question - nothing else`,
+        `- DO NOT give the standard "What worked well / Areas to develop" format`,
+        `- DO NOT repeat your previous analysis structure`,
+        `- Read the question carefully and address exactly what they're asking for`,
+        `- If they ask "how", give actionable steps`,
+        `- If they ask "which", point to specific criterion/material`,
+        `- If they ask "what would X look like", give a concrete example`,
+        `- Quote the transcript to support your answer`,
+        `- Keep it conversational and direct - 2-5 sentences`,
         ``,
         ]
       : isRubricInsight 

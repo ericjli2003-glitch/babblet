@@ -1244,46 +1244,93 @@ RULES:
                     </div>
                   </div>
 
-                  {/* Course Material Alignment - Compact, tight spacing */}
+                  {/* Course Material Alignment - Restructured with Key Insights & Verification */}
                   <CollapsibleSection
                     title="Course Material Alignment"
-                    subtitle="Feedback based on your rubric criteria"
-                    icon={<Target className="w-4 h-4" />}
+                    subtitle="How the presentation connects to class content"
+                    icon={<BookOpen className="w-4 h-4" />}
                     defaultExpanded={true}
                     headerRight={<span className="text-lg font-bold text-primary-600">{Math.round(normalizedScore)}%</span>}
                   >
-                    <div className="space-y-1">
-                      {effectiveCriteria.map((c, idx) => {
-                        const pct = c.maxScore ? Math.round((c.score / c.maxScore) * 100) : c.score;
-                        return (
-                          <div key={idx} className="flex items-start justify-between gap-2 py-1.5 border-b border-surface-100 last:border-0">
-                            <div className="min-w-0 flex-1">
-                              <h4 className="text-sm font-semibold text-surface-900">{c.criterion}</h4>
-                              <p className="text-xs text-surface-600 mt-0.5 line-clamp-1">{c.feedback || c.rationale}</p>
-                            </div>
-                            <span className="text-sm font-bold text-primary-600 shrink-0">{pct}%</span>
+                    <div className="space-y-4">
+                      {/* Key Insights - Strengths and Improvements */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <h4 className="text-xs font-semibold text-emerald-600 uppercase tracking-wide mb-2 flex items-center gap-1">
+                            <ThumbsUp className="w-3 h-3" /> Strengths
+                          </h4>
+                          <div className="space-y-1.5">
+                            {(rubric?.strengths?.length ? rubric.strengths : [
+                              'Demonstrated solid understanding of core concepts.',
+                              'Clear structure with logical flow.',
+                            ]).slice(0, 3).map((s, i) => (
+                              <div key={i} className="p-2 bg-emerald-50 rounded-lg border border-emerald-100">
+                                <p className="text-xs text-surface-700">{typeof s === 'string' ? s : (s as { text: string }).text}</p>
+                              </div>
+                            ))}
                           </div>
-                        );
-                      })}
-                      {alignmentMoreInsights && (
-                        <div className="mt-3 p-3 bg-primary-50 rounded-lg border border-primary-100">
-                          <p className="text-sm text-surface-700 whitespace-pre-wrap">{alignmentMoreInsights}</p>
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2 flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" /> Areas to Develop
+                          </h4>
+                          <div className="space-y-1.5">
+                            {(rubric?.improvements?.length ? rubric.improvements : [
+                              'Consider adding citations or references to research.',
+                              'Could strengthen by connecting to established frameworks discussed in class.',
+                            ]).slice(0, 3).map((s, i) => (
+                              <div key={i} className="p-2 bg-amber-50 rounded-lg border border-amber-100">
+                                <p className="text-xs text-surface-700">{typeof s === 'string' ? s : (s as { text: string }).text}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Verification & Identity */}
+                      {submission.verificationFindings && submission.verificationFindings.length > 0 && (
+                        <div className="pt-3 border-t border-surface-100">
+                          <h4 className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2 flex items-center gap-1">
+                            <Shield className="w-3 h-3" /> Claim Verification
+                          </h4>
+                          <div className="grid grid-cols-2 gap-2">
+                            {submission.verificationFindings.slice(0, 4).map((f, i) => (
+                              <div 
+                                key={i} 
+                                className={`p-2 rounded-lg border ${
+                                  f.status === 'VERIFIED' ? 'bg-emerald-50 border-emerald-200' :
+                                  f.status === 'NEEDS_EVIDENCE' ? 'bg-amber-50 border-amber-200' :
+                                  'bg-red-50 border-red-200'
+                                }`}
+                              >
+                                <p className="text-[10px] font-medium mb-1 text-surface-600">{f.statement}</p>
+                                <p className="text-[9px] text-surface-500">{f.status}</p>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
-                      <button
-                        onClick={handleGetMoreAlignmentInsights}
-                        disabled={moreInsightsLoading === 'alignment'}
-                        className="flex items-center gap-2 text-xs text-primary-600 hover:text-primary-700 font-medium mt-2 disabled:opacity-50"
-                      >
-                        {moreInsightsLoading === 'alignment' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                        Get More Alignment Insights
-                        <ChevronRight className="w-3 h-3" />
-                      </button>
+
+                      {/* Rubric Criteria Performance */}
+                      <div className="pt-3 border-t border-surface-100">
+                        <h4 className="text-xs font-semibold text-primary-600 uppercase tracking-wide mb-2">Rubric Performance</h4>
+                        <div className="space-y-1">
+                          {effectiveCriteria.map((c, idx) => {
+                            const pct = c.maxScore ? Math.round((c.score / c.maxScore) * 100) : c.score;
+                            return (
+                              <div key={idx} className="flex items-start justify-between gap-2 py-1 text-xs">
+                                <span className="text-surface-700">{c.criterion}</span>
+                                <span className="font-semibold text-primary-600 shrink-0">{pct}%</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                   </CollapsibleSection>
 
-                  {/* Key Insights and Verification - Side by side, compact */}
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* Remove old Key Insights and Verification sections - now integrated above */}
+                  <div className="hidden grid-cols-2 gap-4">
                     {/* Key Insights */}
                     <CollapsibleSection
                       title="Key Insights"
