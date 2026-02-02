@@ -7,6 +7,7 @@ import {
   updateSubmission, 
   updateBatchStats,
   getBatch,
+  getBatchSubmissions,
   requeue,
 } from '@/lib/batch-store';
 import { getBundleVersions, getBundleVersion } from '@/lib/context-store';
@@ -31,9 +32,9 @@ export async function POST(request: NextRequest) {
 
     // If batchId provided but no specific IDs, re-grade all submissions in batch
     if (batchId && idsToRegrade.length === 0) {
-      const batch = await getBatch(batchId);
-      if (batch?.submissionIds) {
-        idsToRegrade = batch.submissionIds;
+      const submissions = await getBatchSubmissions(batchId);
+      if (submissions.length > 0) {
+        idsToRegrade = submissions.map(s => s.id);
       }
     }
 
