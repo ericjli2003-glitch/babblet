@@ -203,6 +203,13 @@ async function processSubmission(submissionId: string, batchId: string): Promise
       const questions = questionsResult.status === 'fulfilled' ? questionsResult.value : [];
       const findings = verifyResult.status === 'fulfilled' ? verifyResult.value : [];
 
+      // STATE CONSISTENCY: Only mark as 'ready' if we have a valid rubric score
+      // If rubric evaluation failed, mark as 'failed' to prevent inconsistent state
+      if (!rubricEvaluation || rubricEvaluation.overallScore === undefined || rubricEvaluation.overallScore === null) {
+        console.error(`[Worker] Rubric evaluation failed or returned no score for ${submissionId}`);
+        throw new Error('Rubric evaluation failed or returned no score');
+      }
+
       const verificationFindings = findings.map(f => ({
         id: f.id,
         statement: f.statement,
@@ -210,7 +217,7 @@ async function processSubmission(submissionId: string, batchId: string): Promise
         explanation: f.explanation,
       }));
 
-      // Update submission with results
+      // Update submission with results - only if we have valid grade data
       await updateSubmission(submissionId, {
         analysis: {
           keyClaims: analysis.keyClaims.map(c => ({
@@ -229,12 +236,12 @@ async function processSubmission(submissionId: string, batchId: string): Promise
           })),
           overallStrength: analysis.overallStrength,
         },
-        rubricEvaluation: rubricEvaluation ? {
+        rubricEvaluation: {
           overallScore: rubricEvaluation.overallScore,
           criteriaBreakdown: rubricEvaluation.criteriaBreakdown,
           strengths: rubricEvaluation.criteriaBreakdown?.flatMap(c => c.strengths || []) || [],
           improvements: rubricEvaluation.criteriaBreakdown?.flatMap(c => c.improvements || []) || [],
-        } : undefined,
+        },
         questions: questions.slice(0, 8).map(q => ({
           id: q.id,
           question: q.question,
