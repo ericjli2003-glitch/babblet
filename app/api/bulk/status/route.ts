@@ -283,6 +283,7 @@ export async function GET(request: NextRequest) {
         hasGradeData: s.rubricEvaluation?.overallScore !== undefined && s.rubricEvaluation?.overallScore !== null,
         createdAt: s.createdAt,
         completedAt: s.completedAt,
+        duration: s.duration,
       })),
       stats,
       globalQueueLength: queueLength,
