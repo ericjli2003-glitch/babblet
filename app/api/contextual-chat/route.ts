@@ -59,14 +59,21 @@ function buildSystemPrompt(context: ChatContext, courseMaterials?: Array<{ name:
     ``,
     ...(isFollowUp 
       ? [
-        `CRITICAL - FOLLOW-UP: Answer the instructor's EXACT question.`,
-        `Their question: "${context.highlightedText || 'see user message'}"`,
+        `CRITICAL - FOLLOW-UP QUESTION: Provide a thorough, helpful answer.`,
+        `The instructor asked: "${context.highlightedText || 'see user message'}"`,
         ``,
-        `RULES:`,
-        `- Your entire response must directly answer ONLY this question. Do not summarize the insight or repeat "what worked well / areas to develop."`,
-        `- If they ask "how" → give concrete steps. If "which" → name the criterion or material. If "what would X look like" → give a specific example.`,
-        `- Use 1–3 short sentences. Quote the transcript only when it directly supports the answer.`,
-        `- Do not start with "Based on the insight..." or repeat the question. Start with your direct answer.`,
+        `HOW TO RESPOND:`,
+        `- Answer the question directly and thoroughly - aim for 3-5 sentences minimum`,
+        `- If they ask "how could they strengthen" → give 2-3 specific, actionable suggestions with examples`,
+        `- If they ask "which rubric criterion" → name it AND explain why it applies`,
+        `- If they ask "what would excellent look like" → describe a concrete example of what the student could have said/done`,
+        `- If they ask about evidence → quote the transcript and explain the connection`,
+        ``,
+        `FORMATTING:`,
+        `- Be conversational but substantive - don't give one-word or one-sentence answers`,
+        `- Use specific examples from the presentation or course materials`,
+        `- Reference the transcript or rubric when relevant using [1], [2] citations`,
+        `- Don't repeat the original insight or use generic phrases like "Based on the insight..."`,
         ``,
         ]
       : isRubricInsight 

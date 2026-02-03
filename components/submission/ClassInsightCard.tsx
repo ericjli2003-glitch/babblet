@@ -359,13 +359,13 @@ export default function ClassInsightCard({
           {isOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => { setOpenRef(null); setClipPlaying(false); }} aria-hidden="true" />
-              <div ref={openRefRef} className="absolute left-0 top-full mt-1 z-50 w-72 max-h-64 overflow-y-auto rounded-lg border border-surface-200 bg-white shadow-lg p-3">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-xs font-semibold text-surface-900">Clip @ {ref.timestamp}</p>
-                  <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">{CLIP_DURATION}s clip</span>
+              <div ref={openRefRef} className="absolute left-0 top-full mt-1 z-50 w-96 max-h-[400px] overflow-y-auto rounded-xl border border-surface-200 bg-white shadow-xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-semibold text-surface-900">Video Evidence @ {ref.timestamp}</p>
+                  <span className="text-[10px] px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">{CLIP_DURATION}s clip</span>
                 </div>
                 {videoUrl && (
-                  <div className="rounded overflow-hidden bg-surface-900 mb-2 relative group">
+                  <div className="rounded-lg overflow-hidden bg-surface-900 mb-3 relative group">
                     {/* Video with native controls but timeline hidden via clip-video class */}
                     <video
                       ref={clipVideoRef}
@@ -404,16 +404,19 @@ export default function ClassInsightCard({
                     />
                   </div>
                 )}
-                <p className="text-xs text-surface-600 mb-2 line-clamp-2 italic">&quot;{ref.text}&quot;</p>
-                <div className="bg-blue-50 rounded p-2 mb-2">
-                  <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wide mb-0.5">Why this is relevant</p>
-                  <p className="text-xs text-blue-800">This moment from the student&apos;s presentation provides direct evidence for the assessment point above.</p>
+                <div className="bg-surface-50 rounded-lg p-3 mb-3 border border-surface-100">
+                  <p className="text-[10px] font-semibold text-surface-500 uppercase tracking-wide mb-1">Student Quote</p>
+                  <p className="text-sm text-surface-700 italic leading-relaxed">&quot;{ref.text}&quot;</p>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-3 mb-3 border border-blue-100">
+                  <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wide mb-1">Connection to Assessment</p>
+                  <p className="text-sm text-blue-800 leading-relaxed">This clip captures a specific moment where the student demonstrates (or lacks) the skill being assessed in the bullet above. The quote shows exactly what the student said, allowing you to evaluate their understanding, delivery, or application of concepts in context. Use this as primary evidence when discussing this feedback point with the student or when justifying the assessment.</p>
                 </div>
                 <button
                   onClick={() => { onSeekToTime?.(ref.timeMs); setOpenRef(null); setClipPlaying(false); }}
-                  className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded"
+                  className="w-full flex items-center justify-center gap-2 py-2 px-3 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                 >
-                  <PlayCircle className="w-3.5 h-3.5" /> Go to full video
+                  <PlayCircle className="w-4 h-4" /> Watch in full video
                 </button>
               </div>
             </>
@@ -444,20 +447,29 @@ export default function ClassInsightCard({
           {isOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setOpenRef(null)} aria-hidden="true" />
-              <div className="absolute left-0 top-full mt-1 z-50 w-72 max-h-64 overflow-y-auto rounded-lg border border-surface-200 bg-white shadow-lg p-3">
-                <p className="text-xs font-semibold text-surface-900 mb-1.5">{ref.type === 'rubric' ? 'Rubric' : 'Course'}: {ref.title}</p>
-                <div className="bg-orange-50 rounded p-2 mb-2">
-                  <p className="text-[10px] font-semibold text-orange-700 uppercase tracking-wide mb-0.5">Why this is relevant</p>
-                  <p className="text-xs text-orange-800">{ref.explanation || 'This rubric criterion or course material directly relates to the assessment point above.'}</p>
+              <div className="absolute left-0 top-full mt-1 z-50 w-96 max-h-[400px] overflow-y-auto rounded-xl border border-surface-200 bg-white shadow-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${ref.type === 'rubric' ? 'bg-orange-100' : 'bg-purple-100'}`}>
+                    <BookOpen className={`w-4 h-4 ${ref.type === 'rubric' ? 'text-orange-600' : 'text-purple-600'}`} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-surface-900">{ref.title}</p>
+                    <p className="text-xs text-surface-500">{ref.type === 'rubric' ? 'Rubric Criterion' : 'Course Material'}</p>
+                  </div>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-3 mb-3 border border-orange-100">
+                  <p className="text-[10px] font-semibold text-orange-700 uppercase tracking-wide mb-1">Connection to Assessment</p>
+                  <p className="text-sm text-orange-800 leading-relaxed mb-2">{ref.explanation || 'This criterion defines the expectations against which the student\'s performance is being evaluated.'}</p>
+                  <p className="text-sm text-orange-700 leading-relaxed">The assessment point above directly maps to this {ref.type === 'rubric' ? 'rubric criterion' : 'course material'}. When providing feedback to the student, reference this standard to explain why certain aspects of their presentation met or did not meet expectations. This creates a clear connection between your feedback and the grading framework.</p>
                 </div>
                 {ref.documentUrl && (
                   <a
                     href={ref.documentUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 rounded border border-primary-200"
+                    className="w-full flex items-center justify-center gap-2 py-2 px-3 text-sm font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg border border-primary-200 transition-colors"
                   >
-                    <ExternalLink className="w-3 h-3" /> View source
+                    <ExternalLink className="w-4 h-4" /> View full {ref.type === 'rubric' ? 'rubric' : 'material'}
                   </a>
                 )}
               </div>
