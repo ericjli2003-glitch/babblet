@@ -404,7 +404,11 @@ export default function ClassInsightCard({
                     />
                   </div>
                 )}
-                <p className="text-xs text-surface-600 mb-2 line-clamp-2">&quot;{ref.text}&quot;</p>
+                <p className="text-xs text-surface-600 mb-2 line-clamp-2 italic">&quot;{ref.text}&quot;</p>
+                <div className="bg-blue-50 rounded p-2 mb-2">
+                  <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wide mb-0.5">Why this is relevant</p>
+                  <p className="text-xs text-blue-800">This moment from the student&apos;s presentation provides direct evidence for the assessment point above.</p>
+                </div>
                 <button
                   onClick={() => { onSeekToTime?.(ref.timeMs); setOpenRef(null); setClipPlaying(false); }}
                   className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded"
@@ -442,7 +446,10 @@ export default function ClassInsightCard({
               <div className="fixed inset-0 z-40" onClick={() => setOpenRef(null)} aria-hidden="true" />
               <div className="absolute left-0 top-full mt-1 z-50 w-72 max-h-64 overflow-y-auto rounded-lg border border-surface-200 bg-white shadow-lg p-3">
                 <p className="text-xs font-semibold text-surface-900 mb-1.5">{ref.type === 'rubric' ? 'Rubric' : 'Course'}: {ref.title}</p>
-                <p className="text-xs text-surface-600 mb-2">{ref.explanation}</p>
+                <div className="bg-orange-50 rounded p-2 mb-2">
+                  <p className="text-[10px] font-semibold text-orange-700 uppercase tracking-wide mb-0.5">Why this is relevant</p>
+                  <p className="text-xs text-orange-800">{ref.explanation || 'This rubric criterion or course material directly relates to the assessment point above.'}</p>
+                </div>
                 {ref.documentUrl && (
                   <a
                     href={ref.documentUrl}
