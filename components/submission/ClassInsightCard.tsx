@@ -426,25 +426,23 @@ export default function ClassInsightCard({
                   </div>
                   
                   {/* Pedagogical Analysis - Train of Thought */}
-                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
-                    <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-4">Why This Moment Matters</p>
-                    <div className="space-y-4">
-                      <div>
-                        <p className="text-sm font-semibold text-blue-800 mb-1">Context</p>
-                        <p className="text-sm text-blue-900 leading-relaxed">This specific segment was selected because it represents a key moment in the student&apos;s presentation that directly relates to the assessment criterion being evaluated. The timing ({ref.timestamp}) places this within the broader arc of their argument.</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-blue-800 mb-1">What to Observe</p>
-                        <p className="text-sm text-blue-900 leading-relaxed">Listen for how the student articulates their understanding. Are they using discipline-specific terminology correctly? Is there evidence of critical thinking, or are they reciting memorized content? Pay attention to their delivery—confidence, pacing, and clarity often signal depth of understanding.</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-blue-800 mb-1">Pedagogical Connection</p>
-                        <p className="text-sm text-blue-900 leading-relaxed">This clip serves as primary evidence for the feedback point it&apos;s attached to. When discussing this with the student, you can point to this exact moment to ground your assessment in observable behavior rather than abstract evaluation. Students respond better to feedback anchored in specific, reviewable moments.</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-blue-800 mb-1">For Your Records</p>
-                        <p className="text-sm text-blue-900 leading-relaxed">If you need to justify this grade to the student, a department chair, or during grade appeals, this timestamped evidence provides objective documentation of the student&apos;s demonstrated competency (or areas for growth) at this point in their presentation.</p>
-                      </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Why This Moment Matters</p>
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100 overflow-hidden">
+                      <p className="text-sm font-semibold text-blue-800 mb-1">Context</p>
+                      <p className="text-sm text-blue-900 leading-relaxed break-words">This specific segment was selected because it represents a key moment in the student&apos;s presentation that directly relates to the assessment criterion being evaluated. The timing ({ref.timestamp}) places this within the broader arc of their argument.</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100 overflow-hidden">
+                      <p className="text-sm font-semibold text-blue-800 mb-1">What to Observe</p>
+                      <p className="text-sm text-blue-900 leading-relaxed break-words">Listen for how the student articulates their understanding. Are they using discipline-specific terminology correctly? Is there evidence of critical thinking, or are they reciting memorized content? Pay attention to their delivery—confidence, pacing, and clarity often signal depth of understanding.</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100 overflow-hidden">
+                      <p className="text-sm font-semibold text-blue-800 mb-1">Pedagogical Connection</p>
+                      <p className="text-sm text-blue-900 leading-relaxed break-words">This clip serves as primary evidence for the feedback point it&apos;s attached to. When discussing this with the student, you can point to this exact moment to ground your assessment in observable behavior rather than abstract evaluation. Students respond better to feedback anchored in specific, reviewable moments.</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100 overflow-hidden">
+                      <p className="text-sm font-semibold text-blue-800 mb-1">For Your Records</p>
+                      <p className="text-sm text-blue-900 leading-relaxed break-words">If you need to justify this grade to the student, a department chair, or during grade appeals, this timestamped evidence provides objective documentation of the student&apos;s demonstrated competency (or areas for growth) at this point in their presentation.</p>
                     </div>
                   </div>
                   
@@ -510,25 +508,23 @@ export default function ClassInsightCard({
                   </div>
                   
                   {/* Pedagogical Analysis - Train of Thought */}
-                  <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border border-orange-100">
-                    <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide mb-4">Why This Criterion Applies</p>
-                    <div className="space-y-4">
-                      <div>
-                        <p className="text-sm font-semibold text-orange-800 mb-1">Rubric Alignment</p>
-                        <p className="text-sm text-orange-900 leading-relaxed">The feedback point this reference is attached to directly addresses expectations outlined in the &quot;{ref.title}&quot; section of your rubric. This isn&apos;t a generic connection—the specific strength or area for development identified maps to measurable criteria you&apos;ve established for this assignment.</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-orange-800 mb-1">Why This Matters Pedagogically</p>
-                        <p className="text-sm text-orange-900 leading-relaxed">Students often struggle to understand why they received a particular score. By explicitly connecting your feedback to rubric criteria, you&apos;re teaching them to read rubrics as roadmaps for success, not just evaluation tools. This metacognitive skill transfers across courses and disciplines.</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-orange-800 mb-1">For Student Conferences</p>
-                        <p className="text-sm text-orange-900 leading-relaxed">When meeting with students about their work, you can pull up this criterion and walk through exactly how their performance mapped (or didn&apos;t map) to each descriptor. This transforms a potentially defensive conversation into a collaborative analysis of their work.</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-orange-800 mb-1">Institutional Documentation</p>
-                        <p className="text-sm text-orange-900 leading-relaxed">If grades are ever questioned—whether by the student, parents, or administration—having explicit rubric-to-feedback connections demonstrates rigorous, fair, and transparent evaluation practices aligned with best practices in outcomes-based assessment.</p>
-                      </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Why This Criterion Applies</p>
+                    <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border border-orange-100 overflow-hidden">
+                      <p className="text-sm font-semibold text-orange-800 mb-1">Rubric Alignment</p>
+                      <p className="text-sm text-orange-900 leading-relaxed break-words">The feedback point this reference is attached to directly addresses expectations outlined in the &quot;{ref.title}&quot; section of your rubric. This isn&apos;t a generic connection—the specific strength or area for development identified maps to measurable criteria you&apos;ve established for this assignment.</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border border-orange-100 overflow-hidden">
+                      <p className="text-sm font-semibold text-orange-800 mb-1">Why This Matters Pedagogically</p>
+                      <p className="text-sm text-orange-900 leading-relaxed break-words">Students often struggle to understand why they received a particular score. By explicitly connecting your feedback to rubric criteria, you&apos;re teaching them to read rubrics as roadmaps for success, not just evaluation tools. This metacognitive skill transfers across courses and disciplines.</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border border-orange-100 overflow-hidden">
+                      <p className="text-sm font-semibold text-orange-800 mb-1">For Student Conferences</p>
+                      <p className="text-sm text-orange-900 leading-relaxed break-words">When meeting with students about their work, you can pull up this criterion and walk through exactly how their performance mapped (or didn&apos;t map) to each descriptor. This transforms a potentially defensive conversation into a collaborative analysis of their work.</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border border-orange-100 overflow-hidden">
+                      <p className="text-sm font-semibold text-orange-800 mb-1">Institutional Documentation</p>
+                      <p className="text-sm text-orange-900 leading-relaxed break-words">If grades are ever questioned—whether by the student, parents, or administration—having explicit rubric-to-feedback connections demonstrates rigorous, fair, and transparent evaluation practices aligned with best practices in outcomes-based assessment.</p>
                     </div>
                   </div>
                 </div>
