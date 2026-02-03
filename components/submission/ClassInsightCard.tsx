@@ -50,6 +50,23 @@ function parseTimestamp(ts: string): number {
   return 0;
 }
 
+/** Truncate at sentence boundary so excerpt reads as a complete thought (relevant to rubric context). */
+function getCoherentExcerpt(text: string, maxLen: number): string {
+  const t = text.trim();
+  if (!t || t.length <= maxLen) return t;
+  const slice = t.slice(0, maxLen + 1);
+  const lastSentenceEnd = Math.max(
+    slice.lastIndexOf('. '),
+    slice.lastIndexOf('! '),
+    slice.lastIndexOf('? '),
+    slice.lastIndexOf('.\n'),
+    slice.lastIndexOf('.\"')
+  );
+  if (lastSentenceEnd > maxLen * 0.4) return slice.slice(0, lastSentenceEnd + 1).trim();
+  const lastSpace = slice.slice(0, maxLen).lastIndexOf(' ');
+  return (lastSpace > maxLen * 0.5 ? slice.slice(0, lastSpace) : slice.slice(0, maxLen)).trim() + (t.length > maxLen ? '…' : '');
+}
+
 const statusConfig = {
   excellent: {
     icon: CheckCircle,
@@ -168,8 +185,8 @@ export default function ClassInsightCard({
           id: 'A' as const,
           timestamp,
           timeMs,
-          text: seg.text.slice(0, 80) + (seg.text.length > 80 ? '...' : ''),
-          explanation: `Student said at ${timestamp}: "${seg.text.slice(0, 60)}${seg.text.length > 60 ? '...' : ''}"`,
+          text: getCoherentExcerpt(seg.text, 180),
+          explanation: `Student said at ${timestamp}: "${getCoherentExcerpt(seg.text, 100)}"`,
         });
       }
     } else if (evidence && evidence.length > 0) {
@@ -187,7 +204,7 @@ export default function ClassInsightCard({
           id: 'A' as const,
           timestamp: e.timestamp,
           timeMs: parseTimestamp(e.timestamp),
-          text: e.text.slice(0, 80) + (e.text.length > 80 ? '...' : ''),
+          text: getCoherentExcerpt(e.text, 180),
           explanation: e.analysis || `Evidence at ${e.timestamp}`,
         });
       }
@@ -463,20 +480,20 @@ export default function ClassInsightCard({
                       </div>
                     )}
 
-                    {/* Rubric / Course material tabs */}
+                    {/* Rubric / Course material — streamlined pill tabs */}
                     <div className={citationBox}>
-                      <div className="flex border-b border-surface-200 mb-3 -mx-1">
+                      <div className="flex gap-1 p-0.5 rounded-lg bg-surface-100 mb-3">
                         <button
                           type="button"
                           onClick={() => setVideoEvidenceTab('rubric')}
-                          className={`flex-1 px-3 py-2 text-xs font-medium rounded-t transition-colors ${videoEvidenceTab === 'rubric' ? 'bg-surface-100 text-surface-900 border-b-2 border-primary-500 -mb-px' : 'text-surface-500 hover:text-surface-700'}`}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${videoEvidenceTab === 'rubric' ? 'bg-white text-surface-900 shadow-sm' : 'text-surface-600 hover:text-surface-900'}`}
                         >
                           Rubric
                         </button>
                         <button
                           type="button"
                           onClick={() => setVideoEvidenceTab('course')}
-                          className={`flex-1 px-3 py-2 text-xs font-medium rounded-t transition-colors ${videoEvidenceTab === 'course' ? 'bg-surface-100 text-surface-900 border-b-2 border-primary-500 -mb-px' : 'text-surface-500 hover:text-surface-700'}`}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${videoEvidenceTab === 'course' ? 'bg-white text-surface-900 shadow-sm' : 'text-surface-600 hover:text-surface-900'}`}
                         >
                           Course material
                         </button>
@@ -489,7 +506,11 @@ export default function ClassInsightCard({
                           </p>
                           <p className="text-xs text-surface-800 leading-snug" style={textWrapStyle}>
                             <span className="text-surface-500">Why this aligns: </span>
-                            {ref.explanation?.trim() || `This clip at ${ref.timestamp} aligns with the criterion above by demonstrating the expected behavior or evidence.`}
+                            {ref.explanation?.trim() && !ref.explanation.startsWith('Student said at')
+                              ? ref.explanation.trim()
+                              : rubricRef
+                                ? `This clip at ${ref.timestamp} aligns with the rubric expectation above: the observed behavior demonstrates ${rubricRef.summary}.`
+                                : `This clip at ${ref.timestamp} demonstrates the expected behavior for this criterion.`}
                           </p>
                         </>
                       )}

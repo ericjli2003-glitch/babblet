@@ -28,19 +28,20 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PATCH /api/bulk/submissions - Update submission (e.g., student name)
+// PATCH /api/bulk/submissions - Update submission (e.g., student name, criterionInsights)
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { submissionId, studentName, studentId } = body;
+    const { submissionId, studentName, studentId, criterionInsights } = body;
 
     if (!submissionId) {
       return NextResponse.json({ error: 'submissionId is required' }, { status: 400 });
     }
 
-    const updates: { studentName?: string; studentId?: string } = {};
+    const updates: { studentName?: string; studentId?: string; criterionInsights?: Record<string, string> } = {};
     if (studentName !== undefined) updates.studentName = studentName;
     if (studentId !== undefined) updates.studentId = studentId;
+    if (criterionInsights !== undefined && typeof criterionInsights === 'object') updates.criterionInsights = criterionInsights;
 
     const updated = await updateSubmission(submissionId, updates);
     if (!updated) {

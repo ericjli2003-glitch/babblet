@@ -1854,9 +1854,12 @@ RULES:
                                     criterionIndex={selectedCriterionIndex}
                                     totalCriteria={effectiveCriteria.length}
                                     onInsightsGenerated={(criterionTitle, insights) => {
-                                      setCriterionInsights(prev => 
-                                        insights ? { ...prev, [criterionTitle]: insights } : (() => { const { [criterionTitle]: _, ...rest } = prev; return rest; })()
-                                      );
+                                      setCriterionInsights(prev => {
+                                        const next = insights ? { ...prev, [criterionTitle]: insights } : (() => { const { [criterionTitle]: _, ...rest } = prev; return rest; })();
+                                        // Persist so Babblet insights run once and stay consistent on future visits
+                                        fetch('/api/bulk/submissions', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submissionId, criterionInsights: next }) }).catch(() => {});
+                                        return next;
+                                      });
                                     }}
                                     onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
                                     onRequestMoreInsights={handleRequestCriterionInsights}
