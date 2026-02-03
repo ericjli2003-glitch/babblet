@@ -300,6 +300,7 @@ export default function ClassInsightCard({
   // Popover state for reference A/B
   const [openRef, setOpenRef] = useState<string | null>(null);
   const openRefRef = useRef<HTMLDivElement | null>(null);
+  const [videoEvidenceTab, setVideoEvidenceTab] = useState<'rubric' | 'course'>('rubric');
   // Custom clip player state
   const [clipPlaying, setClipPlaying] = useState(false);
   const [clipProgress, setClipProgress] = useState(0);
@@ -391,7 +392,7 @@ export default function ClassInsightCard({
           </button>
           {isOpen && (
             <>
-              <div className="fixed inset-0 z-[100] bg-black/20" onClick={() => { setOpenRef(null); setClipPlaying(false); }} aria-hidden="true" />
+              <div className="fixed inset-0 z-[100] bg-black/20" onClick={() => { setOpenRef(null); setClipPlaying(false); setVideoEvidenceTab('rubric'); }} aria-hidden="true" />
               <div 
                 ref={openRefRef} 
                 className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] max-h-[85vh] flex flex-col rounded-2xl border border-surface-200 bg-white shadow-2xl"
@@ -413,7 +414,7 @@ export default function ClassInsightCard({
                       <p className="text-xs text-surface-500">Observed at {ref.timestamp}</p>
                     </div>
                   </div>
-                  <button onClick={() => { setOpenRef(null); setClipPlaying(false); }} className="p-2 shrink-0 hover:bg-surface-100 rounded-lg transition-colors">
+                  <button onClick={() => { setOpenRef(null); setClipPlaying(false); setVideoEvidenceTab('rubric'); }} className="p-2 shrink-0 hover:bg-surface-100 rounded-lg transition-colors">
                     <X className="w-5 h-5 text-surface-400" />
                   </button>
                 </div>
@@ -462,21 +463,42 @@ export default function ClassInsightCard({
                       </div>
                     )}
 
-                    {/* Triangulation: Rubric Expectation / Observed Here / Course Reference */}
+                    {/* Rubric / Course material tabs */}
                     <div className={citationBox}>
-                      <p className={citationLabel}>Rubric &amp; course alignment</p>
-                      <p className="text-xs font-semibold text-surface-700 mb-1" style={textWrapStyle}>
-                        <span className="text-surface-500">Rubric Expectation: </span>
-                        {rubricRef ? rubricRef.summary : '—'}
-                      </p>
-                      <p className="text-xs text-surface-800 leading-snug mb-1" style={textWrapStyle}>
-                        <span className="text-surface-500">Observed Here: </span>
-                        {ref.explanation?.trim() || `Observable behavior at ${ref.timestamp} supports the criterion above.`}
-                      </p>
-                      <p className="text-xs text-surface-800 leading-snug border-t border-surface-200 pt-2 mt-2" style={textWrapStyle}>
-                        <span className="text-surface-500">Course Reference: </span>
-                        {courseRef ? courseRef.quote : '—'}
-                      </p>
+                      <div className="flex border-b border-surface-200 mb-3 -mx-1">
+                        <button
+                          type="button"
+                          onClick={() => setVideoEvidenceTab('rubric')}
+                          className={`flex-1 px-3 py-2 text-xs font-medium rounded-t transition-colors ${videoEvidenceTab === 'rubric' ? 'bg-surface-100 text-surface-900 border-b-2 border-primary-500 -mb-px' : 'text-surface-500 hover:text-surface-700'}`}
+                        >
+                          Rubric
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setVideoEvidenceTab('course')}
+                          className={`flex-1 px-3 py-2 text-xs font-medium rounded-t transition-colors ${videoEvidenceTab === 'course' ? 'bg-surface-100 text-surface-900 border-b-2 border-primary-500 -mb-px' : 'text-surface-500 hover:text-surface-700'}`}
+                        >
+                          Course material
+                        </button>
+                      </div>
+                      {videoEvidenceTab === 'rubric' && (
+                        <>
+                          <p className="text-xs font-semibold text-surface-700 mb-1" style={textWrapStyle}>
+                            <span className="text-surface-500">Rubric Expectation: </span>
+                            {rubricRef ? rubricRef.summary : '—'}
+                          </p>
+                          <p className="text-xs text-surface-800 leading-snug" style={textWrapStyle}>
+                            <span className="text-surface-500">Why this aligns: </span>
+                            {ref.explanation?.trim() || `This clip at ${ref.timestamp} aligns with the criterion above by demonstrating the expected behavior or evidence.`}
+                          </p>
+                        </>
+                      )}
+                      {videoEvidenceTab === 'course' && (
+                        <p className="text-xs text-surface-800 leading-snug" style={textWrapStyle}>
+                          <span className="text-surface-500">Course Reference: </span>
+                          {courseRef?.quote ? courseRef.quote : 'No course material reference available for this criterion.'}
+                        </p>
+                      )}
                     </div>
 
                     {/* Transcript Excerpt */}
@@ -486,7 +508,7 @@ export default function ClassInsightCard({
                     </div>
                     
                     <button
-                      onClick={() => { onSeekToTime?.(ref.timeMs); setOpenRef(null); setClipPlaying(false); }}
+                      onClick={() => { onSeekToTime?.(ref.timeMs); setOpenRef(null); setClipPlaying(false); setVideoEvidenceTab('rubric'); }}
                       className="w-full flex items-center justify-center gap-2 py-2.5 px-3 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
                     >
                       <PlayCircle className="w-4 h-4" /> Jump to this moment in full video

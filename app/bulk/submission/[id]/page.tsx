@@ -1847,8 +1847,8 @@ RULES:
                                     initialInsights={criterionInsights[c.criterion] || null}
                                     citationSegments={sortedSegments.map(seg => ({ timestamp: normalizeTimestamp(seg.timestamp), text: seg.text }))}
                                     courseReferences={[
-                                      // Short explanation + link to course materials
-                                      { id: 'B', title: c.criterion, type: 'rubric' as const, explanation: (c.rationale || c.feedback || `This rubric criterion applies to the insight above.`).slice(0, 150), documentUrl: batchInfo?.courseId ? `/courses/${batchInfo.courseId}/content` : undefined },
+                                      { id: 'rubric', title: c.criterion, type: 'rubric' as const, explanation: (c.rationale || c.feedback || `This rubric criterion applies to the insight above.`).slice(0, 300), documentUrl: batchInfo?.courseId ? `/courses/${batchInfo.courseId}/content` : undefined },
+                                      ...(batchInfo?.courseId ? [{ id: 'course', title: batchInfo.courseName || 'Course materials', type: 'course' as const, excerpt: `Relevant lecture slides, readings, or course materials define or reinforce expectations for ${c.criterion}. See course content for full materials.`, documentUrl: `/courses/${batchInfo.courseId}/content` }] : []),
                                     ]}
                                     videoUrl={videoUrl}
                                     criterionIndex={selectedCriterionIndex}
