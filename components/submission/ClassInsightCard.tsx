@@ -205,6 +205,7 @@ export default function ClassInsightCard({
       title: ref.title,
       type: ref.type,
       explanation,
+      excerpt: ref.excerpt,
       documentUrl: ref.documentUrl,
     };
   }, [courseReferences]);
@@ -336,11 +337,18 @@ export default function ClassInsightCard({
     const getVideoRefForBullet = (bulletIdx: number) =>
       videoRefsByBullet[bulletIdx] ?? videoRefsByBullet[videoRefsByBullet.length - 1] ?? null;
 
-    const renderVideoRef = (ref: { id: 'A'; timestamp: string; timeMs: number; text: string; explanation: string } | null, key: string, displayNum: number) => {
+    const renderVideoRef = (
+      ref: { id: 'A'; timestamp: string; timeMs: number; text: string; explanation: string } | null,
+      key: string,
+      displayNum: number,
+      referencedFeedbackText?: string
+    ) => {
       if (!ref) return null;
       const isOpen = openRef === `v-A-${key}`;
       const clipStart = ref.timeMs / 1000;
       const clipEnd = clipStart + CLIP_DURATION;
+      const citationBox = 'rounded-lg border border-surface-200 bg-surface-50/80 px-3 py-2 overflow-hidden';
+      const citationLabel = 'text-[10px] font-semibold text-surface-500 uppercase tracking-wide mb-1.5';
       return (
         <div key={key} className="relative inline-block">
           <button
@@ -352,7 +360,7 @@ export default function ClassInsightCard({
               }
             }}
             className="text-[11px] font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors"
-            title={`Student video @ ${ref.timestamp}`}
+            title={`Video evidence @ ${ref.timestamp}`}
           >
             [{displayNum}]
           </button>
@@ -368,7 +376,7 @@ export default function ClassInsightCard({
                     </div>
                     <div>
                       <p className="text-base font-semibold text-surface-900">Video Evidence</p>
-                      <p className="text-xs text-surface-500">Timestamp: {ref.timestamp}</p>
+                      <p className="text-xs text-surface-500">Observed at {ref.timestamp}</p>
                     </div>
                   </div>
                   <button onClick={() => { setOpenRef(null); setClipPlaying(false); }} className="p-2 hover:bg-surface-100 rounded-lg transition-colors">
@@ -376,10 +384,9 @@ export default function ClassInsightCard({
                   </button>
                 </div>
                 
-                {/* Scrollable content */}
-                <div className="flex-1 overflow-y-auto overflow-x-hidden p-5" style={{ maxWidth: '100%' }}>
-                  <div className="space-y-4" style={{ maxWidth: '100%' }}>
-                    {/* Video Player */}
+                {/* Citation-style content */}
+                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4" style={{ maxWidth: '100%' }}>
+                  <div className="space-y-3" style={{ maxWidth: '100%' }}>
                     {videoUrl && (
                       <div className="rounded-xl overflow-hidden bg-surface-900 relative">
                         <video
@@ -420,40 +427,52 @@ export default function ClassInsightCard({
                         <div className="absolute top-2 right-2 px-2 py-1 bg-black/70 rounded text-white text-xs font-medium">{CLIP_DURATION}s clip</div>
                       </div>
                     )}
-                    
-                    {/* Student Quote */}
-                    <div className="bg-surface-50 rounded-xl px-4 py-3 border border-surface-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
-                      <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-2">What the Student Said</p>
-                      <p className="text-sm text-surface-800 italic leading-relaxed" style={{ wordBreak: 'break-word' }}>&quot;{ref.text}&quot;</p>
+
+                    {/* 1. Referenced Feedback */}
+                    {referencedFeedbackText && (
+                      <div className={citationBox} style={{ wordBreak: 'break-word' }}>
+                        <p className={citationLabel}>Referenced Feedback</p>
+                        <p className="text-sm text-surface-800 leading-snug">Supports: {referencedFeedbackText} [{displayNum}]</p>
+                      </div>
+                    )}
+
+                    {/* 2. Observed at [timestamp] */}
+                    <div className={citationBox} style={{ wordBreak: 'break-word' }}>
+                      <p className={citationLabel}>Observed at {ref.timestamp}</p>
+                      <ul className="text-sm text-surface-800 leading-snug list-disc list-inside space-y-0.5">
+                        <li>Student stated: &quot;{ref.text}&quot;</li>
+                      </ul>
+                    </div>
+
+                    {/* 3. Course Material Reference */}
+                    {courseRefB && courseRefB.type === 'course' && (
+                      <div className={citationBox} style={{ wordBreak: 'break-word' }}>
+                        <p className={citationLabel}>Course Material Reference</p>
+                        <p className="text-xs font-medium text-surface-700 mb-1">{courseRefB.title}</p>
+                        <p className="text-sm text-surface-800 leading-snug">{courseRefB.explanation || courseRefB.excerpt || '—'}</p>
+                      </div>
+                    )}
+
+                    {/* 4. Rubric Alignment */}
+                    {courseRefB && courseRefB.type === 'rubric' && (
+                      <div className={citationBox} style={{ wordBreak: 'break-word' }}>
+                        <p className={citationLabel}>Rubric Alignment</p>
+                        <p className="text-xs font-medium text-surface-700 mb-1">{courseRefB.title}</p>
+                        <p className="text-sm text-surface-800 leading-snug">{courseRefB.explanation || '—'}</p>
+                      </div>
+                    )}
+
+                    {/* 5. Transcript Excerpt */}
+                    <div className={citationBox} style={{ wordBreak: 'break-word' }}>
+                      <p className={citationLabel}>Transcript Excerpt</p>
+                      <p className="text-sm text-surface-800 italic leading-relaxed">&quot;{ref.text}&quot;</p>
                     </div>
                     
-                    {/* Pedagogical Analysis - Train of Thought */}
-                    <div className="space-y-2" style={{ maxWidth: '100%' }}>
-                      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Why This Moment Matters</p>
-                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl px-4 py-3 border border-blue-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
-                        <p className="text-sm font-semibold text-blue-800 mb-1">Context</p>
-                        <p className="text-sm text-blue-900 leading-relaxed" style={{ wordBreak: 'break-word' }}>This specific segment was selected because it represents a key moment in the student&apos;s presentation that directly relates to the assessment criterion being evaluated. The timing ({ref.timestamp}) places this within the broader arc of their argument.</p>
-                      </div>
-                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl px-4 py-3 border border-blue-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
-                        <p className="text-sm font-semibold text-blue-800 mb-1">What to Observe</p>
-                        <p className="text-sm text-blue-900 leading-relaxed" style={{ wordBreak: 'break-word' }}>Listen for how the student articulates their understanding. Are they using discipline-specific terminology correctly? Is there evidence of critical thinking, or are they reciting memorized content? Pay attention to their delivery—confidence, pacing, and clarity often signal depth of understanding.</p>
-                      </div>
-                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl px-4 py-3 border border-blue-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
-                        <p className="text-sm font-semibold text-blue-800 mb-1">Pedagogical Connection</p>
-                        <p className="text-sm text-blue-900 leading-relaxed" style={{ wordBreak: 'break-word' }}>This clip serves as primary evidence for the feedback point it&apos;s attached to. When discussing this with the student, you can point to this exact moment to ground your assessment in observable behavior rather than abstract evaluation. Students respond better to feedback anchored in specific, reviewable moments.</p>
-                      </div>
-                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl px-4 py-3 border border-blue-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
-                        <p className="text-sm font-semibold text-blue-800 mb-1">For Your Records</p>
-                        <p className="text-sm text-blue-900 leading-relaxed" style={{ wordBreak: 'break-word' }}>If you need to justify this grade to the student, a department chair, or during grade appeals, this timestamped evidence provides objective documentation of the student&apos;s demonstrated competency (or areas for growth) at this point in their presentation.</p>
-                      </div>
-                    </div>
-                    
-                    {/* Action */}
                     <button
                       onClick={() => { onSeekToTime?.(ref.timeMs); setOpenRef(null); setClipPlaying(false); }}
-                      className="w-full flex items-center justify-center gap-2 py-3 px-4 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors"
+                      className="w-full flex items-center justify-center gap-2 py-2.5 px-3 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
                     >
-                      <PlayCircle className="w-5 h-5" /> Jump to This Moment in Full Video
+                      <PlayCircle className="w-4 h-4" /> Jump to this moment in full video
                     </button>
                   </div>
                 </div>
@@ -503,48 +522,26 @@ export default function ClassInsightCard({
                   </button>
                 </div>
                 
-                {/* Scrollable content */}
-                <div className="flex-1 overflow-y-auto overflow-x-hidden p-5" style={{ maxWidth: '100%' }}>
-                  <div className="space-y-4" style={{ maxWidth: '100%' }}>
-                    {/* Criterion Description */}
-                    <div className="bg-surface-50 rounded-xl px-4 py-3 border border-surface-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
-                      <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-2">Criterion Description</p>
-                      <p className="text-sm text-surface-800 leading-relaxed" style={{ wordBreak: 'break-word' }}>{ref.explanation || 'This criterion defines the expectations against which the student\'s performance is being evaluated.'}</p>
-                    </div>
-                    
-                    {/* Pedagogical Analysis - Train of Thought */}
-                    <div className="space-y-2" style={{ maxWidth: '100%' }}>
-                      <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Why This Criterion Applies</p>
-                      <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl px-4 py-3 border border-orange-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
-                        <p className="text-sm font-semibold text-orange-800 mb-1">Rubric Alignment</p>
-                        <p className="text-sm text-orange-900 leading-relaxed" style={{ wordBreak: 'break-word' }}>The feedback point this reference is attached to directly addresses expectations outlined in the &quot;{ref.title}&quot; section of your rubric. This isn&apos;t a generic connection—the specific strength or area for development identified maps to measurable criteria you&apos;ve established for this assignment.</p>
-                      </div>
-                      <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl px-4 py-3 border border-orange-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
-                        <p className="text-sm font-semibold text-orange-800 mb-1">Why This Matters Pedagogically</p>
-                        <p className="text-sm text-orange-900 leading-relaxed" style={{ wordBreak: 'break-word' }}>Students often struggle to understand why they received a particular score. By explicitly connecting your feedback to rubric criteria, you&apos;re teaching them to read rubrics as roadmaps for success, not just evaluation tools. This metacognitive skill transfers across courses and disciplines.</p>
-                      </div>
-                      <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl px-4 py-3 border border-orange-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
-                        <p className="text-sm font-semibold text-orange-800 mb-1">For Student Conferences</p>
-                        <p className="text-sm text-orange-900 leading-relaxed" style={{ wordBreak: 'break-word' }}>When meeting with students about their work, you can pull up this criterion and walk through exactly how their performance mapped (or didn&apos;t map) to each descriptor. This transforms a potentially defensive conversation into a collaborative analysis of their work.</p>
-                      </div>
-                      <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl px-4 py-3 border border-orange-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
-                        <p className="text-sm font-semibold text-orange-800 mb-1">Institutional Documentation</p>
-                        <p className="text-sm text-orange-900 leading-relaxed" style={{ wordBreak: 'break-word' }}>If grades are ever questioned—whether by the student, parents, or administration—having explicit rubric-to-feedback connections demonstrates rigorous, fair, and transparent evaluation practices aligned with best practices in outcomes-based assessment.</p>
-                      </div>
+                {/* Citation-style content */}
+                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4" style={{ maxWidth: '100%' }}>
+                  <div className="space-y-3" style={{ maxWidth: '100%' }}>
+                    <div className="rounded-lg border border-surface-200 bg-surface-50/80 px-3 py-2 overflow-hidden" style={{ wordBreak: 'break-word' }}>
+                      <p className="text-[10px] font-semibold text-surface-500 uppercase tracking-wide mb-1.5">{ref.type === 'rubric' ? 'Rubric Criterion' : 'Course Material'}</p>
+                      <p className="text-xs font-medium text-surface-800 mb-1">{ref.title}</p>
+                      <p className="text-sm text-surface-700 leading-snug">{ref.explanation || ref.excerpt || '—'}</p>
                     </div>
                   </div>
                 </div>
                 
-                {/* Footer Actions */}
                 {ref.documentUrl && (
-                  <div className="shrink-0 bg-white border-t border-surface-100 px-5 py-3">
+                  <div className="shrink-0 bg-white border-t border-surface-100 px-4 py-3">
                     <a
                       href={ref.documentUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-full flex items-center justify-center gap-2 py-3 px-4 text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-xl transition-colors"
+                      className="w-full flex items-center justify-center gap-2 py-2.5 px-3 text-sm font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 rounded-lg border border-orange-200 transition-colors"
                     >
-                      <ExternalLink className="w-4 h-4" /> View Full {ref.type === 'rubric' ? 'Rubric' : 'Material'}
+                      <ExternalLink className="w-4 h-4" /> View full {ref.type === 'rubric' ? 'rubric' : 'material'}
                     </a>
                   </div>
                 )}
@@ -555,12 +552,12 @@ export default function ClassInsightCard({
       );
     };
     
-    const renderRefButton = (letter: string, key: string, bulletIdx?: number, refIndexWithinLine?: number) => {
+    const renderRefButton = (letter: string, key: string, bulletIdx?: number, refIndexWithinLine?: number, referencedFeedbackText?: string) => {
       if (letter === 'A') {
         const globalRefIdx = (bulletIdx ?? 0) * 3 + (refIndexWithinLine ?? 0);
         const ref = getVideoRefForBullet(globalRefIdx);
         const num = nextRefNum();
-        return renderVideoRef(ref, key, num);
+        return renderVideoRef(ref, key, num, referencedFeedbackText);
       }
       if (letter === 'B' && courseRefB) {
         if (courseRefDisplayNum === undefined) courseRefDisplayNum = nextRefNum();
@@ -599,8 +596,8 @@ export default function ClassInsightCard({
             // Clean the line - remove any trailing A, B markers and (A) (B)
             const cleanLine = line.slice(2).replace(/\s*[AB]\s*$/g, '').trim();
             const refNodes = [
-              ...refLetters.map((l, idx) => renderRefButton(l, `${i}-${idx}`, thisBulletIdx, idx)),
-              !hasVideo && bulletRef && renderVideoRef(bulletRef, `${i}-v`, nextRefNum()),
+              ...refLetters.map((l, idx) => renderRefButton(l, `${i}-${idx}`, thisBulletIdx, idx, cleanLine)),
+              !hasVideo && bulletRef && renderVideoRef(bulletRef, `${i}-v`, nextRefNum(), cleanLine),
               !hasCourse && courseRefB && (() => {
                 if (courseRefDisplayNum === undefined) courseRefDisplayNum = nextRefNum();
                 return renderCourseRef(courseRefDisplayNum, 'B', `${i}-c`);
