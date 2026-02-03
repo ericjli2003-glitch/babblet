@@ -359,7 +359,7 @@ export default function ClassInsightCard({
           {isOpen && (
             <>
               <div className="fixed inset-0 z-[100] bg-black/20" onClick={() => { setOpenRef(null); setClipPlaying(false); }} aria-hidden="true" />
-              <div ref={openRefRef} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] w-[440px] max-h-[85vh] overflow-hidden rounded-2xl border border-surface-200 bg-white shadow-2xl flex flex-col">
+              <div ref={openRefRef} style={{ width: '440px', maxWidth: 'calc(100vw - 32px)', wordBreak: 'break-word', overflowWrap: 'anywhere' }} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] max-h-[85vh] overflow-hidden rounded-2xl border border-surface-200 bg-white shadow-2xl flex flex-col">
                 {/* Header */}
                 <div className="shrink-0 bg-white border-b border-surface-100 px-5 py-3 flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -377,8 +377,8 @@ export default function ClassInsightCard({
                 </div>
                 
                 {/* Scrollable content */}
-                <div className="flex-1 overflow-y-auto overflow-x-hidden p-5">
-                  <div className="space-y-4">
+                <div className="flex-1 overflow-y-auto overflow-x-hidden p-5" style={{ maxWidth: '100%' }}>
+                  <div className="space-y-4" style={{ maxWidth: '100%' }}>
                     {/* Video Player */}
                     {videoUrl && (
                       <div className="rounded-xl overflow-hidden bg-surface-900 relative">
@@ -422,29 +422,29 @@ export default function ClassInsightCard({
                     )}
                     
                     {/* Student Quote */}
-                    <div className="bg-surface-50 rounded-xl px-4 py-3 border border-surface-100">
+                    <div className="bg-surface-50 rounded-xl px-4 py-3 border border-surface-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
                       <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-2">What the Student Said</p>
-                      <p className="text-sm text-surface-800 italic leading-relaxed">&quot;{ref.text}&quot;</p>
+                      <p className="text-sm text-surface-800 italic leading-relaxed" style={{ wordBreak: 'break-word' }}>&quot;{ref.text}&quot;</p>
                     </div>
                     
                     {/* Pedagogical Analysis - Train of Thought */}
-                    <div className="space-y-2">
+                    <div className="space-y-2" style={{ maxWidth: '100%' }}>
                       <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Why This Moment Matters</p>
-                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl px-4 py-3 border border-blue-100">
+                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl px-4 py-3 border border-blue-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
                         <p className="text-sm font-semibold text-blue-800 mb-1">Context</p>
-                        <p className="text-sm text-blue-900 leading-relaxed">This specific segment was selected because it represents a key moment in the student&apos;s presentation that directly relates to the assessment criterion being evaluated. The timing ({ref.timestamp}) places this within the broader arc of their argument.</p>
+                        <p className="text-sm text-blue-900 leading-relaxed" style={{ wordBreak: 'break-word' }}>This specific segment was selected because it represents a key moment in the student&apos;s presentation that directly relates to the assessment criterion being evaluated. The timing ({ref.timestamp}) places this within the broader arc of their argument.</p>
                       </div>
-                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl px-4 py-3 border border-blue-100">
+                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl px-4 py-3 border border-blue-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
                         <p className="text-sm font-semibold text-blue-800 mb-1">What to Observe</p>
-                        <p className="text-sm text-blue-900 leading-relaxed">Listen for how the student articulates their understanding. Are they using discipline-specific terminology correctly? Is there evidence of critical thinking, or are they reciting memorized content? Pay attention to their delivery—confidence, pacing, and clarity often signal depth of understanding.</p>
+                        <p className="text-sm text-blue-900 leading-relaxed" style={{ wordBreak: 'break-word' }}>Listen for how the student articulates their understanding. Are they using discipline-specific terminology correctly? Is there evidence of critical thinking, or are they reciting memorized content? Pay attention to their delivery—confidence, pacing, and clarity often signal depth of understanding.</p>
                       </div>
-                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl px-4 py-3 border border-blue-100">
+                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl px-4 py-3 border border-blue-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
                         <p className="text-sm font-semibold text-blue-800 mb-1">Pedagogical Connection</p>
-                        <p className="text-sm text-blue-900 leading-relaxed">This clip serves as primary evidence for the feedback point it&apos;s attached to. When discussing this with the student, you can point to this exact moment to ground your assessment in observable behavior rather than abstract evaluation. Students respond better to feedback anchored in specific, reviewable moments.</p>
+                        <p className="text-sm text-blue-900 leading-relaxed" style={{ wordBreak: 'break-word' }}>This clip serves as primary evidence for the feedback point it&apos;s attached to. When discussing this with the student, you can point to this exact moment to ground your assessment in observable behavior rather than abstract evaluation. Students respond better to feedback anchored in specific, reviewable moments.</p>
                       </div>
-                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl px-4 py-3 border border-blue-100">
+                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl px-4 py-3 border border-blue-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
                         <p className="text-sm font-semibold text-blue-800 mb-1">For Your Records</p>
-                        <p className="text-sm text-blue-900 leading-relaxed">If you need to justify this grade to the student, a department chair, or during grade appeals, this timestamped evidence provides objective documentation of the student&apos;s demonstrated competency (or areas for growth) at this point in their presentation.</p>
+                        <p className="text-sm text-blue-900 leading-relaxed" style={{ wordBreak: 'break-word' }}>If you need to justify this grade to the student, a department chair, or during grade appeals, this timestamped evidence provides objective documentation of the student&apos;s demonstrated competency (or areas for growth) at this point in their presentation.</p>
                       </div>
                     </div>
                     
@@ -486,7 +486,7 @@ export default function ClassInsightCard({
           {isOpen && (
             <>
               <div className="fixed inset-0 z-[100] bg-black/20" onClick={() => setOpenRef(null)} aria-hidden="true" />
-              <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] w-[440px] max-h-[85vh] overflow-hidden rounded-2xl border border-surface-200 bg-white shadow-2xl flex flex-col">
+              <div style={{ width: '440px', maxWidth: 'calc(100vw - 32px)', wordBreak: 'break-word', overflowWrap: 'anywhere' }} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] max-h-[85vh] overflow-hidden rounded-2xl border border-surface-200 bg-white shadow-2xl flex flex-col">
                 {/* Header */}
                 <div className="shrink-0 bg-white border-b border-surface-100 px-5 py-3 flex items-center justify-between">
                   <div className="flex items-center gap-3 min-w-0">
@@ -504,32 +504,32 @@ export default function ClassInsightCard({
                 </div>
                 
                 {/* Scrollable content */}
-                <div className="flex-1 overflow-y-auto overflow-x-hidden p-5">
-                  <div className="space-y-4">
+                <div className="flex-1 overflow-y-auto overflow-x-hidden p-5" style={{ maxWidth: '100%' }}>
+                  <div className="space-y-4" style={{ maxWidth: '100%' }}>
                     {/* Criterion Description */}
-                    <div className="bg-surface-50 rounded-xl px-4 py-3 border border-surface-100">
+                    <div className="bg-surface-50 rounded-xl px-4 py-3 border border-surface-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
                       <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-2">Criterion Description</p>
-                      <p className="text-sm text-surface-800 leading-relaxed">{ref.explanation || 'This criterion defines the expectations against which the student\'s performance is being evaluated.'}</p>
+                      <p className="text-sm text-surface-800 leading-relaxed" style={{ wordBreak: 'break-word' }}>{ref.explanation || 'This criterion defines the expectations against which the student\'s performance is being evaluated.'}</p>
                     </div>
                     
                     {/* Pedagogical Analysis - Train of Thought */}
-                    <div className="space-y-2">
+                    <div className="space-y-2" style={{ maxWidth: '100%' }}>
                       <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Why This Criterion Applies</p>
-                      <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl px-4 py-3 border border-orange-100">
+                      <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl px-4 py-3 border border-orange-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
                         <p className="text-sm font-semibold text-orange-800 mb-1">Rubric Alignment</p>
-                        <p className="text-sm text-orange-900 leading-relaxed">The feedback point this reference is attached to directly addresses expectations outlined in the &quot;{ref.title}&quot; section of your rubric. This isn&apos;t a generic connection—the specific strength or area for development identified maps to measurable criteria you&apos;ve established for this assignment.</p>
+                        <p className="text-sm text-orange-900 leading-relaxed" style={{ wordBreak: 'break-word' }}>The feedback point this reference is attached to directly addresses expectations outlined in the &quot;{ref.title}&quot; section of your rubric. This isn&apos;t a generic connection—the specific strength or area for development identified maps to measurable criteria you&apos;ve established for this assignment.</p>
                       </div>
-                      <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl px-4 py-3 border border-orange-100">
+                      <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl px-4 py-3 border border-orange-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
                         <p className="text-sm font-semibold text-orange-800 mb-1">Why This Matters Pedagogically</p>
-                        <p className="text-sm text-orange-900 leading-relaxed">Students often struggle to understand why they received a particular score. By explicitly connecting your feedback to rubric criteria, you&apos;re teaching them to read rubrics as roadmaps for success, not just evaluation tools. This metacognitive skill transfers across courses and disciplines.</p>
+                        <p className="text-sm text-orange-900 leading-relaxed" style={{ wordBreak: 'break-word' }}>Students often struggle to understand why they received a particular score. By explicitly connecting your feedback to rubric criteria, you&apos;re teaching them to read rubrics as roadmaps for success, not just evaluation tools. This metacognitive skill transfers across courses and disciplines.</p>
                       </div>
-                      <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl px-4 py-3 border border-orange-100">
+                      <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl px-4 py-3 border border-orange-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
                         <p className="text-sm font-semibold text-orange-800 mb-1">For Student Conferences</p>
-                        <p className="text-sm text-orange-900 leading-relaxed">When meeting with students about their work, you can pull up this criterion and walk through exactly how their performance mapped (or didn&apos;t map) to each descriptor. This transforms a potentially defensive conversation into a collaborative analysis of their work.</p>
+                        <p className="text-sm text-orange-900 leading-relaxed" style={{ wordBreak: 'break-word' }}>When meeting with students about their work, you can pull up this criterion and walk through exactly how their performance mapped (or didn&apos;t map) to each descriptor. This transforms a potentially defensive conversation into a collaborative analysis of their work.</p>
                       </div>
-                      <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl px-4 py-3 border border-orange-100">
+                      <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl px-4 py-3 border border-orange-100 overflow-hidden" style={{ wordBreak: 'break-word' }}>
                         <p className="text-sm font-semibold text-orange-800 mb-1">Institutional Documentation</p>
-                        <p className="text-sm text-orange-900 leading-relaxed">If grades are ever questioned—whether by the student, parents, or administration—having explicit rubric-to-feedback connections demonstrates rigorous, fair, and transparent evaluation practices aligned with best practices in outcomes-based assessment.</p>
+                        <p className="text-sm text-orange-900 leading-relaxed" style={{ wordBreak: 'break-word' }}>If grades are ever questioned—whether by the student, parents, or administration—having explicit rubric-to-feedback connections demonstrates rigorous, fair, and transparent evaluation practices aligned with best practices in outcomes-based assessment.</p>
                       </div>
                     </div>
                   </div>
