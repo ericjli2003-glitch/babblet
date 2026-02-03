@@ -437,33 +437,18 @@ export default function ClassInsightCard({
                       </div>
                     )}
 
-                    {/* 2. Observed at [timestamp] */}
-                    <div className={citationBox} style={wrapStyle}>
-                      <p className={citationLabel}>Observed at {ref.timestamp}</p>
-                      <ul className="text-sm text-surface-800 leading-snug list-disc list-inside space-y-0.5 break-words" style={wrapStyle}>
-                        <li className="break-words" style={wrapStyle}>Student stated: &quot;{ref.text}&quot;</li>
-                      </ul>
-                    </div>
-
-                    {/* 3. Course Material Reference */}
-                    {courseRefB && courseRefB.type === 'course' && (
-                      <div className={citationBox} style={wrapStyle}>
-                        <p className={citationLabel}>Course Material Reference</p>
-                        <p className="text-xs font-medium text-surface-700 mb-1 break-words" style={wrapStyle}>{courseRefB.title}</p>
-                        <p className="text-sm text-surface-800 leading-snug break-words" style={wrapStyle}>{courseRefB.explanation || courseRefB.excerpt || '—'}</p>
-                      </div>
-                    )}
-
-                    {/* 4. Rubric Alignment */}
+                    {/* Rubric Alignment (beefed up) */}
                     {courseRefB && courseRefB.type === 'rubric' && (
                       <div className={citationBox} style={wrapStyle}>
                         <p className={citationLabel}>Rubric Alignment</p>
-                        <p className="text-xs font-medium text-surface-700 mb-1 break-words" style={wrapStyle}>{courseRefB.title}</p>
-                        <p className="text-sm text-surface-800 leading-snug break-words" style={wrapStyle}>{courseRefB.explanation || '—'}</p>
+                        <p className="text-xs font-semibold text-surface-800 mb-1.5 break-words" style={wrapStyle}>Criterion: {courseRefB.title}</p>
+                        <p className="text-[10px] font-semibold text-surface-500 uppercase tracking-wide mb-1 break-words" style={wrapStyle}>Descriptor / expectations</p>
+                        <p className="text-sm text-surface-800 leading-snug break-words mb-2" style={wrapStyle}>{courseRefB.explanation || '—'}</p>
+                        <p className="text-xs text-surface-600 leading-snug break-words border-t border-surface-200 pt-2 mt-2" style={wrapStyle}>This clip provides evidence for the criterion above at {ref.timestamp}.</p>
                       </div>
                     )}
 
-                    {/* 5. Transcript Excerpt */}
+                    {/* Transcript Excerpt */}
                     <div className={citationBox} style={wrapStyle}>
                       <p className={citationLabel}>Transcript Excerpt</p>
                       <p className="text-sm text-surface-800 italic leading-relaxed break-words" style={wrapStyle}>&quot;{ref.text}&quot;</p>
@@ -484,85 +469,15 @@ export default function ClassInsightCard({
       );
     };
     
-    // Ref counter: [1], [2], [3] for video clips; course ref reuses same number when same source
     let refCounter = 0;
     const nextRefNum = () => { refCounter += 1; return refCounter; };
-    let courseRefDisplayNum: number | undefined; // same number for same class content ref
 
-    // B = course/rubric ref: short explanation + link to source doc
-    const renderCourseRef = (displayNum: number, _letter: string, key: string) => {
-      const ref = courseRefB;
-      if (!ref) return null;
-      const isOpen = openRef === `c-B-${key}`;
-      return (
-        <div key={key} className="relative inline-block">
-          <button
-            onClick={() => setOpenRef(isOpen ? null : `c-B-${key}`)}
-            className="text-[11px] font-medium text-orange-600 hover:text-orange-800 hover:underline transition-colors"
-            title={`${ref.type === 'rubric' ? 'Rubric' : 'Course'} reference`}
-          >
-            [{displayNum}]
-          </button>
-          {isOpen && (
-            <>
-              <div className="fixed inset-0 z-[100] bg-black/20" onClick={() => setOpenRef(null)} aria-hidden="true" />
-              <div style={{ width: '440px', maxWidth: 'calc(100vw - 32px)', wordBreak: 'break-word', overflowWrap: 'anywhere' }} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] max-h-[85vh] overflow-hidden rounded-2xl border border-surface-200 bg-white shadow-2xl flex flex-col">
-                {/* Header */}
-                <div className="shrink-0 bg-white border-b border-surface-100 px-5 py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${ref.type === 'rubric' ? 'bg-orange-100' : 'bg-purple-100'}`}>
-                      <BookOpen className={`w-5 h-5 ${ref.type === 'rubric' ? 'text-orange-600' : 'text-purple-600'}`} />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-base font-semibold text-surface-900 truncate">{ref.title}</p>
-                      <p className="text-xs text-surface-500">{ref.type === 'rubric' ? 'Rubric Criterion' : 'Course Material'}</p>
-                    </div>
-                  </div>
-                  <button onClick={() => setOpenRef(null)} className="p-2 hover:bg-surface-100 rounded-lg transition-colors">
-                    <X className="w-5 h-5 text-surface-400" />
-                  </button>
-                </div>
-                
-                {/* Citation-style content */}
-                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4" style={{ maxWidth: '100%' }}>
-                  <div className="space-y-3" style={{ maxWidth: '100%' }}>
-                    <div className="rounded-lg border border-surface-200 bg-surface-50/80 px-3 py-2 overflow-hidden" style={{ wordBreak: 'break-word' }}>
-                      <p className="text-[10px] font-semibold text-surface-500 uppercase tracking-wide mb-1.5">{ref.type === 'rubric' ? 'Rubric Criterion' : 'Course Material'}</p>
-                      <p className="text-xs font-medium text-surface-800 mb-1">{ref.title}</p>
-                      <p className="text-sm text-surface-700 leading-snug">{ref.explanation || ref.excerpt || '—'}</p>
-                    </div>
-                  </div>
-                </div>
-                
-                {ref.documentUrl && (
-                  <div className="shrink-0 bg-white border-t border-surface-100 px-4 py-3">
-                    <a
-                      href={ref.documentUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full flex items-center justify-center gap-2 py-2.5 px-3 text-sm font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 rounded-lg border border-orange-200 transition-colors"
-                    >
-                      <ExternalLink className="w-4 h-4" /> View full {ref.type === 'rubric' ? 'rubric' : 'material'}
-                    </a>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      );
-    };
-    
     const renderRefButton = (letter: string, key: string, bulletIdx?: number, refIndexWithinLine?: number, referencedFeedbackText?: string) => {
       if (letter === 'A') {
         const globalRefIdx = (bulletIdx ?? 0) * 3 + (refIndexWithinLine ?? 0);
         const ref = getVideoRefForBullet(globalRefIdx);
         const num = nextRefNum();
         return renderVideoRef(ref, key, num, referencedFeedbackText);
-      }
-      if (letter === 'B' && courseRefB) {
-        if (courseRefDisplayNum === undefined) courseRefDisplayNum = nextRefNum();
-        return renderCourseRef(courseRefDisplayNum, 'B', key);
       }
       return null;
     };
@@ -593,16 +508,11 @@ export default function ClassInsightCard({
             const thisBulletIdx = bulletIndex - 1; // 0-based for first bullet
             const bulletRef = getVideoRefForBullet(thisBulletIdx);
             const hasVideo = refLetters.some((l) => l === 'A');
-            const hasCourse = refLetters.some((l) => l === 'B');
             // Clean the line - remove any trailing A, B markers and (A) (B)
             const cleanLine = line.slice(2).replace(/\s*[AB]\s*$/g, '').trim();
             const refNodes = [
               ...refLetters.map((l, idx) => renderRefButton(l, `${i}-${idx}`, thisBulletIdx, idx, cleanLine)),
               !hasVideo && bulletRef && renderVideoRef(bulletRef, `${i}-v`, nextRefNum(), cleanLine),
-              !hasCourse && courseRefB && (() => {
-                if (courseRefDisplayNum === undefined) courseRefDisplayNum = nextRefNum();
-                return renderCourseRef(courseRefDisplayNum, 'B', `${i}-c`);
-              })(),
             ].filter(Boolean);
             return (
               <p key={i} className="text-surface-700">
