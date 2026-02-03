@@ -358,66 +358,92 @@ export default function ClassInsightCard({
           </button>
           {isOpen && (
             <>
-              <div className="fixed inset-0 z-40" onClick={() => { setOpenRef(null); setClipPlaying(false); }} aria-hidden="true" />
-              <div ref={openRefRef} className="absolute left-0 top-full mt-1 z-50 w-96 max-h-[400px] overflow-y-auto rounded-xl border border-surface-200 bg-white shadow-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-semibold text-surface-900">Video Evidence @ {ref.timestamp}</p>
-                  <span className="text-[10px] px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">{CLIP_DURATION}s clip</span>
+              <div className="fixed inset-0 z-[100] bg-black/20" onClick={() => { setOpenRef(null); setClipPlaying(false); }} aria-hidden="true" />
+              <div ref={openRefRef} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] w-[480px] max-h-[85vh] overflow-y-auto rounded-2xl border border-surface-200 bg-white shadow-2xl">
+                {/* Header */}
+                <div className="sticky top-0 bg-white border-b border-surface-100 px-5 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                      <PlayCircle className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-base font-semibold text-surface-900">Video Evidence</p>
+                      <p className="text-xs text-surface-500">Timestamp: {ref.timestamp}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => { setOpenRef(null); setClipPlaying(false); }} className="p-2 hover:bg-surface-100 rounded-lg transition-colors">
+                    <X className="w-5 h-5 text-surface-400" />
+                  </button>
                 </div>
-                {videoUrl && (
-                  <div className="rounded-lg overflow-hidden bg-surface-900 mb-3 relative group">
-                    {/* Video with native controls but timeline hidden via clip-video class */}
-                    <video
-                      ref={clipVideoRef}
-                      src={videoUrl}
-                      className="clip-video w-full aspect-video object-cover"
-                      controls
-                      muted
-                      playsInline
-                      disablePictureInPicture
-                      controlsList="nodownload noremoteplayback"
-                      onLoadedMetadata={(e) => {
-                        const v = e.target as HTMLVideoElement;
-                        v.currentTime = clipStart;
-                      }}
-                      onPlay={() => setClipPlaying(true)}
-                      onPause={() => setClipPlaying(false)}
-                      onTimeUpdate={(e) => {
-                        const v = e.target as HTMLVideoElement;
-                        const elapsed = v.currentTime - clipStart;
-                        const progress = Math.min(Math.max(elapsed / CLIP_DURATION, 0), 1);
-                        setClipProgress(progress * 100);
-                        if (v.currentTime >= clipEnd - 0.1) {
-                          v.pause();
+                
+                <div className="p-5 space-y-4">
+                  {/* Video Player */}
+                  {videoUrl && (
+                    <div className="rounded-xl overflow-hidden bg-surface-900 relative">
+                      <video
+                        ref={clipVideoRef}
+                        src={videoUrl}
+                        className="clip-video w-full aspect-video object-cover"
+                        controls
+                        muted
+                        playsInline
+                        disablePictureInPicture
+                        controlsList="nodownload noremoteplayback"
+                        onLoadedMetadata={(e) => {
+                          const v = e.target as HTMLVideoElement;
                           v.currentTime = clipStart;
+                        }}
+                        onPlay={() => setClipPlaying(true)}
+                        onPause={() => setClipPlaying(false)}
+                        onTimeUpdate={(e) => {
+                          const v = e.target as HTMLVideoElement;
+                          const elapsed = v.currentTime - clipStart;
+                          const progress = Math.min(Math.max(elapsed / CLIP_DURATION, 0), 1);
+                          setClipProgress(progress * 100);
+                          if (v.currentTime >= clipEnd - 0.1) {
+                            v.pause();
+                            v.currentTime = clipStart;
+                            setClipPlaying(false);
+                            setClipProgress(0);
+                          }
+                        }}
+                        onEnded={() => {
                           setClipPlaying(false);
                           setClipProgress(0);
-                        }
-                      }}
-                      onEnded={() => {
-                        setClipPlaying(false);
-                        setClipProgress(0);
-                        if (clipVideoRef.current) {
-                          clipVideoRef.current.currentTime = clipStart;
-                        }
-                      }}
-                    />
+                          if (clipVideoRef.current) {
+                            clipVideoRef.current.currentTime = clipStart;
+                          }
+                        }}
+                      />
+                      <div className="absolute top-2 right-2 px-2 py-1 bg-black/70 rounded text-white text-xs font-medium">{CLIP_DURATION}s clip</div>
+                    </div>
+                  )}
+                  
+                  {/* Student Quote */}
+                  <div className="bg-surface-50 rounded-xl p-4 border border-surface-100">
+                    <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-2">What the Student Said</p>
+                    <p className="text-base text-surface-800 italic leading-relaxed">&quot;{ref.text}&quot;</p>
                   </div>
-                )}
-                <div className="bg-surface-50 rounded-lg p-3 mb-3 border border-surface-100">
-                  <p className="text-[10px] font-semibold text-surface-500 uppercase tracking-wide mb-1">Student Quote</p>
-                  <p className="text-sm text-surface-700 italic leading-relaxed">&quot;{ref.text}&quot;</p>
+                  
+                  {/* Pedagogical Analysis - Train of Thought */}
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
+                    <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-3">Why This Moment Matters</p>
+                    <div className="space-y-3 text-sm text-blue-900 leading-relaxed">
+                      <p><strong>Context:</strong> This specific segment was selected because it represents a key moment in the student&apos;s presentation that directly relates to the assessment criterion being evaluated. The timing ({ref.timestamp}) places this within the broader arc of their argument.</p>
+                      <p><strong>What to observe:</strong> Listen for how the student articulates their understanding. Are they using discipline-specific terminology correctly? Is there evidence of critical thinking, or are they reciting memorized content? Pay attention to their delivery—confidence, pacing, and clarity often signal depth of understanding.</p>
+                      <p><strong>Pedagogical connection:</strong> This clip serves as primary evidence for the feedback point it&apos;s attached to. When discussing this with the student, you can point to this exact moment to ground your assessment in observable behavior rather than abstract evaluation. Students respond better to feedback anchored in specific, reviewable moments.</p>
+                      <p><strong>For your records:</strong> If you need to justify this grade to the student, a department chair, or during grade appeals, this timestamped evidence provides objective documentation of the student&apos;s demonstrated competency (or areas for growth) at this point in their presentation.</p>
+                    </div>
+                  </div>
+                  
+                  {/* Action */}
+                  <button
+                    onClick={() => { onSeekToTime?.(ref.timeMs); setOpenRef(null); setClipPlaying(false); }}
+                    className="w-full flex items-center justify-center gap-2 py-3 px-4 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors"
+                  >
+                    <PlayCircle className="w-5 h-5" /> Jump to This Moment in Full Video
+                  </button>
                 </div>
-                <div className="bg-blue-50 rounded-lg p-3 mb-3 border border-blue-100">
-                  <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wide mb-1">Connection to Assessment</p>
-                  <p className="text-sm text-blue-800 leading-relaxed">This clip captures a specific moment where the student demonstrates (or lacks) the skill being assessed in the bullet above. The quote shows exactly what the student said, allowing you to evaluate their understanding, delivery, or application of concepts in context. Use this as primary evidence when discussing this feedback point with the student or when justifying the assessment.</p>
-                </div>
-                <button
-                  onClick={() => { onSeekToTime?.(ref.timeMs); setOpenRef(null); setClipPlaying(false); }}
-                  className="w-full flex items-center justify-center gap-2 py-2 px-3 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
-                >
-                  <PlayCircle className="w-4 h-4" /> Watch in full video
-                </button>
               </div>
             </>
           )}
@@ -446,31 +472,55 @@ export default function ClassInsightCard({
           </button>
           {isOpen && (
             <>
-              <div className="fixed inset-0 z-40" onClick={() => setOpenRef(null)} aria-hidden="true" />
-              <div className="absolute left-0 top-full mt-1 z-50 w-96 max-h-[400px] overflow-y-auto rounded-xl border border-surface-200 bg-white shadow-xl p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${ref.type === 'rubric' ? 'bg-orange-100' : 'bg-purple-100'}`}>
-                    <BookOpen className={`w-4 h-4 ${ref.type === 'rubric' ? 'text-orange-600' : 'text-purple-600'}`} />
+              <div className="fixed inset-0 z-[100] bg-black/20" onClick={() => setOpenRef(null)} aria-hidden="true" />
+              <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] w-[480px] max-h-[85vh] overflow-y-auto rounded-2xl border border-surface-200 bg-white shadow-2xl">
+                {/* Header */}
+                <div className="sticky top-0 bg-white border-b border-surface-100 px-5 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${ref.type === 'rubric' ? 'bg-orange-100' : 'bg-purple-100'}`}>
+                      <BookOpen className={`w-5 h-5 ${ref.type === 'rubric' ? 'text-orange-600' : 'text-purple-600'}`} />
+                    </div>
+                    <div>
+                      <p className="text-base font-semibold text-surface-900">{ref.title}</p>
+                      <p className="text-xs text-surface-500">{ref.type === 'rubric' ? 'Rubric Criterion' : 'Course Material'}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-surface-900">{ref.title}</p>
-                    <p className="text-xs text-surface-500">{ref.type === 'rubric' ? 'Rubric Criterion' : 'Course Material'}</p>
+                  <button onClick={() => setOpenRef(null)} className="p-2 hover:bg-surface-100 rounded-lg transition-colors">
+                    <X className="w-5 h-5 text-surface-400" />
+                  </button>
+                </div>
+                
+                <div className="p-5 space-y-4">
+                  {/* Criterion Description */}
+                  <div className="bg-surface-50 rounded-xl p-4 border border-surface-100">
+                    <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-2">Criterion Description</p>
+                    <p className="text-base text-surface-800 leading-relaxed">{ref.explanation || 'This criterion defines the expectations against which the student\'s performance is being evaluated.'}</p>
+                  </div>
+                  
+                  {/* Pedagogical Analysis - Train of Thought */}
+                  <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border border-orange-100">
+                    <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide mb-3">Why This Criterion Applies</p>
+                    <div className="space-y-3 text-sm text-orange-900 leading-relaxed">
+                      <p><strong>Rubric alignment:</strong> The feedback point this reference is attached to directly addresses expectations outlined in the &quot;{ref.title}&quot; section of your rubric. This isn&apos;t a generic connection—the specific strength or area for development identified maps to measurable criteria you&apos;ve established for this assignment.</p>
+                      <p><strong>Why this matters pedagogically:</strong> Students often struggle to understand why they received a particular score. By explicitly connecting your feedback to rubric criteria, you&apos;re teaching them to read rubrics as roadmaps for success, not just evaluation tools. This metacognitive skill transfers across courses and disciplines.</p>
+                      <p><strong>For student conferences:</strong> When meeting with students about their work, you can pull up this criterion and walk through exactly how their performance mapped (or didn&apos;t map) to each descriptor. This transforms a potentially defensive conversation into a collaborative analysis of their work.</p>
+                      <p><strong>Institutional documentation:</strong> If grades are ever questioned—whether by the student, parents, or administration—having explicit rubric-to-feedback connections demonstrates rigorous, fair, and transparent evaluation practices aligned with best practices in outcomes-based assessment.</p>
+                    </div>
                   </div>
                 </div>
-                <div className="bg-orange-50 rounded-lg p-3 mb-3 border border-orange-100">
-                  <p className="text-[10px] font-semibold text-orange-700 uppercase tracking-wide mb-1">Connection to Assessment</p>
-                  <p className="text-sm text-orange-800 leading-relaxed mb-2">{ref.explanation || 'This criterion defines the expectations against which the student\'s performance is being evaluated.'}</p>
-                  <p className="text-sm text-orange-700 leading-relaxed">The assessment point above directly maps to this {ref.type === 'rubric' ? 'rubric criterion' : 'course material'}. When providing feedback to the student, reference this standard to explain why certain aspects of their presentation met or did not meet expectations. This creates a clear connection between your feedback and the grading framework.</p>
-                </div>
+                
+                {/* Footer Actions */}
                 {ref.documentUrl && (
-                  <a
-                    href={ref.documentUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full flex items-center justify-center gap-2 py-2 px-3 text-sm font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg border border-primary-200 transition-colors"
-                  >
-                    <ExternalLink className="w-4 h-4" /> View full {ref.type === 'rubric' ? 'rubric' : 'material'}
-                  </a>
+                  <div className="sticky bottom-0 bg-white border-t border-surface-100 px-5 py-3">
+                    <a
+                      href={ref.documentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full flex items-center justify-center gap-2 py-3 px-4 text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-xl transition-colors"
+                    >
+                      <ExternalLink className="w-4 h-4" /> View Full {ref.type === 'rubric' ? 'Rubric' : 'Material'}
+                    </a>
+                  </div>
                 )}
               </div>
             </>
