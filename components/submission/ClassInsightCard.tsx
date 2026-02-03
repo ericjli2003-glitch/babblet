@@ -347,10 +347,17 @@ export default function ClassInsightCard({
       const isOpen = openRef === `v-A-${key}`;
       const clipStart = ref.timeMs / 1000;
       const clipEnd = clipStart + CLIP_DURATION;
-      const citationBox = 'rounded-lg border border-surface-200 bg-surface-50/80 px-3 py-2 overflow-hidden min-w-0 w-full';
+      const citationBox = 'rounded-lg border border-surface-200 bg-surface-50/80 px-3 py-2 min-w-0 w-full';
       const citationLabel = 'text-[10px] font-semibold text-surface-500 uppercase tracking-wide mb-1.5';
-      const wrapStyle = { wordBreak: 'break-word' as const, overflowWrap: 'anywhere' as const, maxWidth: '100%', minWidth: 0 };
-      const textBlockStyle = { ...wrapStyle, width: '100%', overflow: 'hidden' as const };
+      // More aggressive text wrapping styles
+      const textWrapStyle: React.CSSProperties = { 
+        wordBreak: 'break-word', 
+        overflowWrap: 'anywhere', 
+        whiteSpace: 'pre-wrap',
+        maxWidth: '100%', 
+        minWidth: 0,
+        display: 'block',
+      };
       return (
         <div key={key} className="relative inline-block">
           <button
@@ -369,7 +376,16 @@ export default function ClassInsightCard({
           {isOpen && (
             <>
               <div className="fixed inset-0 z-[100] bg-black/20" onClick={() => { setOpenRef(null); setClipPlaying(false); }} aria-hidden="true" />
-              <div ref={openRefRef} style={{ width: '440px', maxWidth: 'calc(100vw - 32px)', minWidth: 0, boxSizing: 'border-box', overflow: 'hidden', wordBreak: 'break-word', overflowWrap: 'anywhere' }} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] max-h-[85vh] flex flex-col rounded-2xl border border-surface-200 bg-white shadow-2xl">
+              <div 
+                ref={openRefRef} 
+                className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] max-h-[85vh] flex flex-col rounded-2xl border border-surface-200 bg-white shadow-2xl"
+                style={{ 
+                  width: '440px', 
+                  maxWidth: 'calc(100vw - 32px)', 
+                  minWidth: 0, 
+                  boxSizing: 'border-box',
+                }}
+              >
                 {/* Header */}
                 <div className="shrink-0 bg-white border-b border-surface-100 px-5 py-3 flex items-center justify-between min-w-0">
                   <div className="flex items-center gap-3 min-w-0">
@@ -387,8 +403,8 @@ export default function ClassInsightCard({
                 </div>
                 
                 {/* Citation-style content */}
-                <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-4 w-full" style={{ maxWidth: '100%' }}>
-                  <div className="space-y-3 min-w-0 w-full" style={{ maxWidth: '100%', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                <div className="flex-1 min-w-0 overflow-y-auto p-4 w-full">
+                  <div className="space-y-3 min-w-0 w-full">
                     {videoUrl && (
                       <div className="rounded-xl overflow-hidden bg-surface-900 relative">
                         <video
@@ -430,29 +446,21 @@ export default function ClassInsightCard({
                       </div>
                     )}
 
-                    {/* 1. Referenced Feedback */}
-                    {referencedFeedbackText && (
-                      <div className={citationBox} style={wrapStyle}>
-                        <p className={citationLabel}>Referenced Feedback</p>
-                        <p className="text-sm text-surface-800 leading-snug break-words" style={textBlockStyle}>Supports: {referencedFeedbackText} [{displayNum}]</p>
-                      </div>
-                    )}
-
                     {/* Rubric Alignment (beefed up) */}
                     {courseRefB && courseRefB.type === 'rubric' && (
-                      <div className={citationBox} style={wrapStyle}>
+                      <div className={citationBox}>
                         <p className={citationLabel}>Rubric Alignment</p>
-                        <p className="text-xs font-semibold text-surface-800 mb-1.5 break-words" style={textBlockStyle}>Criterion: {courseRefB.title}</p>
-                        <p className="text-[10px] font-semibold text-surface-500 uppercase tracking-wide mb-1 break-words" style={textBlockStyle}>Descriptor / expectations</p>
-                        <p className="text-sm text-surface-800 leading-snug break-words mb-2" style={textBlockStyle}>{courseRefB.explanation || '—'}</p>
-                        <p className="text-xs text-surface-600 leading-snug break-words border-t border-surface-200 pt-2 mt-2" style={textBlockStyle}>This clip provides evidence for the criterion above at {ref.timestamp}.</p>
+                        <p className="text-xs font-semibold text-surface-800 mb-1.5" style={textWrapStyle}>Criterion: {courseRefB.title}</p>
+                        <p className="text-[10px] font-semibold text-surface-500 uppercase tracking-wide mb-1">Descriptor / expectations</p>
+                        <p className="text-sm text-surface-800 leading-snug mb-2" style={textWrapStyle}>{courseRefB.explanation || '—'}</p>
+                        <p className="text-xs text-surface-600 leading-snug border-t border-surface-200 pt-2 mt-2" style={textWrapStyle}>This clip provides evidence for the criterion above at {ref.timestamp}.</p>
                       </div>
                     )}
 
                     {/* Transcript Excerpt */}
-                    <div className={citationBox} style={wrapStyle}>
+                    <div className={citationBox}>
                       <p className={citationLabel}>Transcript Excerpt</p>
-                      <p className="text-sm text-surface-800 italic leading-relaxed break-words" style={textBlockStyle}>&quot;{ref.text}&quot;</p>
+                      <p className="text-sm text-surface-800 italic leading-relaxed" style={textWrapStyle}>&quot;{ref.text}&quot;</p>
                     </div>
                     
                     <button

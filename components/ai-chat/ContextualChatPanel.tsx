@@ -134,25 +134,26 @@ export default function ContextualChatPanel() {
         {currentHighlight && (
           <div className="px-4 py-2 bg-surface-50 border-b border-surface-100">
             {/* Path breadcrumb - shows location in content */}
-            {(currentHighlight.rubricCriterion || currentHighlight.timestamp || currentHighlight.sourceId) && (
-              <div className="flex items-center gap-1.5 mb-2 text-[10px] text-surface-400">
-                <span className="uppercase tracking-wide">{sourceConfig.label}</span>
-                {currentHighlight.rubricCriterion && (
-                  <>
-                    <ChevronRight className="w-3 h-3" />
-                    <span className="font-medium text-surface-600">{currentHighlight.rubricCriterion}</span>
-                  </>
-                )}
-                {currentHighlight.timestamp && (
-                  <>
-                    <ChevronRight className="w-3 h-3" />
-                    <span className="font-medium text-surface-600">@ {currentHighlight.timestamp}</span>
-                  </>
-                )}
-              </div>
-            )}
+            <div className="flex items-center flex-wrap gap-1.5 mb-2 text-[10px] text-surface-400">
+              <span className="uppercase tracking-wide font-medium">{sourceConfig.label}</span>
+              {currentHighlight.rubricCriterion && (
+                <>
+                  <ChevronRight className="w-3 h-3 flex-shrink-0" />
+                  <span className="font-medium text-surface-600">{currentHighlight.rubricCriterion}</span>
+                </>
+              )}
+              {currentHighlight.timestamp && (
+                <>
+                  <ChevronRight className="w-3 h-3 flex-shrink-0" />
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">
+                    <Clock className="w-2.5 h-2.5" />
+                    {currentHighlight.timestamp}
+                  </span>
+                </>
+              )}
+            </div>
             <div className="flex items-start gap-2">
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${sourceConfig.color}`}>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${sourceConfig.color}`}>
                 {sourceConfig.icon}
                 {sourceConfig.label}
               </span>
@@ -198,7 +199,12 @@ export default function ContextualChatPanel() {
             </div>
           )}
           
-          {chatMessages.map((message, msgIdx) => (
+          {chatMessages.map((message, msgIdx) => {
+            // Check if this is the first assistant message
+            const isFirstAssistantMessage = message.role === 'assistant' && 
+              chatMessages.findIndex(m => m.role === 'assistant') === msgIdx;
+            
+            return (
             <div
               key={message.id}
               className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -211,7 +217,7 @@ export default function ContextualChatPanel() {
                 }`}
               >
                 {/* Source context tag on first assistant message */}
-                {message.role === 'assistant' && msgIdx === 1 && currentHighlight && (
+                {isFirstAssistantMessage && currentHighlight && (
                   <div className="flex flex-wrap gap-1.5 mb-2 pb-2 border-b border-surface-200/50">
                     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${sourceConfig.color}`}>
                       {sourceConfig.icon}
@@ -280,7 +286,8 @@ export default function ContextualChatPanel() {
                 )}
               </div>
             </div>
-          ))}
+          );
+          })}
           
           {/* Loading indicator */}
           {isLoading && (
