@@ -1175,14 +1175,17 @@ RULES:
                       </div>
                     </div>
 
-                    {/* Speech Delivery - Metrics only, no videos */}
+                    {/* Speech Delivery - Metrics with class averages (rest of assignment) */}
                     <div className="bg-white rounded-2xl border border-surface-200 p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Mic className="w-4 h-4 text-primary-500" />
-                        <h3 className="text-sm font-semibold text-surface-900">Speech Delivery</h3>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Mic className="w-4 h-4 text-primary-500" />
+                          <h3 className="text-sm font-semibold text-surface-900">Speech Delivery</h3>
+                        </div>
+                        {classSpeechStats?.count != null && classSpeechStats.count > 0 && (
+                          <span className="text-[10px] text-surface-500">Averages from rest of assignment (n={classSpeechStats.count})</span>
+                        )}
                       </div>
-                      
-                      {/* Metrics - compact */}
                       <div className="grid grid-cols-3 gap-2 text-center">
                         {/* Filler Word Count */}
                         <div className="bg-surface-50 rounded-lg p-3">
@@ -1199,7 +1202,7 @@ RULES:
                           <p className="text-[10px] text-surface-500 mb-0.5">Filler Words</p>
                           <p className="text-[9px] text-surface-600 leading-tight">
                             {classSpeechStats?.fillerWordAvg != null ? (
-                              <>Class Avg: <span className="font-medium">{classSpeechStats.fillerWordAvg}</span> — Lower filler use improves clarity.</>
+                              <>Class avg: <span className="font-semibold">{Number(classSpeechStats.fillerWordAvg) === Math.floor(classSpeechStats.fillerWordAvg) ? Math.round(classSpeechStats.fillerWordAvg) : classSpeechStats.fillerWordAvg}</span> · Lower filler use improves clarity.</>
                             ) : (
                               <>Lower filler use improves clarity.</>
                             )}
@@ -1223,7 +1226,7 @@ RULES:
                           <p className="text-[10px] text-surface-500 mb-0.5">Words/min</p>
                           <p className="text-[9px] text-surface-600 leading-tight">
                             {classSpeechStats?.wpmAvg != null ? (
-                              <>Class Avg: <span className="font-medium">{classSpeechStats.wpmAvg}</span> — Ideal range 120–180 for comprehension.</>
+                              <>Class avg: <span className="font-semibold">{Math.round(classSpeechStats.wpmAvg)}</span> · Ideal range 120–180.</>
                             ) : (
                               <>Ideal range 120–180 for comprehension.</>
                             )}
@@ -1245,7 +1248,7 @@ RULES:
                           <p className="text-[10px] text-surface-500 mb-0.5">Pauses/min</p>
                           <p className="text-[9px] text-surface-600 leading-tight">
                             {classSpeechStats?.pausesPerMinAvg != null ? (
-                              <>Class Avg: <span className="font-medium">{classSpeechStats.pausesPerMinAvg}</span> — Strategic pauses aid emphasis.</>
+                              <>Class avg: <span className="font-semibold">{Number(classSpeechStats.pausesPerMinAvg) === Math.floor(classSpeechStats.pausesPerMinAvg) ? Math.round(classSpeechStats.pausesPerMinAvg) : classSpeechStats.pausesPerMinAvg}</span> · Strategic pauses aid emphasis.</>
                             ) : (
                               <>Strategic pauses aid emphasis.</>
                             )}

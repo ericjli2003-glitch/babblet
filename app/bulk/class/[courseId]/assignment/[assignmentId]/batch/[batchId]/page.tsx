@@ -584,6 +584,13 @@ export default function AssignmentDashboardPage() {
             </p>
             </div>
             <div className="flex items-center gap-3">
+            <Link
+              href={`/bulk?batchId=${batchId}`}
+              className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium"
+            >
+              <Upload className="w-4 h-4" />
+              {submissions.length === 0 ? 'Upload Submissions' : 'Upload more'}
+            </Link>
             <button
               onClick={handleExport}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-surface-200 rounded-lg hover:bg-surface-50 text-sm font-medium text-surface-700"
