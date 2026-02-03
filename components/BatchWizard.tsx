@@ -1298,12 +1298,14 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses, defa
       // Files will upload in background - pass expected count for progress display
       onComplete(batchId, filesToUpload.length);
 
-      // Upload files in background (fire and forget)
+      // Upload files in background IN PARALLEL (fire and forget)
       // This continues even after the wizard component unmounts
       (async () => {
+        const CONCURRENCY = 4; // Upload 4 files at a time
         let successfulUploads = 0;
         
-        for (const queuedFile of filesToUpload) {
+        // Helper to upload a single file
+        const uploadFile = async (queuedFile: QueuedFile): Promise<boolean> => {
           try {
             console.log(`[BatchWizard Background] Uploading ${queuedFile.name}`);
             
@@ -1321,7 +1323,7 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses, defa
 
             if (!presignData.success) {
               console.error(`[BatchWizard Background] Presign failed for ${queuedFile.name}:`, presignData.error);
-              continue;
+              return false;
             }
 
             // Upload to R2
@@ -1333,7 +1335,7 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses, defa
 
             if (!uploadRes.ok) {
               console.error(`[BatchWizard Background] R2 upload failed for ${queuedFile.name}: ${uploadRes.status}`);
-              continue;
+              return false;
             }
 
             // Enqueue for processing
@@ -1351,15 +1353,41 @@ export default function BatchWizard({ isOpen, onClose, onComplete, courses, defa
             const enqueueData = await enqueueRes.json();
 
             if (enqueueData.success) {
-              successfulUploads++;
               console.log(`[BatchWizard Background] Enqueued ${queuedFile.name}`);
+              return true;
             }
+            return false;
           } catch (err) {
             console.error(`[BatchWizard Background] Error uploading ${queuedFile.name}:`, err);
+            return false;
+          }
+        };
+        
+        // Process files in parallel with concurrency limit
+        const queue = [...filesToUpload];
+        const inFlight: Promise<void>[] = [];
+        
+        while (queue.length > 0 || inFlight.length > 0) {
+          // Start new uploads up to concurrency limit
+          while (inFlight.length < CONCURRENCY && queue.length > 0) {
+            const file = queue.shift()!;
+            const promise = uploadFile(file).then((success) => {
+              if (success) successfulUploads++;
+            }).finally(() => {
+              // Remove this promise from inFlight when done
+              const idx = inFlight.indexOf(promise);
+              if (idx !== -1) inFlight.splice(idx, 1);
+            });
+            inFlight.push(promise);
+          }
+          
+          // Wait for at least one to complete before continuing
+          if (inFlight.length > 0) {
+            await Promise.race(inFlight);
           }
         }
 
-        console.log(`[BatchWizard Background] Completed: ${successfulUploads}/${filesToUpload.length} files uploaded`);
+        console.log(`[BatchWizard Background] Completed: ${successfulUploads}/${filesToUpload.length} files uploaded in parallel`);
       })();
 
     } catch (error) {
