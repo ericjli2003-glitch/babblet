@@ -195,7 +195,23 @@ export default function ClassInsightCard({
     return refs;
   }, [citationSegments, evidence]);
   
-  // B = course/rubric ref — short explanation only; link to source doc if provided
+  // Rubric ref (for Video Evidence triangulation: Rubric Expectation)
+  const rubricRef = useMemo(() => {
+    const ref = courseReferences?.find(r => r.type === 'rubric');
+    if (!ref) return null;
+    const summary = ref.explanation?.trim() || ref.title;
+    return { title: ref.title, summary };
+  }, [courseReferences]);
+
+  // Course ref (for Video Evidence triangulation: Course Reference)
+  const courseRef = useMemo(() => {
+    const ref = courseReferences?.find(r => r.type === 'course');
+    if (!ref) return null;
+    const quote = ref.excerpt?.trim() || ref.explanation?.trim() || ref.title;
+    return { title: ref.title, quote, documentUrl: ref.documentUrl };
+  }, [courseReferences]);
+
+  // Legacy: first ref for any B-button usage
   const courseRefB = useMemo(() => {
     const ref = courseReferences?.[0];
     if (!ref) return null;
@@ -446,16 +462,22 @@ export default function ClassInsightCard({
                       </div>
                     )}
 
-                    {/* Rubric Alignment (beefed up) */}
-                    {courseRefB && courseRefB.type === 'rubric' && (
-                      <div className={citationBox}>
-                        <p className={citationLabel}>Rubric Alignment</p>
-                        <p className="text-xs font-semibold text-surface-800 mb-1.5" style={textWrapStyle}>Criterion: {courseRefB.title}</p>
-                        <p className="text-[10px] font-semibold text-surface-500 uppercase tracking-wide mb-1">Descriptor / expectations</p>
-                        <p className="text-sm text-surface-800 leading-snug mb-2" style={textWrapStyle}>{courseRefB.explanation || '—'}</p>
-                        <p className="text-xs text-surface-600 leading-snug border-t border-surface-200 pt-2 mt-2" style={textWrapStyle}>This clip provides evidence for the criterion above at {ref.timestamp}.</p>
-                      </div>
-                    )}
+                    {/* Triangulation: Rubric Expectation / Observed Here / Course Reference */}
+                    <div className={citationBox}>
+                      <p className={citationLabel}>Rubric &amp; course alignment</p>
+                      <p className="text-xs font-semibold text-surface-700 mb-1" style={textWrapStyle}>
+                        <span className="text-surface-500">Rubric Expectation: </span>
+                        {rubricRef ? rubricRef.summary : '—'}
+                      </p>
+                      <p className="text-xs text-surface-800 leading-snug mb-1" style={textWrapStyle}>
+                        <span className="text-surface-500">Observed Here: </span>
+                        {ref.explanation?.trim() || `Observable behavior at ${ref.timestamp} supports the criterion above.`}
+                      </p>
+                      <p className="text-xs text-surface-800 leading-snug border-t border-surface-200 pt-2 mt-2" style={textWrapStyle}>
+                        <span className="text-surface-500">Course Reference: </span>
+                        {courseRef ? courseRef.quote : '—'}
+                      </p>
+                    </div>
 
                     {/* Transcript Excerpt */}
                     <div className={citationBox}>
@@ -545,7 +567,7 @@ export default function ClassInsightCard({
         })}
       </div>
     );
-  }, [videoRefsByBullet, courseRefB, videoUrl, onSeekToTime, openRef]);
+  }, [videoRefsByBullet, rubricRef, courseRef, courseRefB, videoUrl, onSeekToTime, openRef]);
 
   return (
     <div className="space-y-4">
