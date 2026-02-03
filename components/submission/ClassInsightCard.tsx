@@ -347,8 +347,9 @@ export default function ClassInsightCard({
       const isOpen = openRef === `v-A-${key}`;
       const clipStart = ref.timeMs / 1000;
       const clipEnd = clipStart + CLIP_DURATION;
-      const citationBox = 'rounded-lg border border-surface-200 bg-surface-50/80 px-3 py-2 overflow-hidden';
+      const citationBox = 'rounded-lg border border-surface-200 bg-surface-50/80 px-3 py-2 overflow-hidden min-w-0';
       const citationLabel = 'text-[10px] font-semibold text-surface-500 uppercase tracking-wide mb-1.5';
+      const wrapStyle = { wordBreak: 'break-word' as const, overflowWrap: 'anywhere' as const, maxWidth: '100%' };
       return (
         <div key={key} className="relative inline-block">
           <button
@@ -367,26 +368,26 @@ export default function ClassInsightCard({
           {isOpen && (
             <>
               <div className="fixed inset-0 z-[100] bg-black/20" onClick={() => { setOpenRef(null); setClipPlaying(false); }} aria-hidden="true" />
-              <div ref={openRefRef} style={{ width: '440px', maxWidth: 'calc(100vw - 32px)', wordBreak: 'break-word', overflowWrap: 'anywhere' }} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] max-h-[85vh] overflow-hidden rounded-2xl border border-surface-200 bg-white shadow-2xl flex flex-col">
+              <div ref={openRefRef} style={{ width: '440px', maxWidth: 'calc(100vw - 32px)', minWidth: 0, wordBreak: 'break-word', overflowWrap: 'anywhere', boxSizing: 'border-box' }} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] max-h-[85vh] overflow-hidden rounded-2xl border border-surface-200 bg-white shadow-2xl flex flex-col">
                 {/* Header */}
-                <div className="shrink-0 bg-white border-b border-surface-100 px-5 py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                <div className="shrink-0 bg-white border-b border-surface-100 px-5 py-3 flex items-center justify-between min-w-0">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 shrink-0 rounded-xl bg-blue-100 flex items-center justify-center">
                       <PlayCircle className="w-5 h-5 text-blue-600" />
                     </div>
-                    <div>
-                      <p className="text-base font-semibold text-surface-900">Video Evidence</p>
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold text-surface-900 truncate">Video Evidence</p>
                       <p className="text-xs text-surface-500">Observed at {ref.timestamp}</p>
                     </div>
                   </div>
-                  <button onClick={() => { setOpenRef(null); setClipPlaying(false); }} className="p-2 hover:bg-surface-100 rounded-lg transition-colors">
+                  <button onClick={() => { setOpenRef(null); setClipPlaying(false); }} className="p-2 shrink-0 hover:bg-surface-100 rounded-lg transition-colors">
                     <X className="w-5 h-5 text-surface-400" />
                   </button>
                 </div>
                 
                 {/* Citation-style content */}
-                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4" style={{ maxWidth: '100%' }}>
-                  <div className="space-y-3" style={{ maxWidth: '100%' }}>
+                <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-4" style={{ maxWidth: '100%' }}>
+                  <div className="space-y-3 min-w-0" style={{ maxWidth: '100%' }}>
                     {videoUrl && (
                       <div className="rounded-xl overflow-hidden bg-surface-900 relative">
                         <video
@@ -430,42 +431,42 @@ export default function ClassInsightCard({
 
                     {/* 1. Referenced Feedback */}
                     {referencedFeedbackText && (
-                      <div className={citationBox} style={{ wordBreak: 'break-word' }}>
+                      <div className={citationBox} style={wrapStyle}>
                         <p className={citationLabel}>Referenced Feedback</p>
-                        <p className="text-sm text-surface-800 leading-snug">Supports: {referencedFeedbackText} [{displayNum}]</p>
+                        <p className="text-sm text-surface-800 leading-snug break-words" style={wrapStyle}>Supports: {referencedFeedbackText} [{displayNum}]</p>
                       </div>
                     )}
 
                     {/* 2. Observed at [timestamp] */}
-                    <div className={citationBox} style={{ wordBreak: 'break-word' }}>
+                    <div className={citationBox} style={wrapStyle}>
                       <p className={citationLabel}>Observed at {ref.timestamp}</p>
-                      <ul className="text-sm text-surface-800 leading-snug list-disc list-inside space-y-0.5">
-                        <li>Student stated: &quot;{ref.text}&quot;</li>
+                      <ul className="text-sm text-surface-800 leading-snug list-disc list-inside space-y-0.5 break-words" style={wrapStyle}>
+                        <li className="break-words" style={wrapStyle}>Student stated: &quot;{ref.text}&quot;</li>
                       </ul>
                     </div>
 
                     {/* 3. Course Material Reference */}
                     {courseRefB && courseRefB.type === 'course' && (
-                      <div className={citationBox} style={{ wordBreak: 'break-word' }}>
+                      <div className={citationBox} style={wrapStyle}>
                         <p className={citationLabel}>Course Material Reference</p>
-                        <p className="text-xs font-medium text-surface-700 mb-1">{courseRefB.title}</p>
-                        <p className="text-sm text-surface-800 leading-snug">{courseRefB.explanation || courseRefB.excerpt || '—'}</p>
+                        <p className="text-xs font-medium text-surface-700 mb-1 break-words" style={wrapStyle}>{courseRefB.title}</p>
+                        <p className="text-sm text-surface-800 leading-snug break-words" style={wrapStyle}>{courseRefB.explanation || courseRefB.excerpt || '—'}</p>
                       </div>
                     )}
 
                     {/* 4. Rubric Alignment */}
                     {courseRefB && courseRefB.type === 'rubric' && (
-                      <div className={citationBox} style={{ wordBreak: 'break-word' }}>
+                      <div className={citationBox} style={wrapStyle}>
                         <p className={citationLabel}>Rubric Alignment</p>
-                        <p className="text-xs font-medium text-surface-700 mb-1">{courseRefB.title}</p>
-                        <p className="text-sm text-surface-800 leading-snug">{courseRefB.explanation || '—'}</p>
+                        <p className="text-xs font-medium text-surface-700 mb-1 break-words" style={wrapStyle}>{courseRefB.title}</p>
+                        <p className="text-sm text-surface-800 leading-snug break-words" style={wrapStyle}>{courseRefB.explanation || '—'}</p>
                       </div>
                     )}
 
                     {/* 5. Transcript Excerpt */}
-                    <div className={citationBox} style={{ wordBreak: 'break-word' }}>
+                    <div className={citationBox} style={wrapStyle}>
                       <p className={citationLabel}>Transcript Excerpt</p>
-                      <p className="text-sm text-surface-800 italic leading-relaxed">&quot;{ref.text}&quot;</p>
+                      <p className="text-sm text-surface-800 italic leading-relaxed break-words" style={wrapStyle}>&quot;{ref.text}&quot;</p>
                     </div>
                     
                     <button
