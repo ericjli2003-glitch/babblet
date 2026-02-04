@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
-  Plus, Settings, Download, ChevronRight, Users, TrendingUp,
+  Plus, ChevronRight, TrendingUp,
   AlertCircle, Play, Eye, Loader2, BookOpen, Trash2, MoreVertical, Library, X
 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -753,11 +753,8 @@ function CoursesContent() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'assignments' | 'students' | 'analytics'>('assignments');
   const [showBatchWizard, setShowBatchWizard] = useState(false);
   const [showCreateCourse, setShowCreateCourse] = useState(false);
-  const [showCourseSettings, setShowCourseSettings] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
 
   const loadCoursesAndBatches = async () => {
     try {
@@ -851,61 +848,6 @@ function CoursesContent() {
     loadCoursesAndBatches();
   }, []);
 
-  // Export course report
-  const handleExportCourseReport = async () => {
-    if (!selectedCourse) return;
-    
-    setIsExporting(true);
-    try {
-      // Generate CSV report of all submissions
-      const submissions: { studentName: string; assignment: string; score: number | string; status: string }[] = [];
-      
-      for (const assignment of selectedCourse.assignments) {
-        // Fetch submissions for this batch
-        const res = await fetch(`/api/bulk/submissions?batchId=${assignment.id}`);
-        const data = await res.json();
-        
-        if (data.submissions) {
-          for (const sub of data.submissions) {
-            submissions.push({
-              studentName: sub.studentName || 'Unknown',
-              assignment: assignment.name,
-              score: sub.score ?? 'N/A',
-              status: sub.status || 'pending',
-            });
-          }
-        }
-      }
-
-      // Create CSV content
-      const headers = ['Student Name', 'Assignment', 'Score', 'Status'];
-      const rows = submissions.map(s => [s.studentName, s.assignment, String(s.score), s.status]);
-      const csvContent = [
-        `Course Report: ${selectedCourse.name}`,
-        `Generated: ${new Date().toLocaleString()}`,
-        '',
-        headers.join(','),
-        ...rows.map(r => r.map(cell => `"${cell}"`).join(',')),
-      ].join('\n');
-
-      // Download CSV
-      const blob = new Blob([csvContent], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${selectedCourse.courseCode || selectedCourse.name}_report_${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Export failed:', error);
-      alert('Failed to export report. Please try again.');
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
   if (loading) {
     return (
       <DashboardLayout>
@@ -977,14 +919,6 @@ function CoursesContent() {
           onClose={() => setShowCreateCourse(false)}
           onSuccess={loadCoursesAndBatches}
         />
-
-        {/* Course Settings Modal */}
-        <CourseSettingsModal
-          isOpen={showCourseSettings}
-          onClose={() => setShowCourseSettings(false)}
-          course={selectedCourse}
-          onUpdate={loadCoursesAndBatches}
-        />
       </DashboardLayout>
     );
   }
@@ -1019,109 +953,58 @@ function CoursesContent() {
               <Library className="w-4 h-4" />
               Manage Resources
             </Link>
-            <button 
-              onClick={() => handleExportCourseReport()}
-              disabled={isExporting}
-              className="flex items-center gap-2 px-4 py-2 text-surface-600 bg-white border border-surface-200 rounded-lg hover:bg-surface-50 text-sm font-medium disabled:opacity-50"
-            >
-              {isExporting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Download className="w-4 h-4" />
-              )}
-              {isExporting ? 'Exporting...' : 'Export Report'}
-            </button>
-            <button 
-              onClick={() => setShowCourseSettings(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium"
-            >
-              <Settings className="w-4 h-4" />
-              Course Settings
-            </button>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 mb-6 border-b border-surface-200 -mx-8 px-8">
-          {(['assignments', 'students', 'analytics'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2.5 text-sm font-medium transition-colors ${
-                activeTab === tab
-                  ? 'text-primary-600 border-b-2 border-primary-500 -mb-px'
-                  : 'text-surface-500 hover:text-surface-700'
-              }`}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </button>
-          ))}
-        </div>
+        {/* Section Title */}
+        <h2 className="text-lg font-semibold text-surface-900 mb-4">Assignments</h2>
 
         {/* Content */}
         <div className="flex gap-6">
           {/* Assignments Grid */}
           <div className="flex-1">
-            {activeTab === 'assignments' && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {selectedCourse.assignments.map((assignment) => (
-                  <AssignmentCard
-                    key={assignment.id}
-                    assignment={assignment}
-                    courseId={selectedCourse.id}
-                    courseName={selectedCourse.name}
-                    onDelete={(deletedId) => {
-                      // Remove the deleted assignment from the local state
-                      setSelectedCourse(prev => prev ? {
-                        ...prev,
-                        assignments: prev.assignments.filter(a => a.id !== deletedId),
-                        totalSubmissions: prev.totalSubmissions - (assignment.totalSubmissions || 0),
-                      } : null);
-                      // Also update the courses list
-                      setCourses(prev => prev.map(c => 
-                        c.id === selectedCourse.id 
-                          ? { 
-                              ...c, 
-                              assignments: c.assignments.filter(a => a.id !== deletedId),
-                              totalSubmissions: c.totalSubmissions - (assignment.totalSubmissions || 0),
-                            }
-                          : c
-                      ));
-                    }}
-                  />
-                ))}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {selectedCourse.assignments.map((assignment) => (
+                <AssignmentCard
+                  key={assignment.id}
+                  assignment={assignment}
+                  courseId={selectedCourse.id}
+                  courseName={selectedCourse.name}
+                  onDelete={(deletedId) => {
+                    // Remove the deleted assignment from the local state
+                    setSelectedCourse(prev => prev ? {
+                      ...prev,
+                      assignments: prev.assignments.filter(a => a.id !== deletedId),
+                      totalSubmissions: prev.totalSubmissions - (assignment.totalSubmissions || 0),
+                    } : null);
+                    // Also update the courses list
+                    setCourses(prev => prev.map(c => 
+                      c.id === selectedCourse.id 
+                        ? { 
+                            ...c, 
+                            assignments: c.assignments.filter(a => a.id !== deletedId),
+                            totalSubmissions: c.totalSubmissions - (assignment.totalSubmissions || 0),
+                          }
+                        : c
+                    ));
+                  }}
+                />
+              ))}
 
-                {/* Add Assignment Card */}
-                <button
-                  onClick={() => setShowBatchWizard(true)}
-                  className="bg-surface-50 rounded-2xl border-2 border-dashed border-surface-200 p-8 flex flex-col items-center justify-center hover:border-primary-300 hover:bg-primary-50/30 transition-all min-h-[250px]"
-                >
-                  <div className="w-12 h-12 rounded-xl bg-surface-100 flex items-center justify-center mb-3">
-                    <Plus className="w-6 h-6 text-surface-400" />
-                  </div>
-                  <p className="font-medium text-surface-700">Create Assignment</p>
-                  <p className="text-sm text-surface-500 text-center mt-1">
-                    Add rubric and start grading
-                  </p>
-                </button>
-              </div>
-            )}
-
-            {activeTab === 'students' && (
-              <div className="bg-white rounded-2xl border border-surface-200 p-8 text-center">
-                <Users className="w-12 h-12 text-surface-300 mx-auto mb-4" />
-                <h3 className="font-semibold text-surface-900 mb-2">Student Roster</h3>
-                <p className="text-surface-500">Student management coming soon</p>
-              </div>
-            )}
-
-            {activeTab === 'analytics' && (
-              <div className="bg-white rounded-2xl border border-surface-200 p-8 text-center">
-                <TrendingUp className="w-12 h-12 text-surface-300 mx-auto mb-4" />
-                <h3 className="font-semibold text-surface-900 mb-2">Course Analytics</h3>
-                <p className="text-surface-500">Detailed analytics coming soon</p>
-              </div>
-            )}
+              {/* Add Assignment Card */}
+              <button
+                onClick={() => setShowBatchWizard(true)}
+                className="bg-surface-50 rounded-2xl border-2 border-dashed border-surface-200 p-8 flex flex-col items-center justify-center hover:border-primary-300 hover:bg-primary-50/30 transition-all min-h-[250px]"
+              >
+                <div className="w-12 h-12 rounded-xl bg-surface-100 flex items-center justify-center mb-3">
+                  <Plus className="w-6 h-6 text-surface-400" />
+                </div>
+                <p className="font-medium text-surface-700">Create Assignment</p>
+                <p className="text-sm text-surface-500 text-center mt-1">
+                  Add rubric and start grading
+                </p>
+              </button>
+            </div>
           </div>
 
         </div>
