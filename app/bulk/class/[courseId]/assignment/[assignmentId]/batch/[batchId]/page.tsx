@@ -1845,18 +1845,36 @@ export default function AssignmentDashboardPage() {
                 </div>
           )}
 
-          {/* Empty State */}
-          {submissions.length === 0 && (
+          {/* Empty State - only show after loading complete and no uploads in progress */}
+          {submissions.length === 0 && !loading && !uploadsInProgress && !isUploading && (
             <div className="text-center py-12">
               <p className="text-surface-500">No submissions yet</p>
-                <Link
-                href={`/bulk?batchId=${batchId}`}
-                className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium"
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium"
                 >
-                Upload Submissions
-                </Link>
+                  Upload Submissions
+                </button>
               </div>
-        )}
+          )}
+          
+          {/* Loading State - show owl while fetching initial data */}
+          {submissions.length === 0 && loading && (
+            <div className="py-12">
+              <div className="flex flex-col items-center justify-center text-center">
+                <div className="relative mb-4">
+                  <div className="text-6xl animate-bounce">🦉</div>
+                  <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-12 h-2 bg-surface-200 rounded-full opacity-30 animate-pulse" />
+                </div>
+                <h3 className="text-lg font-semibold text-surface-900 mb-1">
+                  Loading submissions...
+                </h3>
+                <p className="text-sm text-surface-500">
+                  Babblet is fetching your data
+                </p>
+              </div>
+            </div>
+          )}
         </div>
     </div>
     </DashboardLayout>
