@@ -179,6 +179,8 @@ export default function AssignmentDashboardPage() {
   const [selectedForRegrade, setSelectedForRegrade] = useState<Set<string>>(new Set());
   /** IDs currently being regraded; block View link until they have hasGradeData again */
   const [submissionIdsRegrading, setSubmissionIdsRegrading] = useState<Set<string>>(new Set());
+  /** AbortController for current regrade session; abort when a new regrade starts */
+  const regradeAbortRef = useRef<AbortController | null>(null);
 
   // ============================================
   // ADD MORE UPLOADS: State for uploading additional files
@@ -743,6 +745,12 @@ export default function AssignmentDashboardPage() {
   const handleRegradeSelected = async () => {
     if (selectedForRegrade.size === 0) return;
     
+    // Cancel any in-flight regrade (previous API + worker requests)
+    regradeAbortRef.current?.abort();
+    const controller = new AbortController();
+    regradeAbortRef.current = controller;
+    const signal = controller.signal;
+
     const submissionIdsToRegrade = Array.from(selectedForRegrade);
     setIsRegrading(true);
     setSubmissionIdsRegrading(new Set(submissionIdsToRegrade));
@@ -752,10 +760,13 @@ export default function AssignmentDashboardPage() {
       const regradeRes = await fetch(`/api/bulk/regrade`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ submissionIds: submissionIdsToRegrade })
+        body: JSON.stringify({ submissionIds: submissionIdsToRegrade }),
+        signal,
       });
       const regradeData = await regradeRes.json();
       console.log(`[Regrade] API response:`, regradeData);
+      
+      if (signal.aborted) return;
       
       // Exit regrade mode and clear selections
       setRegradeMode(false);
@@ -767,8 +778,9 @@ export default function AssignmentDashboardPage() {
       setGradingStartTime(Date.now());
       
       // Refetch data immediately
-      const res = await fetch(`/api/bulk/status?batchId=${batchId}`);
+      const res = await fetch(`/api/bulk/status?batchId=${batchId}`, { signal });
       const data = await res.json();
+      if (signal.aborted) return;
       if (data.submissions) {
         const subs = data.submissions.map((sub: any) => ({
           id: sub.id,
@@ -793,43 +805,46 @@ export default function AssignmentDashboardPage() {
         }
       }
       
-      // Start workers directly (avoid runWorker closure issues)
+      // Start workers; they respect the same abort signal so a new regrade cancels these
       const MAX_WORKERS = 10;
       const numWorkers = Math.min(submissionIdsToRegrade.length, MAX_WORKERS);
       
       const workerPromises = Array.from({ length: numWorkers }, async (_, i) => {
         const workerId = i + 1;
-        let keepProcessing = true;
-        
-        while (keepProcessing) {
+        while (!signal.aborted) {
           try {
-            console.log(`[Regrade] Worker ${workerId} processing...`);
-            const workerRes = await fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST' });
+            const workerRes = await fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST', signal });
             const workerData = await workerRes.json();
-            console.log(`[Regrade] Worker ${workerId} result:`, workerData);
-            
+            if (signal.aborted) break;
             if (workerData.processed > 0) {
               await new Promise(r => setTimeout(r, 500));
             } else {
-              keepProcessing = false;
+              break;
             }
           } catch (err) {
+            if (err instanceof Error && err.name === 'AbortError') break;
             console.error(`[Regrade] Worker ${workerId} error:`, err);
-            keepProcessing = false;
+            break;
           }
         }
-        console.log(`[Regrade] Worker ${workerId} finished`);
       });
       
-      // Run workers in background
+      // Run workers in background; don't await so we can exit and let new regrade abort these
       Promise.all(workerPromises).then(() => {
-        console.log(`[Regrade] All workers finished`);
+        if (!signal.aborted) console.log(`[Regrade] All workers finished`);
       });
       
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.log('[Regrade] Previous regrade aborted');
+        return;
+      }
       console.error('[AssignmentDashboard] Regrade error:', err);
     } finally {
-      setIsRegrading(false);
+      // Only clear if this session is still the active one (not superseded by a new regrade)
+      if (regradeAbortRef.current === controller) {
+        setIsRegrading(false);
+      }
     }
   };
 
