@@ -131,33 +131,37 @@ export async function GET(request: NextRequest) {
     let submissions = (await Promise.all(submissionIds.map(id => getSubmission(id)))).filter(Boolean) as NonNullable<Awaited<ReturnType<typeof getSubmission>>>[];
     console.log(`[Status] BatchId=${batchId} Found ${submissions.length} valid submissions from set`);
     
-    // ALWAYS try to recover if batch claims more submissions than we found
-    // This handles cases where submissions exist but weren't added to the set
-    if (batch.totalSubmissions > submissions.length || submissions.length === 0) {
-      console.log(`[Status] Recovery needed. Batch claims ${batch.totalSubmissions}, found ${submissions.length}`);
-      
-      const existingIds = new Set(submissions.map(s => s.id));
-      
-      // Try 1: Check the queue for queued submissions
-      const queueItems = await kv.lrange('submission_queue', 0, -1) as string[];
-      console.log(`[Status] Queue has ${queueItems?.length || 0} items`);
-      
-      for (const subId of queueItems || []) {
-        if (existingIds.has(subId)) continue;
-        const sub = await getSubmission(subId);
-        if (sub && sub.batchId === batchId) {
-          submissions.push(sub);
-          existingIds.add(sub.id);
-          await kv.sadd(`batch_submissions:${batchId}`, subId);
-          console.log(`[Status] Recovered submission ${subId} from queue`);
-        }
+    // ALWAYS check queue for any submissions belonging to this batch
+    // This catches submissions that were created but not added to SET
+    const existingIds = new Set(submissions.map(s => s.id));
+    const queueItems = await kv.lrange('submission_queue', 0, -1) as string[];
+    console.log(`[Status] Queue has ${queueItems?.length || 0} items`);
+    
+    for (const subId of queueItems || []) {
+      if (existingIds.has(subId)) continue;
+      const sub = await getSubmission(subId);
+      if (sub && sub.batchId === batchId) {
+        submissions.push(sub);
+        existingIds.add(sub.id);
+        await kv.sadd(`batch_submissions:${batchId}`, subId);
+        console.log(`[Status] Recovered submission ${subId} from queue`);
       }
+    }
+    
+    // If we still have fewer submissions than expected, or SET seems incomplete, scan for orphans
+    // This handles cases where submissions exist but weren't added to the set or queue
+    const shouldScan = batch.totalSubmissions > submissions.length || 
+                      submissions.length === 0 ||
+                      (submissionIds.length < 5 && batch.totalSubmissions >= 5); // Heuristic: if batch has many but SET has few
+    
+    if (shouldScan) {
+      console.log(`[Status] Recovery scan needed. Batch claims ${batch.totalSubmissions}, SET has ${submissionIds.length}, found ${submissions.length}`);
       
-      // Try 2: Scan for submission keys that belong to this batch
+      // Scan for submission keys that belong to this batch
       console.log(`[Status] Scanning for orphaned submissions...`);
       let cursor = 0;
       let scanCount = 0;
-      const maxScans = 20; // Increased limit for better recovery
+      const maxScans = 50; // Increased limit for better recovery
       
       do {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -174,7 +178,7 @@ export async function GET(request: NextRequest) {
             submissions.push(sub);
             existingIds.add(sub.id);
             await kv.sadd(`batch_submissions:${batchId}`, subId);
-            console.log(`[Status] Recovered orphaned submission ${subId}`);
+            console.log(`[Status] Recovered orphaned submission ${subId} (${sub.studentName})`);
           }
         }
         
