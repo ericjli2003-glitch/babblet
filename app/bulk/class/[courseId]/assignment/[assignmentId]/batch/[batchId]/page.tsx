@@ -143,9 +143,11 @@ export default function AssignmentDashboardPage() {
   const urlExpectedUploads = parseInt(searchParams.get('uploading') || '0', 10);
 
   const [loading, setLoading] = useState(true);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [batch, setBatch] = useState<BatchInfo | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const loadIdRef = useRef(0);
   // ============================================
   // HIGH WATER MARK: Prevent counts from going backwards
   // Once we've seen N submissions, never show fewer than N
@@ -166,6 +168,7 @@ export default function AssignmentDashboardPage() {
     message: '',
   });
   const [isRegrading, setIsRegrading] = useState(false);
+  const [regradingCount, setRegradingCount] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -186,14 +189,16 @@ export default function AssignmentDashboardPage() {
   const submissionStateCacheRef = useRef<Record<string, { hasGradeData?: boolean; overallScore?: number | null; videoLength?: string }>>({});
 
   // Minimum time to show loading screen (prevents flash of empty state)
-  const MIN_LOADING_MS = 800;
+  const MIN_LOADING_MS = 1200;
 
   // Load batch and submissions
   useEffect(() => {
+    setInitialLoadComplete(false);
+    setLoading(true);
+    const loadId = ++loadIdRef.current;
     const loadData = async () => {
       const start = Date.now();
       try {
-        setLoading(true);
 
         // Fetch batch status and course info
         const [batchRes, courseRes] = await Promise.all([
@@ -291,12 +296,16 @@ export default function AssignmentDashboardPage() {
         console.error('[AssignmentDashboard] Error:', err);
         setError('Failed to load data');
       } finally {
+        // Only apply result if this is still the latest load (avoids Strict Mode / fast nav race)
+        if (loadId !== loadIdRef.current) return;
         // Keep loading screen visible for minimum time so owl always shows
         const elapsed = Date.now() - start;
         const remaining = Math.max(0, MIN_LOADING_MS - elapsed);
         if (remaining > 0) {
           await new Promise(r => setTimeout(r, remaining));
         }
+        if (loadId !== loadIdRef.current) return;
+        setInitialLoadComplete(true);
         setLoading(false);
       }
     };
@@ -549,74 +558,65 @@ export default function AssignmentDashboardPage() {
             }
           }
           
-          // Map fresh data from server
-          const updatedSubs: Submission[] = data.submissions.map((sub: any) => ({
-            id: sub.id,
-            studentName: sub.studentName || 'Unknown Student',
-            originalFilename: sub.originalFilename || 'Unknown',
-            status: sub.status,
-            createdAt: sub.createdAt || Date.now(),
-            completedAt: sub.completedAt,
-            overallScore: sub.overallScore,
-            hasGradeData: sub.hasGradeData ?? false,
-            videoLength: undefined,
-            aiSentiment: sub.analysis?.sentiment || (sub.hasGradeData ? 'Confident' : undefined),
-            flagged: sub.flagged,
-            flagReason: sub.flagReason,
-          }));
+          // Map fresh data from server (with videoLength)
+          const updatedSubs: Submission[] = data.submissions.map((sub: any) => {
+            const cached = submissionStateCacheRef.current[sub.id] || {};
+            const hasGradeData = sub.hasGradeData ?? false;
+            const overallScore = hasGradeData ? (sub.overallScore ?? cached.overallScore ?? null) : null;
+            const videoLength = sub.duration ? formatDuration(sub.duration) : cached.videoLength;
+            return {
+              id: sub.id,
+              studentName: sub.studentName || 'Unknown Student',
+              originalFilename: sub.originalFilename || 'Unknown',
+              status: sub.status,
+              createdAt: sub.createdAt || Date.now(),
+              completedAt: sub.completedAt,
+              overallScore,
+              hasGradeData: hasGradeData || cached.hasGradeData || false,
+              videoLength,
+              aiSentiment: sub.analysis?.sentiment || (hasGradeData ? 'Confident' : undefined),
+              flagged: sub.flagged,
+              flagReason: sub.flagReason,
+            };
+          });
+          const updatedMap = new Map(updatedSubs.map(s => [s.id, s]));
           
           // ============================================
-          // SUBMISSION UPDATE: Merge server data with local state
-          // - If submission was explicitly regraded (status='queued'), use new data
-          // - Otherwise preserve grade data to prevent flicker
-          // - Never show fewer submissions than we've seen
+          // SUBMISSION UPDATE: Merge server data WITHOUT changing order
+          // - Preserve current dashboard order (createdAt) so rows don't jump
+          // - Update each existing row in place; append any new IDs at end
           // ============================================
           setSubmissions(prev => {
             const prevMap = new Map(prev.map(s => [s.id, s]));
             
-            // Merge submissions
-            const mergedSubs = updatedSubs.map(newSub => {
-              const existingSub = prevMap.get(newSub.id);
-              
-              // If submission is now queued/processing, it's being regraded - use server data
-              // This allows regrades to show proper status even if previously graded
-              if (['queued', 'transcribing', 'analyzing'].includes(newSub.status)) {
-                return newSub;
-              }
-              
-              // If existing submission has grade data and new doesn't, preserve existing
-              // (protects against transient API inconsistencies during normal grading)
-              if (existingSub?.hasGradeData && existingSub.overallScore != null) {
-                if (newSub.hasGradeData && newSub.overallScore != null) {
-                  return newSub; // New grade available, use it
-                }
-                // Keep existing graded data (prevents flicker)
-                return existingSub;
-              }
-              
-              return newSub;
+            const mergeOne = (existing: Submission, incoming: Submission): Submission => {
+              if (['queued', 'transcribing', 'analyzing'].includes(incoming.status)) return incoming;
+              if (existing.hasGradeData && existing.overallScore != null && (!incoming.hasGradeData || incoming.overallScore == null)) return existing;
+              return {
+                ...incoming,
+                aiSentiment: incoming.aiSentiment ?? existing.aiSentiment,
+                flagged: incoming.flagged ?? existing.flagged,
+                flagReason: incoming.flagReason ?? existing.flagReason,
+                videoLength: incoming.videoLength ?? existing.videoLength,
+              };
+            };
+            
+            // Keep same order as prev: update each by id
+            const inOrder = prev.map(s => {
+              const inc = updatedMap.get(s.id);
+              if (!inc) return s;
+              return mergeOne(s, inc);
             });
             
-            if (mergedSubs.length >= prev.length) {
-              setSubmissionHighWaterMark(mark => Math.max(mark, mergedSubs.length));
-              return mergedSubs;
-            } else {
-              // Fewer submissions from server - merge into existing to prevent count drop
-              const mergedMap = new Map(mergedSubs.map(s => [s.id, s]));
-              return prev.map(s => {
-                const updated = mergedMap.get(s.id);
-                if (!updated) return s;
-                // If regrading (queued status), use server data
-                if (['queued', 'transcribing', 'analyzing'].includes(updated.status)) {
-                  return updated;
-                }
-                // Preserve grade if existing has it and new doesn't
-                if (s.hasGradeData && s.overallScore != null && (!updated.hasGradeData || updated.overallScore == null)) {
-                  return s;
-                }
-                return updated;
-              });
+            // Append any new submissions from API (e.g. recovery) at end, by createdAt
+            const newSubs = updatedSubs.filter(s => !prevMap.has(s.id));
+            if (newSubs.length === 0) {
+              setSubmissionHighWaterMark(mark => Math.max(mark, inOrder.length));
+              return inOrder;
             }
+            const appended = [...inOrder, ...newSubs.sort((a, b) => a.createdAt - b.createdAt)];
+            setSubmissionHighWaterMark(mark => Math.max(mark, appended.length));
+            return appended;
           });
           
           if (data.batch) {
@@ -765,10 +765,10 @@ export default function AssignmentDashboardPage() {
   const handleRegradeSelected = async () => {
     if (selectedForRegrade.size === 0) return;
     
+    const submissionIdsToRegrade = Array.from(selectedForRegrade);
     setIsRegrading(true);
+    setRegradingCount(submissionIdsToRegrade.length);
     try {
-      // Re-grade only selected submissions
-      const submissionIdsToRegrade = Array.from(selectedForRegrade);
       console.log(`[Regrade] Starting regrade for ${submissionIdsToRegrade.length} submissions`);
       
       const regradeRes = await fetch(`/api/bulk/regrade`, { 
@@ -779,76 +779,86 @@ export default function AssignmentDashboardPage() {
       const regradeData = await regradeRes.json();
       console.log(`[Regrade] API response:`, regradeData);
       
-      // Exit regrade mode and clear selections
+      if (!regradeRes.ok || !regradeData.success) {
+        const msg = regradeData?.error || regradeData?.message || 'Regrade request failed';
+        alert(`Regrade failed: ${msg}. Please try again.`);
+        setIsRegrading(false);
+        setRegradingCount(0);
+        return;
+      }
+      
       setRegradeMode(false);
       setSelectedForRegrade(new Set());
-      
-      // Unlock status to allow showing processing
       statusLockedRef.current = null;
       setGradingStarted(true);
       setGradingStartTime(Date.now());
       
-      // Refetch data immediately
+      // Refetch and merge WITHOUT changing row order
       const res = await fetch(`/api/bulk/status?batchId=${batchId}`);
       const data = await res.json();
       if (data.submissions) {
-        const subs = data.submissions.map((sub: any) => ({
-          id: sub.id,
-          studentName: sub.studentName || 'Unknown Student',
-          originalFilename: sub.originalFilename || 'Unknown',
-          status: sub.status,
-          createdAt: sub.createdAt || Date.now(),
-          completedAt: sub.completedAt,
-          overallScore: sub.overallScore,
-          hasGradeData: sub.hasGradeData ?? false,
-          videoLength: sub.duration ? formatDuration(sub.duration) : undefined,
-          aiSentiment: sub.analysis?.sentiment,
-          flagged: sub.flagged,
-          flagReason: sub.flagReason,
-        }));
-        setSubmissions(subs);
-        
-        // Update grading status
-        if (data.gradingStatus) {
-          setGradingStatus(data.gradingStatus);
+        const incomingMap = new Map<string, Submission>();
+        for (const sub of data.submissions as any[]) {
+          const cached = submissionStateCacheRef.current[sub.id] || {};
+          const hasGradeData = sub.hasGradeData ?? false;
+          const entry: Submission = {
+            id: sub.id,
+            studentName: sub.studentName || 'Unknown Student',
+            originalFilename: sub.originalFilename || 'Unknown',
+            status: sub.status,
+            createdAt: sub.createdAt || Date.now(),
+            completedAt: sub.completedAt,
+            overallScore: hasGradeData ? (sub.overallScore ?? cached.overallScore ?? null) : null,
+            hasGradeData: hasGradeData || !!cached.hasGradeData,
+            videoLength: sub.duration ? formatDuration(sub.duration) : cached.videoLength,
+            aiSentiment: sub.analysis?.sentiment || (hasGradeData ? 'Confident' : undefined),
+            flagged: sub.flagged,
+            flagReason: sub.flagReason,
+          };
+          submissionStateCacheRef.current[sub.id] = {
+            ...cached,
+            ...(entry.videoLength ? { videoLength: entry.videoLength } : {}),
+            ...(entry.hasGradeData && entry.overallScore != null ? { hasGradeData: true, overallScore: entry.overallScore } : {}),
+          };
+          incomingMap.set(sub.id, entry);
         }
+        setSubmissions(prev => prev.map(s => {
+          const inc = incomingMap.get(s.id);
+          if (!inc) return s;
+          return {
+            ...s,
+            ...inc,
+            aiSentiment: inc.aiSentiment ?? s.aiSentiment,
+            flagged: inc.flagged ?? s.flagged,
+            flagReason: inc.flagReason ?? s.flagReason,
+          };
+        }));
+        if (data.gradingStatus) setGradingStatus(data.gradingStatus);
       }
       
-      // Start workers directly (avoid runWorker closure issues)
       const MAX_WORKERS = 10;
       const numWorkers = Math.min(submissionIdsToRegrade.length, MAX_WORKERS);
-      
-      const workerPromises = Array.from({ length: numWorkers }, async (_, i) => {
-        const workerId = i + 1;
+      const workerPromises = Array.from({ length: numWorkers }, async () => {
         let keepProcessing = true;
-        
         while (keepProcessing) {
           try {
-            console.log(`[Regrade] Worker ${workerId} processing...`);
             const workerRes = await fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST' });
             const workerData = await workerRes.json();
-            console.log(`[Regrade] Worker ${workerId} result:`, workerData);
-            
-            if (workerData.processed > 0) {
-              await new Promise(r => setTimeout(r, 500));
-            } else {
-              keepProcessing = false;
-            }
-          } catch (err) {
-            console.error(`[Regrade] Worker ${workerId} error:`, err);
+            if (workerData.processed > 0) await new Promise(r => setTimeout(r, 500));
+            else keepProcessing = false;
+          } catch {
             keepProcessing = false;
           }
         }
-        console.log(`[Regrade] Worker ${workerId} finished`);
       });
-      
-      // Run workers in background
       Promise.all(workerPromises).then(() => {
-        console.log(`[Regrade] All workers finished`);
+        setRegradingCount(0);
       });
       
     } catch (err) {
       console.error('[AssignmentDashboard] Regrade error:', err);
+      alert('Regrade failed. Please try again.');
+      setRegradingCount(0);
     } finally {
       setIsRegrading(false);
     }
@@ -1156,7 +1166,8 @@ export default function AssignmentDashboardPage() {
     }
   }, [batchId, batch, submissions.length, inferStudentName]);
 
-  if (loading) {
+  // Always show owl until first load has fully completed (prevents flash of empty state)
+  if (loading || !initialLoadComplete) {
     return (
       <DashboardLayout>
         <style dangerouslySetInnerHTML={{ __html: `
@@ -1526,8 +1537,31 @@ export default function AssignmentDashboardPage() {
           </div>
         )}
 
+        {/* Re-grade in progress banner - pleasing UI, does not affect table order */}
+        {(regradingCount > 0 || isRegrading) && (
+          <div className="mb-6 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-5 shadow-sm">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <RefreshCw className="w-6 h-6 text-amber-600 animate-spin" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-surface-900">Re-grading in progress</h3>
+                <p className="text-sm text-surface-600 mt-0.5">
+                  {regradingCount > 0
+                    ? `Re-evaluating ${regradingCount} submission${regradingCount === 1 ? '' : 's'}. Rows stay in place—scores will update when done.`
+                    : 'Queuing submissions…'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-100/80 rounded-lg">
+                <Loader2 className="w-4 h-4 text-amber-700 animate-spin" />
+                <span className="text-sm font-medium text-amber-800">Processing</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Grading Complete Banner - shows when all submissions are graded OR displayGradingStatus is completed */}
-        {(displayGradingStatus.status === 'completed' || (stats.total > 0 && stats.graded === stats.total)) && submissions.length > 0 && (
+        {(displayGradingStatus.status === 'completed' || (stats.total > 0 && stats.graded === stats.total)) && submissions.length > 0 && !regradingCount && (
           <div className="mb-6 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
