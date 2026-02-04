@@ -170,6 +170,7 @@ export default function AssignmentDashboardPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState<{id: string; name: string; progress: number}[]>([]);
+  const submissionStateCacheRef = useRef<Record<string, { hasGradeData?: boolean; overallScore?: number | null; videoLength?: string }>>({});
 
   // Load batch and submissions
   useEffect(() => {
@@ -229,20 +230,42 @@ export default function AssignmentDashboardPage() {
         }
 
         // Map submissions - use hasGradeData from API
-        const subs: Submission[] = (batchData.submissions || []).map((sub: any) => ({
-          id: sub.id,
-          studentName: sub.studentName || 'Unknown Student',
-          originalFilename: sub.originalFilename || 'Unknown',
-          status: sub.status,
-          createdAt: sub.createdAt || Date.now(),
-          completedAt: sub.completedAt,
-          overallScore: sub.overallScore,
-          hasGradeData: sub.hasGradeData ?? false,
-          videoLength: sub.duration ? formatDuration(sub.duration) : undefined,
-          aiSentiment: sub.analysis?.sentiment || (sub.hasGradeData ? 'Confident' : undefined),
-          flagged: sub.flagged,
-          flagReason: sub.flagReason,
-        }));
+        const subs: Submission[] = (batchData.submissions || []).map((sub: any) => {
+          const cached = submissionStateCacheRef.current[sub.id] || {};
+          const incomingHasGrade = sub.hasGradeData ?? false;
+          const hasGradeData = incomingHasGrade || cached.hasGradeData || false;
+          const overallScore = hasGradeData
+            ? (sub.overallScore ?? cached.overallScore ?? null)
+            : null;
+          const videoLength = sub.duration
+            ? formatDuration(sub.duration)
+            : cached.videoLength;
+
+          const submissionEntry: Submission = {
+            id: sub.id,
+            studentName: sub.studentName || 'Unknown Student',
+            originalFilename: sub.originalFilename || 'Unknown',
+            status: sub.status,
+            createdAt: sub.createdAt || Date.now(),
+            completedAt: sub.completedAt,
+            overallScore,
+            hasGradeData,
+            videoLength,
+            aiSentiment: sub.analysis?.sentiment || (hasGradeData ? 'Confident' : undefined),
+            flagged: sub.flagged,
+            flagReason: sub.flagReason,
+          };
+
+          submissionStateCacheRef.current[sub.id] = {
+            ...submissionStateCacheRef.current[sub.id],
+            ...(submissionEntry.videoLength ? { videoLength: submissionEntry.videoLength } : {}),
+            ...(submissionEntry.hasGradeData && submissionEntry.overallScore != null
+              ? { hasGradeData: true, overallScore: submissionEntry.overallScore }
+              : {}),
+          };
+
+          return submissionEntry;
+        });
 
         // Update submissions and high water mark
         setSubmissions(subs);
@@ -1007,20 +1030,42 @@ export default function AssignmentDashboardPage() {
       const res = await fetch(`/api/bulk/status?batchId=${batchId}`);
       const data = await res.json();
       if (data.submissions) {
-        const subs = data.submissions.map((sub: any) => ({
-          id: sub.id,
-          studentName: sub.studentName || 'Unknown Student',
-          originalFilename: sub.originalFilename || 'Unknown',
-          status: sub.status,
-          createdAt: sub.createdAt || Date.now(),
-          completedAt: sub.completedAt,
-          overallScore: sub.overallScore,
-          hasGradeData: sub.hasGradeData ?? false,
-          videoLength: undefined,
-          aiSentiment: sub.analysis?.sentiment,
-          flagged: sub.flagged,
-          flagReason: sub.flagReason,
-        }));
+        const subs = data.submissions.map((sub: any) => {
+          const cached = submissionStateCacheRef.current[sub.id] || {};
+          const incomingHasGrade = sub.hasGradeData ?? false;
+          const hasGradeData = incomingHasGrade || cached.hasGradeData || false;
+          const overallScore = hasGradeData
+            ? (sub.overallScore ?? cached.overallScore ?? null)
+            : null;
+          const videoLength = sub.duration
+            ? formatDuration(sub.duration)
+            : cached.videoLength;
+
+          const submissionEntry: Submission = {
+            id: sub.id,
+            studentName: sub.studentName || 'Unknown Student',
+            originalFilename: sub.originalFilename || 'Unknown',
+            status: sub.status,
+            createdAt: sub.createdAt || Date.now(),
+            completedAt: sub.completedAt,
+            overallScore,
+            hasGradeData,
+            videoLength,
+            aiSentiment: sub.analysis?.sentiment || (hasGradeData ? 'Confident' : undefined),
+            flagged: sub.flagged,
+            flagReason: sub.flagReason,
+          };
+
+          submissionStateCacheRef.current[sub.id] = {
+            ...submissionStateCacheRef.current[sub.id],
+            ...(submissionEntry.videoLength ? { videoLength: submissionEntry.videoLength } : {}),
+            ...(submissionEntry.hasGradeData && submissionEntry.overallScore != null
+              ? { hasGradeData: true, overallScore: submissionEntry.overallScore }
+              : {}),
+          };
+
+          return submissionEntry;
+        });
         setSubmissions(subs);
         setSubmissionHighWaterMark(prev => Math.max(prev, subs.length));
 
