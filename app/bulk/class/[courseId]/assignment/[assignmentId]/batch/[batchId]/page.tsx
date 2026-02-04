@@ -177,6 +177,8 @@ export default function AssignmentDashboardPage() {
   // ============================================
   const [regradeMode, setRegradeMode] = useState(false);
   const [selectedForRegrade, setSelectedForRegrade] = useState<Set<string>>(new Set());
+  /** IDs currently being regraded; block View link until they have hasGradeData again */
+  const [submissionIdsRegrading, setSubmissionIdsRegrading] = useState<Set<string>>(new Set());
 
   // ============================================
   // ADD MORE UPLOADS: State for uploading additional files
@@ -383,6 +385,17 @@ export default function AssignmentDashboardPage() {
       setGradingStartTime(null);
     }
   }, [allProcessed, gradingStarted, activeWorkers]);
+
+  // Clear submissionIdsRegrading once all those submissions have grades again
+  useEffect(() => {
+    if (submissionIdsRegrading.size === 0) return;
+    const idList = Array.from(submissionIdsRegrading);
+    const allDone = idList.every(id => {
+      const s = submissions.find(x => x.id === id);
+      return s?.hasGradeData === true;
+    });
+    if (allDone) setSubmissionIdsRegrading(new Set());
+  }, [submissions, submissionIdsRegrading]);
 
   // ============================================
   // AUTO-RESUME: Continue grading on page refresh
@@ -730,16 +743,16 @@ export default function AssignmentDashboardPage() {
   const handleRegradeSelected = async () => {
     if (selectedForRegrade.size === 0) return;
     
+    const submissionIdsToRegrade = Array.from(selectedForRegrade);
     setIsRegrading(true);
+    setSubmissionIdsRegrading(new Set(submissionIdsToRegrade));
     try {
-      // Re-grade only selected submissions
-      const submissionIdsToRegrade = Array.from(selectedForRegrade);
-      console.log(`[Regrade] Starting regrade for ${submissionIdsToRegrade.length} submissions`);
+      console.log(`[Regrade] Starting regrade for ${submissionIdsToRegrade.length} submissions (selected only)`);
       
       const regradeRes = await fetch(`/api/bulk/regrade`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batchId, submissionIds: submissionIdsToRegrade })
+        body: JSON.stringify({ submissionIds: submissionIdsToRegrade })
       });
       const regradeData = await regradeRes.json();
       console.log(`[Regrade] API response:`, regradeData);
@@ -1684,7 +1697,7 @@ export default function AssignmentDashboardPage() {
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {/* Actions: System-owned states for automated grading */}
-                        {submission.hasGradeData ? (
+                        {submission.hasGradeData && !submissionIdsRegrading.has(submission.id) ? (
                           <Link
                             href={`/bulk/submission/${submission.id}`}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors"
@@ -1692,6 +1705,11 @@ export default function AssignmentDashboardPage() {
                             <Eye className="w-4 h-4" />
                             View
                           </Link>
+                        ) : submissionIdsRegrading.has(submission.id) && !submission.hasGradeData ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-surface-500 cursor-not-allowed" title="Re-grading in progress">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Re-grading…
+                          </span>
                         ) : submission.status === 'failed' ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-amber-600">
                             <RefreshCw className="w-4 h-4" />

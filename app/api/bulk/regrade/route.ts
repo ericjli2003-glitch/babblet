@@ -26,15 +26,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Handle single or multiple submissions
-    let idsToRegrade = submissionIds || (submissionId ? [submissionId] : []);
+    // Use only explicitly provided IDs when present (never regrade whole batch unless no IDs given)
+    const explicitIds = Array.isArray(submissionIds) ? submissionIds : (submissionId ? [submissionId] : []);
+    let idsToRegrade: string[];
 
-    // If batchId provided but no specific IDs, re-grade all submissions in batch
-    if (batchId && idsToRegrade.length === 0) {
+    if (explicitIds.length > 0) {
+      idsToRegrade = explicitIds;
+    } else if (batchId) {
       const batch = await getBatch(batchId);
-      if (batch?.submissionIds) {
-        idsToRegrade = batch.submissionIds;
-      }
+      idsToRegrade = batch?.submissionIds ?? [];
+    } else {
+      idsToRegrade = [];
     }
 
     if (idsToRegrade.length === 0) {
