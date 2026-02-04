@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   Download, RefreshCw, ChevronLeft, ChevronRight, Filter,
   Loader2, AlertTriangle, TrendingUp, Clock, Flag, Eye,
-  Play, AlertCircle, CheckCircle, ArrowLeft, Trash2, MoreVertical, Upload, Plus
+  Play, AlertCircle, CheckCircle, ArrowLeft, Trash2, MoreVertical, Upload, Plus, X
 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
@@ -742,6 +742,12 @@ export default function AssignmentDashboardPage() {
     });
   };
 
+  const handleCancelRegrade = () => {
+    regradeAbortRef.current?.abort();
+    setSubmissionIdsRegrading(new Set());
+    setIsRegrading(false);
+  };
+
   const handleRegradeSelected = async () => {
     if (selectedForRegrade.size === 0) return;
     
@@ -1380,6 +1386,28 @@ export default function AssignmentDashboardPage() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Re-grading in progress: Cancel control */}
+        {submissionIdsRegrading.size > 0 && (
+          <div className="mb-4 flex items-center justify-between gap-4 rounded-xl border border-violet-200 bg-violet-50/80 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-100">
+                <RefreshCw className="h-4 w-4 text-violet-600 animate-spin" />
+              </div>
+              <p className="text-sm font-medium text-violet-900">
+                Re-grading {submissionIdsRegrading.size} submission{submissionIdsRegrading.size !== 1 ? 's' : ''} in progress
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleCancelRegrade}
+              className="inline-flex items-center gap-2 rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm font-medium text-violet-700 shadow-sm transition-colors hover:bg-violet-50 hover:border-violet-300"
+            >
+              <X className="h-4 w-4" />
+              Cancel re-grade
+            </button>
           </div>
         )}
 
