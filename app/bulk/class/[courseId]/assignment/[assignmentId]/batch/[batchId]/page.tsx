@@ -185,9 +185,13 @@ export default function AssignmentDashboardPage() {
   const [uploadingFiles, setUploadingFiles] = useState<{id: string; name: string; progress: number}[]>([]);
   const submissionStateCacheRef = useRef<Record<string, { hasGradeData?: boolean; overallScore?: number | null; videoLength?: string }>>({});
 
+  // Minimum time to show loading screen (prevents flash of empty state)
+  const MIN_LOADING_MS = 800;
+
   // Load batch and submissions
   useEffect(() => {
     const loadData = async () => {
+      const start = Date.now();
       try {
         setLoading(true);
 
@@ -287,6 +291,12 @@ export default function AssignmentDashboardPage() {
         console.error('[AssignmentDashboard] Error:', err);
         setError('Failed to load data');
       } finally {
+        // Keep loading screen visible for minimum time so owl always shows
+        const elapsed = Date.now() - start;
+        const remaining = Math.max(0, MIN_LOADING_MS - elapsed);
+        if (remaining > 0) {
+          await new Promise(r => setTimeout(r, remaining));
+        }
         setLoading(false);
       }
     };
@@ -1149,11 +1159,30 @@ export default function AssignmentDashboardPage() {
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center h-full">
+        <style dangerouslySetInnerHTML={{ __html: `
+          @keyframes owl-bounce {
+            0%, 100% { transform: translateY(0) scale(1); }
+            25% { transform: translateY(-12px) scale(1.05); }
+            50% { transform: translateY(0) scale(1); }
+            75% { transform: translateY(-6px) scale(1.02); }
+          }
+          @keyframes owl-float {
+            0%, 100% { transform: translateY(0) rotate(-2deg); }
+            50% { transform: translateY(-8px) rotate(2deg); }
+          }
+          .owl-loading-emoji {
+            animation: owl-bounce 1.2s ease-in-out infinite;
+            display: inline-block;
+          }
+          .owl-loading-shadow {
+            animation: owl-float 2s ease-in-out infinite;
+          }
+        `}} />
+        <div className="flex items-center justify-center min-h-[60vh]">
           <div className="flex flex-col items-center justify-center text-center">
-            <div className="relative mb-4">
-              <div className="text-6xl animate-bounce">🦉</div>
-              <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-12 h-2 bg-surface-200 rounded-full opacity-30 animate-pulse" />
+            <div className="relative mb-5">
+              <div className="owl-loading-emoji text-7xl" role="img" aria-label="Loading">🦉</div>
+              <div className="owl-loading-shadow absolute -bottom-2 left-1/2 -translate-x-1/2 w-14 h-2.5 bg-surface-300 rounded-full opacity-40" />
             </div>
             <h3 className="text-lg font-semibold text-surface-900 mb-1">
               Loading assignment...
@@ -1354,11 +1383,15 @@ export default function AssignmentDashboardPage() {
         {/* Upload Progress Banner with Owl */}
         {(uploadsInProgress || (isUploading && uploadingFiles.length > 0)) && (
           <div className="mb-6 bg-gradient-to-br from-primary-50 to-violet-50 border border-primary-200 rounded-xl p-6">
+            <style dangerouslySetInnerHTML={{ __html: `
+              @keyframes owl-bounce-sm { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-6px) scale(1.03); } }
+              .owl-upload-emoji { animation: owl-bounce-sm 1s ease-in-out infinite; display: inline-block; }
+            `}} />
             <div className="flex items-center gap-6">
               {/* Fun character - animated owl */}
               <div className="relative flex-shrink-0">
-                <div className="text-5xl animate-bounce">🦉</div>
-                <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-10 h-2 bg-surface-200 rounded-full opacity-30 animate-pulse" />
+                <div className="owl-upload-emoji text-5xl" role="img" aria-label="Uploading">🦉</div>
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-2 bg-surface-200 rounded-full opacity-30 animate-pulse" />
               </div>
               
               <div className="flex-1">
@@ -1867,24 +1900,6 @@ export default function AssignmentDashboardPage() {
                   Upload Submissions
                 </button>
               </div>
-          )}
-          
-          {/* Loading State - show owl while fetching initial data */}
-          {submissions.length === 0 && loading && (
-            <div className="py-12">
-              <div className="flex flex-col items-center justify-center text-center">
-                <div className="relative mb-4">
-                  <div className="text-6xl animate-bounce">🦉</div>
-                  <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-12 h-2 bg-surface-200 rounded-full opacity-30 animate-pulse" />
-                </div>
-                <h3 className="text-lg font-semibold text-surface-900 mb-1">
-                  Loading submissions...
-                </h3>
-                <p className="text-sm text-surface-500">
-                  Babblet is fetching your data
-                </p>
-              </div>
-            </div>
           )}
         </div>
     </div>
