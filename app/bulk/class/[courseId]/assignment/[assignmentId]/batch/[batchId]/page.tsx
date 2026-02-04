@@ -1150,8 +1150,19 @@ export default function AssignmentDashboardPage() {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-full">
-          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-      </div>
+          <div className="flex flex-col items-center justify-center text-center">
+            <div className="relative mb-4">
+              <div className="text-6xl animate-bounce">🦉</div>
+              <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-12 h-2 bg-surface-200 rounded-full opacity-30 animate-pulse" />
+            </div>
+            <h3 className="text-lg font-semibold text-surface-900 mb-1">
+              Loading assignment...
+            </h3>
+            <p className="text-sm text-surface-500">
+              Babblet is fetching your data
+            </p>
+          </div>
+        </div>
       </DashboardLayout>
     );
   }
