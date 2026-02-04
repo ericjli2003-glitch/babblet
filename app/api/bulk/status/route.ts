@@ -253,7 +253,6 @@ export async function GET(request: NextRequest) {
       console.log(`[Status] Syncing batch stats: total ${batch.totalSubmissions}->${submissions.length}, processed ${batch.processedCount}->${processedCount}, status ${batch.status}->${batchStatus}, uploadsComplete=${uploadsComplete}, uploadsStale=${uploadsStale}`);
       batch = await updateBatch(batchId, {
         totalSubmissions: submissions.length, // Always sync to actual count (SET is source of truth)
-        submissionIds: submissions.map(s => s.id), // Also sync IDs array for consistency
         processedCount,
         failedCount,
         status: batchStatus,
