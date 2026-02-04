@@ -1183,7 +1183,7 @@ RULES:
                           <h3 className="text-sm font-semibold text-surface-900">Speech Delivery</h3>
                         </div>
                         {classSpeechStats?.count != null && classSpeechStats.count > 0 && (
-                          <span className="text-[10px] text-surface-500">Averages from rest of assignment (n={classSpeechStats.count})</span>
+                          <span className="text-[10px] text-surface-500">Assignment avg (n={classSpeechStats.count})</span>
                         )}
                       </div>
                       <div className="grid grid-cols-3 gap-2 text-center">
@@ -1201,8 +1201,8 @@ RULES:
                           <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.fillerWordCount}</div>
                           <p className="text-[10px] text-surface-500 mb-0.5">Filler Words</p>
                           <p className="text-[9px] text-surface-600 leading-tight">
-                            {classSpeechStats?.fillerWordAvg != null ? (
-                              <>Class avg: <span className="font-semibold">{Number(classSpeechStats.fillerWordAvg) === Math.floor(classSpeechStats.fillerWordAvg) ? Math.round(classSpeechStats.fillerWordAvg) : classSpeechStats.fillerWordAvg}</span> · Lower filler use improves clarity.</>
+                            {classSpeechStats?.fillerWordAvg != null && classSpeechStats.count > 0 ? (
+                              <>Assignment avg: <span className="font-semibold">{Number(classSpeechStats.fillerWordAvg) === Math.floor(classSpeechStats.fillerWordAvg) ? Math.round(classSpeechStats.fillerWordAvg) : classSpeechStats.fillerWordAvg}</span></>
                             ) : (
                               <>Lower filler use improves clarity.</>
                             )}
@@ -1225,8 +1225,8 @@ RULES:
                           <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.speakingRateWpm}</div>
                           <p className="text-[10px] text-surface-500 mb-0.5">Words/min</p>
                           <p className="text-[9px] text-surface-600 leading-tight">
-                            {classSpeechStats?.wpmAvg != null ? (
-                              <>Class avg: <span className="font-semibold">{Math.round(classSpeechStats.wpmAvg)}</span> · Ideal range 120–180.</>
+                            {classSpeechStats?.wpmAvg != null && classSpeechStats.count > 0 ? (
+                              <>Assignment avg: <span className="font-semibold">{Math.round(classSpeechStats.wpmAvg)}</span> wpm</>
                             ) : (
                               <>Ideal range 120–180 for comprehension.</>
                             )}
@@ -1247,8 +1247,8 @@ RULES:
                           <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.pauseFrequency.toFixed(1)}</div>
                           <p className="text-[10px] text-surface-500 mb-0.5">Pauses/min</p>
                           <p className="text-[9px] text-surface-600 leading-tight">
-                            {classSpeechStats?.pausesPerMinAvg != null ? (
-                              <>Class avg: <span className="font-semibold">{Number(classSpeechStats.pausesPerMinAvg) === Math.floor(classSpeechStats.pausesPerMinAvg) ? Math.round(classSpeechStats.pausesPerMinAvg) : classSpeechStats.pausesPerMinAvg}</span> · Strategic pauses aid emphasis.</>
+                            {classSpeechStats?.pausesPerMinAvg != null && classSpeechStats.count > 0 ? (
+                              <>Assignment avg: <span className="font-semibold">{Number(classSpeechStats.pausesPerMinAvg) === Math.floor(classSpeechStats.pausesPerMinAvg) ? Math.round(classSpeechStats.pausesPerMinAvg) : classSpeechStats.pausesPerMinAvg}</span>/min</>
                             ) : (
                               <>Strategic pauses aid emphasis.</>
                             )}
