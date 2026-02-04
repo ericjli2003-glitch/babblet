@@ -121,6 +121,8 @@ interface Submission {
   };
   createdAt: number;
   completedAt?: number;
+  /** Set when submission was re-graded (2nd+ grading) */
+  regradedAt?: number;
 }
 
 // ============================================
@@ -975,17 +977,26 @@ RULES:
                 {submission.studentName.split(' ').map(n => n[0]).join('').slice(0, 2)}
               </div>
               <div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <h1 className="text-2xl font-bold text-surface-900">{submission.studentName}</h1>
                   {submission.status === 'ready' && (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full">
                       <CheckCircle className="w-3.5 h-3.5" />
                       Submitted on time
-                  </span>
-                )}
+                    </span>
+                  )}
+                  {submission.regradedAt != null && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-100 text-amber-800 text-xs font-medium rounded-full">
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Re-graded
+                    </span>
+                  )}
                 </div>
                 <p className="text-sm text-surface-500 mt-0.5">
                   Submission: {batchInfo?.assignmentName || 'Assignment'} • {formatDate(submission.createdAt)}
+                  {submission.regradedAt != null && (
+                    <span className="ml-2 text-amber-600">• Re-graded {formatDate(submission.regradedAt)}</span>
+                  )}
                 </p>
               </div>
             </div>
@@ -1036,6 +1047,12 @@ RULES:
                   exit={{ opacity: 0, y: -10 }}
                   className="space-y-6"
                 >
+                  {submission.regradedAt != null && (
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-100 text-violet-700 text-sm font-medium">
+                      <RefreshCw className="w-4 h-4" />
+                      <span>2nd grading</span>
+                    </div>
+                  )}
                   <div>
                     <h2 className="text-lg font-semibold text-surface-900 mb-1">Submission Overview & Insights</h2>
                     <p className="text-sm text-surface-500">
@@ -1057,6 +1074,9 @@ RULES:
                         : 'There were minor areas where clarity could be improved.')
                     }
                     badges={[
+                      ...(submission.regradedAt != null
+                        ? [{ label: '2nd grading', icon: <RefreshCw className="w-3 h-3" /> }]
+                        : []),
                       { label: submission.analysis?.sentiment || 'Positive Sentiment', icon: <ThumbsUp className="w-3 h-3" /> },
                       { 
                         label: submission.analysis?.duration 

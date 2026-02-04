@@ -172,6 +172,8 @@ export interface Submission {
   createdAt: number;
   startedAt?: number;
   completedAt?: number;
+  /** Set when submission was queued for re-grading (indicates 2nd+ grading) */
+  regradedAt?: number;
 }
 
 export interface Batch {

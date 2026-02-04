@@ -297,6 +297,7 @@ export async function GET(request: NextRequest) {
         createdAt: s.createdAt,
         completedAt: s.completedAt,
         duration: s.duration,
+        regradedAt: s.regradedAt,
       })),
       stats,
       globalQueueLength: queueLength,

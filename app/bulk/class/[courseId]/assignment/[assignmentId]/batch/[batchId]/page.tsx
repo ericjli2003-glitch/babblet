@@ -38,6 +38,8 @@ interface Submission {
   videoLength?: string;
   flagged?: boolean;
   flagReason?: string;
+  /** Set when this submission was re-graded (2nd+ grading) */
+  regradedAt?: number;
 }
 
 interface BatchInfo {
@@ -276,6 +278,7 @@ export default function AssignmentDashboardPage() {
             aiSentiment: sub.analysis?.sentiment || (hasGradeData ? 'Confident' : undefined),
             flagged: sub.flagged,
             flagReason: sub.flagReason,
+            regradedAt: sub.regradedAt,
           };
 
           submissionStateCacheRef.current[sub.id] = {
@@ -577,6 +580,7 @@ export default function AssignmentDashboardPage() {
               aiSentiment: sub.analysis?.sentiment || (hasGradeData ? 'Confident' : undefined),
               flagged: sub.flagged,
               flagReason: sub.flagReason,
+              regradedAt: sub.regradedAt,
             };
           });
           const updatedMap = new Map(updatedSubs.map(s => [s.id, s]));
@@ -598,6 +602,7 @@ export default function AssignmentDashboardPage() {
                 flagged: incoming.flagged ?? existing.flagged,
                 flagReason: incoming.flagReason ?? existing.flagReason,
                 videoLength: incoming.videoLength ?? existing.videoLength,
+                regradedAt: incoming.regradedAt ?? existing.regradedAt,
               };
             };
             
@@ -724,6 +729,13 @@ export default function AssignmentDashboardPage() {
     };
   }, [gradingStatus, stats]);
 
+  // Clear regrade banner when grading is complete (e.g. user returned to page after server finished)
+  useEffect(() => {
+    if (regradingCount > 0 && stats.total > 0 && stats.graded === stats.total) {
+      setRegradingCount(0);
+    }
+  }, [regradingCount, stats.graded, stats.total]);
+
   // Sort submissions by createdAt ascending (oldest first, newest at end)
   const sortedSubmissions = useMemo(() => {
     return [...submissions].sort((a, b) => a.createdAt - b.createdAt);
@@ -814,6 +826,7 @@ export default function AssignmentDashboardPage() {
             aiSentiment: sub.analysis?.sentiment || (hasGradeData ? 'Confident' : undefined),
             flagged: sub.flagged,
             flagReason: sub.flagReason,
+            regradedAt: sub.regradedAt,
           };
           submissionStateCacheRef.current[sub.id] = {
             ...cached,
@@ -836,24 +849,12 @@ export default function AssignmentDashboardPage() {
         if (data.gradingStatus) setGradingStatus(data.gradingStatus);
       }
       
-      const MAX_WORKERS = 10;
-      const numWorkers = Math.min(submissionIdsToRegrade.length, MAX_WORKERS);
-      const workerPromises = Array.from({ length: numWorkers }, async () => {
-        let keepProcessing = true;
-        while (keepProcessing) {
-          try {
-            const workerRes = await fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST' });
-            const workerData = await workerRes.json();
-            if (workerData.processed > 0) await new Promise(r => setTimeout(r, 500));
-            else keepProcessing = false;
-          } catch {
-            keepProcessing = false;
-          }
-        }
-      });
-      Promise.all(workerPromises).then(() => {
-        setRegradingCount(0);
-      });
+      // Start server-side batch processing (continues even when user navigates away)
+      fetch('/api/bulk/process-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batchId }),
+      }).catch(() => {});
       
     } catch (err) {
       console.error('[AssignmentDashboard] Regrade error:', err);
@@ -1747,18 +1748,26 @@ export default function AssignmentDashboardPage() {
                     <td className="px-6 py-4">
                       {/* GRADING STATUS: Automated grading - system states only */}
                       {submission.hasGradeData && submission.overallScore != null ? (
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-surface-900">
-                            {Math.round(submission.overallScore)}/100
-                          </span>
-                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                            submission.overallScore >= 90 ? 'bg-emerald-100 text-emerald-700' :
-                            submission.overallScore >= 70 ? 'bg-blue-100 text-blue-700' :
-                            'bg-red-100 text-red-700'
-                          }`}>
-                            {submission.overallScore >= 90 ? 'PASS' : 
-                             submission.overallScore >= 70 ? 'GRADED' : 'FLAGGED'}
-                          </span>
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-surface-900">
+                              {Math.round(submission.overallScore)}/100
+                            </span>
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                              submission.overallScore >= 90 ? 'bg-emerald-100 text-emerald-700' :
+                              submission.overallScore >= 70 ? 'bg-blue-100 text-blue-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {submission.overallScore >= 90 ? 'PASS' : 
+                               submission.overallScore >= 70 ? 'GRADED' : 'FLAGGED'}
+                            </span>
+                            {submission.regradedAt != null && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-violet-100 text-violet-700" title="This submission was re-graded">
+                                <RefreshCw className="w-3 h-3" />
+                                2nd grading
+                              </span>
+                            )}
+                          </div>
                         </div>
                       ) : submission.status === 'failed' ? (
                         <span className="text-amber-600 text-sm flex items-center gap-1">

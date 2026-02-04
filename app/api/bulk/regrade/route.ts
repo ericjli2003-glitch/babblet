@@ -63,6 +63,8 @@ export async function POST(request: NextRequest) {
         errorMessage: undefined,
         startedAt: undefined,
         completedAt: undefined,
+        // Mark as re-graded so UI can show "2nd grading"
+        regradedAt: Date.now(),
       };
       
       if (bundleVersionId) {
