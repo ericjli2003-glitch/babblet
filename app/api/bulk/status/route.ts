@@ -122,8 +122,16 @@ export async function GET(request: NextRequest) {
     }
 
     // Pull submission IDs directly from the KV set for consistency
-    let submissionIds = await kv.smembers(`batch_submissions:${batchId}`) as string[];
-    console.log(`[Status] BatchId=${batchId} Raw submission IDs in set (${submissionIds.length}):`, submissionIds);
+    let submissionIds: string[] = [];
+    try {
+      submissionIds = await kv.smembers(`batch_submissions:${batchId}`) as string[];
+      console.log(`[Status] BatchId=${batchId} Raw submission IDs in set (${submissionIds.length}):`, submissionIds);
+      if (submissionIds.length === 0 && batch.totalSubmissions > 0) {
+        console.warn(`[Status] WARNING: SET is empty but batch claims ${batch.totalSubmissions} submissions. Recovery will scan.`);
+      }
+    } catch (e) {
+      console.error(`[Status] Failed to read SET for batch ${batchId}:`, e);
+    }
     // #region agent log
     (()=>{const d={location:'api/bulk/status/route.ts:GET',message:'Status GET entry',data:{batchId,batchTotalSubmissions:batch.totalSubmissions,setSize:submissionIds.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'};fetch('http://127.0.0.1:7242/ingest/4d4a084e-4174-46b3-8733-338fa5664bc9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).catch(()=>{});try{const p=require('path'),fs=require('fs'),lp=p.join(process.cwd(),'.cursor','debug.log');fs.mkdirSync(p.dirname(lp),{recursive:true});fs.appendFileSync(lp,JSON.stringify(d)+'\n');}catch(_){}})();
     // #endregion
