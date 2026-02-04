@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
     console.log(`[Enqueue] Found batch: ${batch.name}`);
 
     // Create submission (this also queues it for processing)
+    // Use the submissionId from presign if provided for consistency
     const submission = await createSubmission({
       batchId,
       originalFilename,
@@ -45,6 +46,7 @@ export async function POST(request: NextRequest) {
       fileSize: fileSize || 0,
       mimeType: mimeType || 'video/mp4',
       studentName,
+      submissionId, // Pass the presign-generated ID
     });
 
     console.log(`[Enqueue] Created submission: id=${submission.id}, studentName=${submission.studentName}`);

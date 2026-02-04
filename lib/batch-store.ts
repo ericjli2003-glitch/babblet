@@ -340,12 +340,13 @@ export async function createSubmission(params: {
   fileSize: number;
   mimeType: string;
   studentName?: string;
+  submissionId?: string; // Optional: use presign-generated ID for consistency
 }): Promise<Submission> {
   // Infer student name from filename if not provided
   const inferredName = params.studentName || inferStudentName(params.originalFilename);
 
   const submission: Submission = {
-    id: uuidv4(),
+    id: params.submissionId || uuidv4(),
     batchId: params.batchId,
     originalFilename: params.originalFilename,
     fileKey: params.fileKey,
@@ -358,12 +359,19 @@ export async function createSubmission(params: {
 
   // Save submission
   await kv.set(`${SUBMISSION_PREFIX}${submission.id}`, submission);
+  console.log(`[BatchStore] Saved submission ${submission.id} to KV`);
 
   // ============================================
   // SUBMISSION COUNT: The set is the source of truth for count
   // APIs should count from set membership, not totalSubmissions field
   // ============================================
-  await kv.sadd(`${BATCH_SUBMISSIONS_PREFIX}${params.batchId}`, submission.id);
+  const setKey = `${BATCH_SUBMISSIONS_PREFIX}${params.batchId}`;
+  const addResult = await kv.sadd(setKey, submission.id);
+  console.log(`[BatchStore] Added ${submission.id} to SET ${setKey}, result=${addResult}`);
+  
+  // Verify it was added
+  const inSet = await kv.sismember(setKey, submission.id);
+  console.log(`[BatchStore] Verified ${submission.id} in SET: ${inSet}`);
 
   // Add to processing queue
   await kv.rpush(QUEUE_KEY, submission.id);
