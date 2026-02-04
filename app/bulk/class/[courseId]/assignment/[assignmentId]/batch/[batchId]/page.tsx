@@ -1496,8 +1496,8 @@ export default function AssignmentDashboardPage() {
           </div>
         )}
 
-        {/* Loading Submissions Screen - shows when expected uploads exceed visible submissions */}
-        {expectedUploads > 0 && submissions.length < expectedUploads && !uploadsInProgress && (
+        {/* Loading Submissions Screen - shows ONLY during active file upload (isUploading state) */}
+        {isUploading && uploadingFiles.length > 0 && (
           <div className="mb-6 bg-gradient-to-br from-primary-50 to-violet-50 border border-primary-200 rounded-xl p-8">
             <div className="flex flex-col items-center justify-center text-center">
               {/* Fun character - animated owl */}
@@ -1507,10 +1507,10 @@ export default function AssignmentDashboardPage() {
               </div>
               
               <h3 className="text-lg font-semibold text-surface-900 mb-1">
-                Loading submissions...
+                Uploading files...
               </h3>
               <p className="text-sm text-surface-600 mb-4">
-                Babblet is fetching your files
+                Babblet is processing your uploads
               </p>
               
               {/* Progress indicator */}
@@ -1518,12 +1518,12 @@ export default function AssignmentDashboardPage() {
                 <div className="h-3 bg-primary-100 rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-gradient-to-r from-primary-500 to-violet-500 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.round((submissions.length / expectedUploads) * 100)}%` }}
+                    style={{ width: `${Math.round(uploadingFiles.filter(f => f.progress === 100).length / uploadingFiles.length * 100)}%` }}
                   />
                 </div>
               </div>
               <p className="text-sm font-medium text-primary-700">
-                {Math.round((submissions.length / expectedUploads) * 100)}% loaded ({submissions.length} of {expectedUploads})
+                {uploadingFiles.filter(f => f.progress === 100).length} of {uploadingFiles.length} files uploaded
               </p>
             </div>
           </div>
