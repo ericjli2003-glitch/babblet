@@ -79,12 +79,25 @@ function getInitials(name: string): string {
 
 function getTimeAgo(timestamp: number): string {
   const diff = Date.now() - timestamp;
+  const minutes = Math.floor(diff / (1000 * 60));
   const hours = Math.floor(diff / (1000 * 60 * 60));
   const days = Math.floor(hours / 24);
   
-  if (days > 0) return `Submitted ${days}d ago`;
-  if (hours > 0) return `Submitted ${hours}h ago`;
-  return 'Just submitted';
+  if (days > 0) return `${days}d ago`;
+  if (hours > 0) return `${hours}h ago`;
+  if (minutes > 0) return `${minutes}m ago`;
+  return 'Just now';
+}
+
+function formatUploadDate(timestamp: number): string {
+  const date = new Date(timestamp);
+  return date.toLocaleDateString('en-US', { 
+    month: 'short', 
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
 }
 
 function getSentimentColor(sentiment?: string): string {
@@ -701,9 +714,14 @@ export default function AssignmentDashboardPage() {
     };
   }, [gradingStatus, stats]);
 
+  // Sort submissions by createdAt ascending (oldest first, newest at end)
+  const sortedSubmissions = useMemo(() => {
+    return [...submissions].sort((a, b) => a.createdAt - b.createdAt);
+  }, [submissions]);
+
   // Pagination
-  const totalPages = Math.ceil(submissions.length / itemsPerPage);
-  const paginatedSubmissions = submissions.slice(
+  const totalPages = Math.ceil(sortedSubmissions.length / itemsPerPage);
+  const paginatedSubmissions = sortedSubmissions.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
@@ -1478,6 +1496,39 @@ export default function AssignmentDashboardPage() {
           </div>
         )}
 
+        {/* Loading Submissions Screen - shows when expected uploads exceed visible submissions */}
+        {expectedUploads > 0 && submissions.length < expectedUploads && !uploadsInProgress && (
+          <div className="mb-6 bg-gradient-to-br from-primary-50 to-violet-50 border border-primary-200 rounded-xl p-8">
+            <div className="flex flex-col items-center justify-center text-center">
+              {/* Fun character - animated owl */}
+              <div className="relative mb-4">
+                <div className="text-6xl animate-bounce">🦉</div>
+                <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-12 h-2 bg-surface-200 rounded-full opacity-30 animate-pulse" />
+              </div>
+              
+              <h3 className="text-lg font-semibold text-surface-900 mb-1">
+                Loading submissions...
+              </h3>
+              <p className="text-sm text-surface-600 mb-4">
+                Babblet is fetching your files
+              </p>
+              
+              {/* Progress indicator */}
+              <div className="w-48 mb-2">
+                <div className="h-3 bg-primary-100 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-primary-500 to-violet-500 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.round((submissions.length / expectedUploads) * 100)}%` }}
+                  />
+                </div>
+              </div>
+              <p className="text-sm font-medium text-primary-700">
+                {Math.round((submissions.length / expectedUploads) * 100)}% loaded ({submissions.length} of {expectedUploads})
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Stats Cards */}
         <div className="grid grid-cols-4 gap-4 mb-8">
           {/* Graded / Total */}
@@ -1635,7 +1686,9 @@ export default function AssignmentDashboardPage() {
                         </div>
                         <div>
                           <p className="font-medium text-surface-900">{submission.studentName}</p>
-                          <p className="text-xs text-surface-500">{getTimeAgo(submission.createdAt)}</p>
+                          <p className="text-xs text-surface-500">
+                            {formatUploadDate(submission.createdAt)} <span className="text-surface-400">({getTimeAgo(submission.createdAt)})</span>
+                          </p>
                         </div>
                       </div>
                     </td>
