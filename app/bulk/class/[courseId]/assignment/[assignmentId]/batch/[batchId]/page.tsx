@@ -1340,63 +1340,67 @@ export default function AssignmentDashboardPage() {
         </div>
       </div>
 
-        {/* Upload Progress Banner */}
-        {uploadsInProgress && (
-          <div className="mb-6 bg-primary-50 border border-primary-200 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
-                  <Upload className="w-5 h-5 text-primary-600" />
+        {/* Upload Progress Banner with Owl */}
+        {(uploadsInProgress || (isUploading && uploadingFiles.length > 0)) && (
+          <div className="mb-6 bg-gradient-to-br from-primary-50 to-violet-50 border border-primary-200 rounded-xl p-6">
+            <div className="flex items-center gap-6">
+              {/* Fun character - animated owl */}
+              <div className="relative flex-shrink-0">
+                <div className="text-5xl animate-bounce">🦉</div>
+                <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-10 h-2 bg-surface-200 rounded-full opacity-30 animate-pulse" />
+              </div>
+              
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-surface-900 mb-1">
+                  {isUploading ? 'Uploading files...' : 'Processing uploads...'}
+                </h3>
+                <p className="text-sm text-surface-600 mb-3">
+                  {isUploading && uploadingFiles.length > 0 
+                    ? `${uploadingFiles.filter(f => f.progress === 100).length} of ${uploadingFiles.length} files uploaded`
+                    : `${submissions.length} of ${expectedUploads} submissions ready`
+                  }
+                </p>
+                
+                {/* Progress bar */}
+                <div className="h-3 bg-primary-100 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-primary-500 to-violet-500 rounded-full transition-all duration-500"
+                    style={{ 
+                      width: `${isUploading && uploadingFiles.length > 0 
+                        ? Math.round(uploadingFiles.filter(f => f.progress === 100).length / uploadingFiles.length * 100)
+                        : uploadProgress
+                      }%` 
+                    }}
+                  />
                 </div>
-                <div>
-                  <h3 className="font-semibold text-surface-900">Uploading Files</h3>
-                  <p className="text-sm text-surface-600">
-                    {submissions.length} of {expectedUploads} files uploaded
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-5 h-5 text-primary-600 animate-spin" />
-                <span className="text-sm font-medium text-primary-700">{uploadProgress}%</span>
-              </div>
-            </div>
-            <div className="h-2 bg-primary-100 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-primary-500 rounded-full transition-all duration-500"
-                style={{ width: `${uploadProgress}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Additional Uploads Progress Banner */}
-        {isUploading && uploadingFiles.length > 0 && (
-          <div className="mb-6 bg-primary-50 border border-primary-200 rounded-xl p-4">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
-                <Plus className="w-5 h-5 text-primary-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-surface-900">Adding Submissions</h3>
-                <p className="text-sm text-surface-600">
-                  Uploading {uploadingFiles.filter(f => f.progress < 100).length} of {uploadingFiles.length} files
+                <p className="text-sm font-medium text-primary-700 mt-2">
+                  {isUploading && uploadingFiles.length > 0 
+                    ? `${Math.round(uploadingFiles.filter(f => f.progress === 100).length / uploadingFiles.length * 100)}%`
+                    : `${uploadProgress}%`
+                  } complete
                 </p>
               </div>
             </div>
-            <div className="space-y-2">
-              {uploadingFiles.map(file => (
-                <div key={file.id} className="flex items-center gap-3">
-                  <span className="text-sm text-surface-700 truncate flex-1 max-w-xs">{file.name}</span>
-                  <div className="flex-1 h-2 bg-primary-100 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-primary-500 rounded-full transition-all duration-300"
-                      style={{ width: `${file.progress}%` }}
-                    />
+            
+            {/* Individual file progress when uploading */}
+            {isUploading && uploadingFiles.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-primary-200/50 space-y-2">
+                {uploadingFiles.map(file => (
+                  <div key={file.id} className="flex items-center gap-3">
+                    <span className="text-sm text-surface-700 truncate flex-1 max-w-xs">{file.name}</span>
+                    <div className="flex-1 h-2 bg-primary-100 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-primary-500 rounded-full transition-all duration-300"
+                        style={{ width: `${file.progress}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-surface-500 w-10 text-right">
+                      {file.progress === 100 ? '✓' : `${file.progress}%`}
+                    </span>
                   </div>
-                  <span className="text-xs text-surface-500 w-10 text-right">{file.progress}%</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -1492,39 +1496,6 @@ export default function AssignmentDashboardPage() {
                   {stats.avgScore !== undefined && ` • Average score: ${stats.avgScore}%`}
                 </p>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Loading Submissions Screen - shows ONLY during active file upload (isUploading state) */}
-        {isUploading && uploadingFiles.length > 0 && (
-          <div className="mb-6 bg-gradient-to-br from-primary-50 to-violet-50 border border-primary-200 rounded-xl p-8">
-            <div className="flex flex-col items-center justify-center text-center">
-              {/* Fun character - animated owl */}
-              <div className="relative mb-4">
-                <div className="text-6xl animate-bounce">🦉</div>
-                <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-12 h-2 bg-surface-200 rounded-full opacity-30 animate-pulse" />
-              </div>
-              
-              <h3 className="text-lg font-semibold text-surface-900 mb-1">
-                Uploading files...
-              </h3>
-              <p className="text-sm text-surface-600 mb-4">
-                Babblet is processing your uploads
-              </p>
-              
-              {/* Progress indicator */}
-              <div className="w-48 mb-2">
-                <div className="h-3 bg-primary-100 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-primary-500 to-violet-500 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.round(uploadingFiles.filter(f => f.progress === 100).length / uploadingFiles.length * 100)}%` }}
-                  />
-                </div>
-              </div>
-              <p className="text-sm font-medium text-primary-700">
-                {uploadingFiles.filter(f => f.progress === 100).length} of {uploadingFiles.length} files uploaded
-              </p>
             </div>
           </div>
         )}
