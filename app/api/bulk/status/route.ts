@@ -160,6 +160,7 @@ export async function GET(request: NextRequest) {
     // This handles cases where submissions exist but weren't added to the set or queue
     const shouldScan = batch.totalSubmissions > submissions.length || 
                       submissions.length === 0 ||
+                      (batch.expectedUploadCount !== undefined && batch.expectedUploadCount > submissions.length) ||
                       (submissionIds.length < 5 && batch.totalSubmissions >= 5); // Heuristic: if batch has many but SET has few
     
     if (shouldScan) {
