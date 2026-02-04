@@ -172,6 +172,8 @@ export interface Submission {
   createdAt: number;
   startedAt?: number;
   completedAt?: number;
+  // Regrade version: 1 = original grading, 2+ = 2nd/3rd/... grading (only show badge when > 1)
+  gradingCount?: number;
 }
 
 export interface Batch {

@@ -121,6 +121,8 @@ interface Submission {
   };
   createdAt: number;
   completedAt?: number;
+  /** Regrade version: 1 = original (no badge), 2+ = show "2nd grading", "3rd grading", etc. */
+  gradingCount?: number;
 }
 
 // ============================================
@@ -964,8 +966,13 @@ RULES:
                 {submission.studentName.split(' ').map(n => n[0]).join('').slice(0, 2)}
               </div>
               <div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <h1 className="text-2xl font-bold text-surface-900">{submission.studentName}</h1>
+                  {submission.gradingCount != null && submission.gradingCount > 1 && (
+                    <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-violet-100 text-violet-700">
+                      {submission.gradingCount === 2 ? '2nd grading' : submission.gradingCount === 3 ? '3rd grading' : `${submission.gradingCount}th grading`}
+                    </span>
+                  )}
                   {submission.status === 'ready' && (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full">
                       <CheckCircle className="w-3.5 h-3.5" />
@@ -1046,6 +1053,9 @@ RULES:
                         : 'There were minor areas where clarity could be improved.')
                     }
                     badges={[
+                      ...(submission.gradingCount != null && submission.gradingCount > 1
+                        ? [{ label: submission.gradingCount === 2 ? '2nd grading' : submission.gradingCount === 3 ? '3rd grading' : `${submission.gradingCount}th grading`, icon: <RefreshCw className="w-3 h-3" /> }]
+                        : []),
                       { label: submission.analysis?.sentiment || 'Positive Sentiment', icon: <ThumbsUp className="w-3 h-3" /> },
                       { 
                         label: submission.analysis?.duration 

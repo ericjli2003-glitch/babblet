@@ -38,6 +38,8 @@ interface Submission {
   videoLength?: string;
   flagged?: boolean;
   flagReason?: string;
+  /** Regrade version: 1 = original (no badge), 2+ = show "2nd grading", "3rd grading", etc. */
+  gradingCount?: number;
 }
 
 interface BatchInfo {
@@ -96,6 +98,18 @@ function getSentimentColor(sentiment?: string): string {
     case 'Uncertain': return 'text-red-600';
     default: return 'text-surface-400';
   }
+}
+
+function ordinalGradingLabel(count: number): string {
+  if (count <= 1) return '';
+  const ordinals: Record<number, string> = {
+    2: '2nd',
+    3: '3rd',
+    4: '4th',
+    5: '5th',
+  };
+  const ord = ordinals[count] || `${count}th`;
+  return `${ord} grading`;
 }
 
 function getSentimentIcon(sentiment?: string) {
@@ -242,6 +256,7 @@ export default function AssignmentDashboardPage() {
           aiSentiment: sub.analysis?.sentiment || (sub.hasGradeData ? 'Confident' : undefined),
           flagged: sub.flagged,
           flagReason: sub.flagReason,
+          gradingCount: sub.gradingCount,
         }));
 
         // Update submissions and high water mark
@@ -517,6 +532,7 @@ export default function AssignmentDashboardPage() {
             aiSentiment: sub.analysis?.sentiment || (sub.hasGradeData ? 'Confident' : undefined),
             flagged: sub.flagged,
             flagReason: sub.flagReason,
+            gradingCount: sub.gradingCount,
           }));
           
           // ============================================
@@ -754,6 +770,7 @@ export default function AssignmentDashboardPage() {
           aiSentiment: sub.analysis?.sentiment,
           flagged: sub.flagged,
           flagReason: sub.flagReason,
+          gradingCount: sub.gradingCount,
         }));
         setSubmissions(subs);
         
@@ -1020,6 +1037,7 @@ export default function AssignmentDashboardPage() {
           aiSentiment: sub.analysis?.sentiment,
           flagged: sub.flagged,
           flagReason: sub.flagReason,
+          gradingCount: sub.gradingCount,
         }));
         setSubmissions(subs);
         setSubmissionHighWaterMark(prev => Math.max(prev, subs.length));
@@ -1150,16 +1168,17 @@ export default function AssignmentDashboardPage() {
               onChange={(e) => handleFilesSelected(e.target.files)}
             />
             <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-surface-200 rounded-lg hover:bg-surface-50 text-sm font-medium text-surface-700 disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium disabled:opacity-50"
             >
               {isUploading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <Plus className="w-4 h-4" />
+                <Upload className="w-4 h-4" />
               )}
-              Add More
+              {isUploading ? 'Uploading...' : 'Upload more'}
             </button>
             <button
               onClick={handleExport}
@@ -1588,7 +1607,14 @@ export default function AssignmentDashboardPage() {
                           {getInitials(submission.studentName)}
                         </div>
                         <div>
-                          <p className="font-medium text-surface-900">{submission.studentName}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium text-surface-900">{submission.studentName}</p>
+                            {submission.gradingCount != null && submission.gradingCount > 1 && (
+                              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-violet-100 text-violet-700">
+                                {ordinalGradingLabel(submission.gradingCount)}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-surface-500">{getTimeAgo(submission.createdAt)}</p>
                         </div>
                       </div>
@@ -1605,11 +1631,11 @@ export default function AssignmentDashboardPage() {
                           </span>
                           <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
                             submission.overallScore >= 90 ? 'bg-emerald-100 text-emerald-700' :
-                            submission.overallScore >= 70 ? 'bg-amber-100 text-amber-700' :
+                            submission.overallScore >= 70 ? 'bg-blue-100 text-blue-700' :
                             'bg-red-100 text-red-700'
                           }`}>
                             {submission.overallScore >= 90 ? 'PASS' : 
-                             submission.overallScore >= 70 ? 'PENDING' : 'FLAGGED'}
+                             submission.overallScore >= 70 ? 'GRADED' : 'FLAGGED'}
                           </span>
                         </div>
                       ) : submission.status === 'failed' ? (

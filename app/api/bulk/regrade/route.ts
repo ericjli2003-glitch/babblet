@@ -50,9 +50,13 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      // Increment regrade version so UI shows "2nd grading", "3rd grading", etc. (only when > 1)
+      const nextGradingCount = (submission.gradingCount ?? 1) + 1;
+
       // Reset submission to queued state, optionally with new bundle version
       const updateData: Record<string, unknown> = {
         status: 'queued',
+        gradingCount: nextGradingCount,
         // Clear previous results
         analysis: undefined,
         rubricEvaluation: undefined,

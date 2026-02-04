@@ -277,6 +277,9 @@ export async function GET(request: NextRequest) {
         hasGradeData: s.rubricEvaluation?.overallScore !== undefined && s.rubricEvaluation?.overallScore !== null,
         createdAt: s.createdAt,
         completedAt: s.completedAt,
+        duration: s.duration,
+        // Regrade version: only show badge when > 1
+        gradingCount: s.gradingCount,
       })),
       stats,
       globalQueueLength: queueLength,
