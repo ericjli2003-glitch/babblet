@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Reset submission to queued state, optionally with new bundle version
+      const currentCount = (submission as { gradingCount?: number }).gradingCount ?? 1;
       const updateData: Record<string, unknown> = {
         status: 'queued',
         // Clear previous results
@@ -63,8 +64,8 @@ export async function POST(request: NextRequest) {
         errorMessage: undefined,
         startedAt: undefined,
         completedAt: undefined,
-        // Mark as re-graded so UI can show "2nd grading"
         regradedAt: Date.now(),
+        gradingCount: currentCount + 1, // 2nd, 3rd, 4th... grading
       };
       
       if (bundleVersionId) {

@@ -40,6 +40,8 @@ interface Submission {
   flagReason?: string;
   /** Set when this submission was re-graded (2nd+ grading) */
   regradedAt?: number;
+  /** 1 = first grading, 2 = second, etc. For "Xth grading" UI */
+  gradingCount?: number;
 }
 
 interface BatchInfo {
@@ -100,6 +102,13 @@ function formatUploadDate(timestamp: number): string {
     minute: '2-digit',
     hour12: true
   });
+}
+
+function ordinalGradingLabel(count: number): string {
+  if (count <= 1) return '';
+  const n = count % 100;
+  const suffix = n >= 11 && n <= 13 ? 'th' : (count % 10 === 1 ? 'st' : count % 10 === 2 ? 'nd' : count % 10 === 3 ? 'rd' : 'th');
+  return `${count}${suffix} grading`;
 }
 
 function getSentimentColor(sentiment?: string): string {
@@ -279,6 +288,7 @@ export default function AssignmentDashboardPage() {
             flagged: sub.flagged,
             flagReason: sub.flagReason,
             regradedAt: sub.regradedAt,
+            gradingCount: sub.gradingCount,
           };
 
           submissionStateCacheRef.current[sub.id] = {
@@ -581,6 +591,7 @@ export default function AssignmentDashboardPage() {
               flagged: sub.flagged,
               flagReason: sub.flagReason,
               regradedAt: sub.regradedAt,
+              gradingCount: sub.gradingCount,
             };
           });
           const updatedMap = new Map(updatedSubs.map(s => [s.id, s]));
@@ -603,6 +614,7 @@ export default function AssignmentDashboardPage() {
                 flagReason: incoming.flagReason ?? existing.flagReason,
                 videoLength: incoming.videoLength ?? existing.videoLength,
                 regradedAt: incoming.regradedAt ?? existing.regradedAt,
+                gradingCount: incoming.gradingCount ?? existing.gradingCount,
               };
             };
             
@@ -827,6 +839,7 @@ export default function AssignmentDashboardPage() {
             flagged: sub.flagged,
             flagReason: sub.flagReason,
             regradedAt: sub.regradedAt,
+            gradingCount: sub.gradingCount,
           };
           submissionStateCacheRef.current[sub.id] = {
             ...cached,
@@ -1761,10 +1774,10 @@ export default function AssignmentDashboardPage() {
                               {submission.overallScore >= 90 ? 'PASS' : 
                                submission.overallScore >= 70 ? 'GRADED' : 'FLAGGED'}
                             </span>
-                            {submission.regradedAt != null && (
+                            {(submission.gradingCount ?? 0) >= 2 && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-violet-100 text-violet-700" title="This submission was re-graded">
                                 <RefreshCw className="w-3 h-3" />
-                                2nd grading
+                                {ordinalGradingLabel(submission.gradingCount!)}
                               </span>
                             )}
                           </div>

@@ -298,6 +298,7 @@ export async function GET(request: NextRequest) {
         completedAt: s.completedAt,
         duration: s.duration,
         regradedAt: s.regradedAt,
+        gradingCount: s.gradingCount,
       })),
       stats,
       globalQueueLength: queueLength,

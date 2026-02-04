@@ -174,6 +174,8 @@ export interface Submission {
   completedAt?: number;
   /** Set when submission was queued for re-grading (indicates 2nd+ grading) */
   regradedAt?: number;
+  /** 1 = first grading, 2 = second, 3 = third, etc. Used for "Xth grading" UI */
+  gradingCount?: number;
 }
 
 export interface Batch {

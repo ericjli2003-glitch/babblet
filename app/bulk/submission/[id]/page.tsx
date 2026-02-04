@@ -123,6 +123,8 @@ interface Submission {
   completedAt?: number;
   /** Set when submission was re-graded (2nd+ grading) */
   regradedAt?: number;
+  /** 1 = first grading, 2 = second, etc. For "Xth grading" UI */
+  gradingCount?: number;
 }
 
 // ============================================
@@ -142,6 +144,13 @@ function formatDate(timestamp: number): string {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+function ordinalGradingLabel(count: number): string {
+  if (count <= 1) return '';
+  const n = count % 100;
+  const suffix = n >= 11 && n <= 13 ? 'th' : (count % 10 === 1 ? 'st' : count % 10 === 2 ? 'nd' : count % 10 === 3 ? 'rd' : 'th');
+  return `${count}${suffix} grading`;
 }
 
 function formatFileSize(bytes: number): string {
@@ -1047,10 +1056,10 @@ RULES:
                   exit={{ opacity: 0, y: -10 }}
                   className="space-y-6"
                 >
-                  {submission.regradedAt != null && (
+                  {(submission.gradingCount ?? 0) >= 2 && (
                     <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-100 text-violet-700 text-sm font-medium">
                       <RefreshCw className="w-4 h-4" />
-                      <span>2nd grading</span>
+                      <span>{ordinalGradingLabel(submission.gradingCount!)}</span>
                     </div>
                   )}
                   <div>
@@ -1074,8 +1083,8 @@ RULES:
                         : 'There were minor areas where clarity could be improved.')
                     }
                     badges={[
-                      ...(submission.regradedAt != null
-                        ? [{ label: '2nd grading', icon: <RefreshCw className="w-3 h-3" /> }]
+                      ...((submission.gradingCount ?? 0) >= 2
+                        ? [{ label: ordinalGradingLabel(submission.gradingCount!), icon: <RefreshCw className="w-3 h-3" /> }]
                         : []),
                       { label: submission.analysis?.sentiment || 'Positive Sentiment', icon: <ThumbsUp className="w-3 h-3" /> },
                       { 
