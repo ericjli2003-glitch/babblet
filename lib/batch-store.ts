@@ -357,12 +357,13 @@ export async function createSubmission(params: {
   fileSize: number;
   mimeType: string;
   studentName?: string;
+  submissionId?: string; // Optional pre-generated ID from presign
 }): Promise<Submission> {
   // Infer student name from filename if not provided
   const inferredName = params.studentName || inferStudentName(params.originalFilename);
 
   const submission: Submission = {
-    id: uuidv4(),
+    id: params.submissionId || uuidv4(),
     batchId: params.batchId,
     originalFilename: params.originalFilename,
     fileKey: params.fileKey,
