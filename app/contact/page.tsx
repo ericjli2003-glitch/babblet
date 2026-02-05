@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Send, CheckCircle, Loader2 } from 'lucide-react';
+import { Sparkles, Send, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
 export default function ContactPage() {
@@ -15,26 +15,32 @@ export default function ContactPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setError(null);
 
-    const subject = encodeURIComponent(`Sales Inquiry from ${formData.firstName} ${formData.lastName}`);
-    const body = encodeURIComponent(
-      `Name: ${formData.firstName} ${formData.lastName}\n` +
-      `Email: ${formData.email}\n` +
-      `Role: ${formData.role}\n` +
-      `Institution: ${formData.institution}\n\n` +
-      `---\nThis inquiry was submitted via the Babblet contact form.`
-    );
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
 
-    window.location.href = `mailto:eric@babblet.io?subject=${subject}&body=${body}`;
+      const data = await response.json();
 
-    setTimeout(() => {
+      if (data.success) {
+        setIsSubmitted(true);
+      } else {
+        setError(data.error || 'Failed to send message. Please try again.');
+      }
+    } catch (err) {
+      setError('Failed to send message. Please try again.');
+    } finally {
       setIsSubmitting(false);
-      setIsSubmitted(true);
-    }, 1000);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -79,13 +85,18 @@ export default function ContactPage() {
               </div>
               <h2 className="text-2xl font-semibold text-emerald-900 mb-2">Thank you!</h2>
               <p className="text-emerald-700 mb-6">
-                Your email client should have opened with the pre-filled message. If not, please email us directly at{' '}
-                <a href="mailto:eric@babblet.io" className="font-medium underline">eric@babblet.io</a>
+                Your inquiry has been sent successfully. Our team will get back to you shortly.
               </p>
               <Link href="/" className="inline-flex items-center px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-100 hover:bg-emerald-200 rounded-lg transition-colors">Back to Home</Link>
             </motion.div>
           ) : (
             <motion.form initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }} onSubmit={handleSubmit} className="bg-surface-50 border border-surface-200 rounded-2xl p-8">
+              {error && (
+                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                  <p className="text-sm text-red-700">{error}</p>
+                </div>
+              )}
               <div className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
