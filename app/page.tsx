@@ -280,11 +280,12 @@ export default function HomePage() {
               >
                 Create Free Account
               </Link>
-              <button
+              <a
+                href="mailto:eric@babblet.io"
                 className="inline-flex items-center px-6 py-3 text-base font-medium text-white border border-white/30 hover:bg-white/10 rounded-lg transition-colors"
               >
                 Talk to Sales
-              </button>
+              </a>
             </div>
           </motion.div>
         </div>
