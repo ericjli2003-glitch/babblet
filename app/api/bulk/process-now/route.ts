@@ -455,7 +455,6 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
         criterionInsights: Object.keys(criterionInsights).length > 0 ? criterionInsights : undefined,
         status: 'ready',
         completedAt: Date.now(),
-        gradingCount: submission.gradingCount ?? 1, // 1st grading if not set (e.g. by regrade)
       });
     } else {
       // Claude not configured - cannot grade, mark as failed
