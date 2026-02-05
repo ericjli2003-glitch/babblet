@@ -121,88 +121,86 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
     }
 
-    // Pull submission IDs directly from the KV set for consistency
-    let submissionIds: string[] = [];
+    // ============================================
+    // SUBMISSION IDS: Redis SET is the ONLY source of truth
+    // The batch array is a cache that can get out of sync during race conditions
+    // ALWAYS rebuild from the SET to ensure we never lose submissions
+    // ============================================
+    let setIds: string[] = [];
     try {
-      submissionIds = await kv.smembers(`batch_submissions:${batchId}`) as string[];
-      console.log(`[Status] BatchId=${batchId} Raw submission IDs in set (${submissionIds.length}):`, submissionIds);
-      if (submissionIds.length === 0 && batch.totalSubmissions > 0) {
-        console.warn(`[Status] WARNING: SET is empty but batch claims ${batch.totalSubmissions} submissions. Recovery will scan.`);
-      }
+      setIds = await kv.smembers(`batch_submissions:${batchId}`) as string[];
     } catch (e) {
-      console.error(`[Status] Failed to read SET for batch ${batchId}:`, e);
+      console.log(`[Status] Failed to read SET for batch ${batchId}:`, e);
     }
-    // #region agent log
-    (()=>{const d={location:'api/bulk/status/route.ts:GET',message:'Status GET entry',data:{batchId,batchTotalSubmissions:batch.totalSubmissions,setSize:submissionIds.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'};fetch('http://127.0.0.1:7242/ingest/4d4a084e-4174-46b3-8733-338fa5664bc9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).catch(()=>{});try{const p=require('path'),fs=require('fs'),lp=p.join(process.cwd(),'.cursor','debug.log');fs.mkdirSync(p.dirname(lp),{recursive:true});fs.appendFileSync(lp,JSON.stringify(d)+'\n');}catch(_){}})();
-    // #endregion
+    const batchIds = batch.submissionIds || [];
     
-    let submissions = (await Promise.all(submissionIds.map(id => getSubmission(id)))).filter(Boolean) as NonNullable<Awaited<ReturnType<typeof getSubmission>>>[];
-    console.log(`[Status] BatchId=${batchId} Found ${submissions.length} valid submissions from set`);
+    // Merge both sources - use Set to dedupe, but SET is authoritative
+    let submissionIds = Array.from(new Set([...setIds, ...batchIds]));
     
-    // ALWAYS check queue for any submissions belonging to this batch
-    // This catches submissions that were created but not added to SET
-    const existingIds = new Set(submissions.map(s => s.id));
-    const queueItems = await kv.lrange('submission_queue', 0, -1) as string[];
-    console.log(`[Status] Queue has ${queueItems?.length || 0} items`);
-    
-    for (const subId of queueItems || []) {
-      if (existingIds.has(subId)) continue;
-      const sub = await getSubmission(subId);
-      if (sub && sub.batchId === batchId) {
-        submissions.push(sub);
-        existingIds.add(sub.id);
-        await kv.sadd(`batch_submissions:${batchId}`, subId);
-        console.log(`[Status] Recovered submission ${subId} from queue`);
-      }
-    }
-    
-    // If we still have fewer submissions than expected, or SET seems incomplete, scan for orphans
-    // This handles cases where submissions exist but weren't added to the set or queue
-    const shouldScan = batch.totalSubmissions > submissions.length || 
-                      submissions.length === 0 ||
-                      (batch.expectedUploadCount !== undefined && batch.expectedUploadCount > submissions.length) ||
-                      (submissionIds.length < 5 && batch.totalSubmissions >= 5); // Heuristic: if batch has many but SET has few
-    
-    if (shouldScan) {
-      console.log(`[Status] Recovery scan needed. Batch claims ${batch.totalSubmissions}, SET has ${submissionIds.length}, found ${submissions.length}`);
-      
-      // Scan for submission keys that belong to this batch
-      console.log(`[Status] Scanning for orphaned submissions...`);
-      let cursor = 0;
-      let scanCount = 0;
-      const maxScans = 50; // Increased limit for better recovery
-      
-      do {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result: [number, string[]] = await kv.scan(cursor, { match: 'submission:*', count: 100 }) as any;
-        cursor = result[0];
-        const keys = result[1];
-        
-        for (const key of keys) {
-          const subId = key.replace('submission:', '');
-          if (existingIds.has(subId)) continue;
-          
+    // ============================================
+    // FALLBACK: If we found 0 submissions but batch.totalSubmissions > 0,
+    // the SET might have been lost. Use a scan as last resort.
+    // ============================================
+    if (submissionIds.length === 0 && batch.totalSubmissions > 0) {
+      console.log(`[Status] RECOVERY: batch ${batchId} claims ${batch.totalSubmissions} submissions but SET/array empty. Attempting scan recovery...`);
+      console.log(`[Status] Batch record: submissionIds=${JSON.stringify(batchIds)}, totalSubmissions=${batch.totalSubmissions}, processedCount=${batch.processedCount}`);
+      try {
+        // Scan ALL submission keys - no limit since we need to find them
+        const allSubmissionKeys = await kv.keys('submission:*');
+        console.log(`[Status] RECOVERY: Scanning ${allSubmissionKeys.length} total submission keys...`);
+        let foundCount = 0;
+        for (const key of allSubmissionKeys) {
+          const subId = (key as string).replace('submission:', '');
           const sub = await getSubmission(subId);
           if (sub && sub.batchId === batchId) {
-            submissions.push(sub);
-            existingIds.add(sub.id);
-            await kv.sadd(`batch_submissions:${batchId}`, subId);
-            console.log(`[Status] Recovered orphaned submission ${subId} (${sub.studentName})`);
+            submissionIds.push(subId);
+            foundCount++;
+            console.log(`[Status] RECOVERY: Found submission ${subId} (${sub.studentName})`);
           }
+          // Stop if we've found enough
+          if (foundCount >= batch.totalSubmissions) break;
         }
-        
-        scanCount++;
-      } while (cursor !== 0 && scanCount < maxScans);
-      
-      console.log(`[Status] After recovery: ${submissions.length} submissions`);
+        console.log(`[Status] RECOVERY: Found ${submissionIds.length} submissions via scan for batch ${batchId}`);
+        // Re-sync to SET and batch
+        if (submissionIds.length > 0) {
+          console.log(`[Status] RECOVERY: Re-syncing ${submissionIds.length} submissions to SET and batch record`);
+          for (const id of submissionIds) {
+            await kv.sadd(`batch_submissions:${batchId}`, id);
+          }
+          await updateBatch(batchId, { submissionIds, totalSubmissions: submissionIds.length });
+          batch = await getBatch(batchId) || batch;
+        } else {
+          // No submissions found - batch record is stale
+          console.log(`[Status] RECOVERY: No submissions found. Resetting batch stats to 0.`);
+          await updateBatch(batchId, { submissionIds: [], totalSubmissions: 0, processedCount: 0, failedCount: 0 });
+          batch = await getBatch(batchId) || batch;
+        }
+      } catch (e) {
+        console.log(`[Status] RECOVERY failed:`, e);
+      }
     }
     
-    // De-duplicate in case recovery added duplicates
-    const deduped = new Map(submissions.map(s => [s.id, s]));
-    submissions = Array.from(deduped.values());
-    // #region agent log
-    (()=>{const d={location:'api/bulk/status/route.ts:after-recovery',message:'Status GET after recovery',data:{batchId,submissionsLength:submissions.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'};fetch('http://127.0.0.1:7242/ingest/4d4a084e-4174-46b3-8733-338fa5664bc9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).catch(()=>{});try{const p=require('path'),fs=require('fs'),lp=p.join(process.cwd(),'.cursor','debug.log');fs.mkdirSync(p.dirname(lp),{recursive:true});fs.appendFileSync(lp,JSON.stringify(d)+'\n');}catch(_){}})();
-    // #endregion
+    // ALWAYS sync batch record if there's ANY mismatch (count or IDs)
+    const batchNeedsSync = submissionIds.length !== batchIds.length || 
+      !submissionIds.every(id => batchIds.includes(id));
+    
+    if (batchNeedsSync) {
+      console.log(`[Status] Syncing batch ${batchId}: batch had ${batchIds.length} IDs, SET has ${setIds.length}, merged to ${submissionIds.length}`);
+      await updateBatch(batchId, {
+        submissionIds: submissionIds,
+        totalSubmissions: submissionIds.length,
+      });
+      // Refresh batch after sync
+      batch = await getBatch(batchId) || batch;
+    }
+    
+    console.log(`[Status] BatchId=${batchId} Found ${submissionIds.length} submission IDs (batch: ${batchIds.length}, set: ${setIds.length})`);
+    
+    // Fetch all submissions
+    const submissionResults = await Promise.all(submissionIds.map(id => getSubmission(id)));
+    const submissions = submissionResults.filter(Boolean) as NonNullable<Awaited<ReturnType<typeof getSubmission>>>[];
+    
+    console.log(`[Status] Returning ${submissions.length} submissions`);
     
     // Compute grading status from actual submission data (SINGLE SOURCE OF TRUTH)
     const submissionData = submissions.map(s => ({
@@ -210,9 +208,6 @@ export async function GET(request: NextRequest) {
       overallScore: s.rubricEvaluation?.overallScore,
     }));
     const gradingStatusResult = computeGradingStatus(submissionData);
-    // #region agent log
-    (()=>{const d={location:'api/bulk/status/route.ts:grading-result',message:'Status GET grading result',data:{batchId,submissionsLength:submissions.length,gradingStatus:gradingStatusResult.status,totalCount:gradingStatusResult.totalCount},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'};fetch('http://127.0.0.1:7242/ingest/4d4a084e-4174-46b3-8733-338fa5664bc9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).catch(()=>{});try{const p=require('path'),fs=require('fs'),lp=p.join(process.cwd(),'.cursor','debug.log');fs.mkdirSync(p.dirname(lp),{recursive:true});fs.appendFileSync(lp,JSON.stringify(d)+'\n');}catch(_){}})();
-    // #endregion
     
     // Sync batch stats to match actual graded count (submissions with scores)
     const processedCount = gradingStatusResult.gradedCount;
@@ -224,41 +219,27 @@ export async function GET(request: NextRequest) {
                       : 'processing';
     
     // ============================================
-    // UPLOAD TRACKING: Clear expectedUploadCount when:
-    // 1. All files are uploaded, OR
-    // 2. Uploads are stale (expected > 0, received 0, batch older than 5 min)
-    // This ensures the UI stops showing upload progress once complete or stale
+    // UPLOAD TRACKING: Clear expectedUploadCount when all files are uploaded
+    // OR when batch is already completed (don't show upload progress for finished batches)
     // ============================================
-    const uploadsComplete = batch.expectedUploadCount !== undefined && 
-                           batch.expectedUploadCount > 0 && 
-                           submissions.length >= batch.expectedUploadCount;
-    
-    // Detect stale uploads: expected > 0, but 0 received and batch is older than 5 minutes
-    const STALE_UPLOAD_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
-    const uploadsStale = batch.expectedUploadCount !== undefined &&
-                        batch.expectedUploadCount > 0 &&
-                        submissions.length === 0 &&
-                        (Date.now() - batch.createdAt) > STALE_UPLOAD_THRESHOLD_MS;
-    
-    if (uploadsStale) {
-      console.log(`[Status] Clearing stale expectedUploadCount: batch ${batchId} expected ${batch.expectedUploadCount} but received 0 after ${Math.round((Date.now() - batch.createdAt) / 1000)}s`);
-    }
-    
-    const shouldClearExpectedCount = uploadsComplete || uploadsStale;
+    const uploadsComplete = (batch.expectedUploadCount !== undefined && 
+                            batch.expectedUploadCount > 0 && 
+                            submissions.length >= batch.expectedUploadCount) ||
+                           (batchStatus === 'completed');
     
     if (batch.totalSubmissions !== submissions.length || 
         batch.processedCount !== processedCount || 
         batch.failedCount !== failedCount ||
         batch.status !== batchStatus ||
-        shouldClearExpectedCount) {
-      console.log(`[Status] Syncing batch stats: total ${batch.totalSubmissions}->${submissions.length}, processed ${batch.processedCount}->${processedCount}, status ${batch.status}->${batchStatus}, uploadsComplete=${uploadsComplete}, uploadsStale=${uploadsStale}`);
+        uploadsComplete) {
+      console.log(`[Status] Syncing batch stats: total ${batch.totalSubmissions}->${submissions.length}, processed ${batch.processedCount}->${processedCount}, status ${batch.status}->${batchStatus}, uploadsComplete=${uploadsComplete}`);
       batch = await updateBatch(batchId, {
-        totalSubmissions: submissions.length, // Always sync to actual count (SET is source of truth)
+        totalSubmissions: submissions.length,
         processedCount,
         failedCount,
         status: batchStatus,
-        // Clear expected count once all files are uploaded OR uploads are stale
-        ...(shouldClearExpectedCount ? { expectedUploadCount: undefined } : {}),
+        // Clear expected count once all files are uploaded
+        ...(uploadsComplete ? { expectedUploadCount: undefined } : {}),
       }) || batch;
     }
 
@@ -297,13 +278,11 @@ export async function GET(request: NextRequest) {
         createdAt: s.createdAt,
         completedAt: s.completedAt,
         duration: s.duration,
-        regradedAt: s.regradedAt,
+        // Regrade version: only show badge when > 1
         gradingCount: s.gradingCount,
       })),
       stats,
       globalQueueLength: queueLength,
-    }, {
-      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
     });
   } catch (error) {
     console.error('[Status] Error:', error);

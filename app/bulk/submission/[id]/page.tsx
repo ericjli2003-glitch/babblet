@@ -121,9 +121,7 @@ interface Submission {
   };
   createdAt: number;
   completedAt?: number;
-  /** Set when submission was re-graded (2nd+ grading) */
-  regradedAt?: number;
-  /** 1 = first grading, 2 = second, etc. For "Xth grading" UI */
+  /** Regrade version: 1 = original (no badge), 2+ = show "2nd grading", "3rd grading", etc. */
   gradingCount?: number;
 }
 
@@ -144,13 +142,6 @@ function formatDate(timestamp: number): string {
     day: 'numeric',
     year: 'numeric',
   });
-}
-
-function ordinalGradingLabel(count: number): string {
-  if (count <= 1) return '';
-  const n = count % 100;
-  const suffix = n >= 11 && n <= 13 ? 'th' : (count % 10 === 1 ? 'st' : count % 10 === 2 ? 'nd' : count % 10 === 3 ? 'rd' : 'th');
-  return `${count}${suffix} grading`;
 }
 
 function formatFileSize(bytes: number): string {
@@ -232,7 +223,6 @@ export default function SubmissionDetailPage() {
     count: number;
   } | null>(null);
   const [criterionInsights, setCriterionInsights] = useState<Record<string, string>>({});
-  const [courseDocuments, setCourseDocuments] = useState<Array<{ id: string; name: string; type: string }>>([]);
   const [alignmentMoreInsights, setAlignmentMoreInsights] = useState<string | null>(null);
   const [keyMoreInsights, setKeyMoreInsights] = useState<string | null>(null);
   const [verificationMoreInsights, setVerificationMoreInsights] = useState<string | null>(null);
@@ -282,16 +272,6 @@ export default function SubmissionDetailPage() {
                       pausesPerMinAvg: stats.pausesPerMinAvg ?? null,
                       count: stats.count,
                     });
-                  }
-                })
-                .catch(() => {});
-            }
-            if (batchData.batch?.courseId) {
-              fetch(`/api/context/documents?courseId=${batchData.batch.courseId}`)
-                .then((r) => r.json())
-                .then((docData) => {
-                  if (docData.documents?.length) {
-                    setCourseDocuments(docData.documents.map((d: { id: string; name: string; type: string }) => ({ id: d.id, name: d.name, type: d.type })));
                   }
                 })
                 .catch(() => {});
@@ -988,24 +968,20 @@ RULES:
               <div>
                 <div className="flex items-center gap-3 flex-wrap">
                   <h1 className="text-2xl font-bold text-surface-900">{submission.studentName}</h1>
+                  {submission.gradingCount != null && submission.gradingCount > 1 && (
+                    <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-violet-100 text-violet-700">
+                      {submission.gradingCount === 2 ? '2nd grading' : submission.gradingCount === 3 ? '3rd grading' : `${submission.gradingCount}th grading`}
+                    </span>
+                  )}
                   {submission.status === 'ready' && (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full">
                       <CheckCircle className="w-3.5 h-3.5" />
                       Submitted on time
-                    </span>
-                  )}
-                  {submission.regradedAt != null && (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-100 text-amber-800 text-xs font-medium rounded-full">
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      Re-graded
-                    </span>
-                  )}
+                  </span>
+                )}
                 </div>
                 <p className="text-sm text-surface-500 mt-0.5">
                   Submission: {batchInfo?.assignmentName || 'Assignment'} • {formatDate(submission.createdAt)}
-                  {submission.regradedAt != null && (
-                    <span className="ml-2 text-amber-600">• Re-graded {formatDate(submission.regradedAt)}</span>
-                  )}
                 </p>
               </div>
             </div>
@@ -1056,12 +1032,6 @@ RULES:
                   exit={{ opacity: 0, y: -10 }}
                   className="space-y-6"
                 >
-                  {(submission.gradingCount ?? 0) >= 2 && (
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-100 text-violet-700 text-sm font-medium">
-                      <RefreshCw className="w-4 h-4" />
-                      <span>{ordinalGradingLabel(submission.gradingCount!)}</span>
-                    </div>
-                  )}
                   <div>
                     <h2 className="text-lg font-semibold text-surface-900 mb-1">Submission Overview & Insights</h2>
                     <p className="text-sm text-surface-500">
@@ -1083,8 +1053,8 @@ RULES:
                         : 'There were minor areas where clarity could be improved.')
                     }
                     badges={[
-                      ...((submission.gradingCount ?? 0) >= 2
-                        ? [{ label: ordinalGradingLabel(submission.gradingCount!), icon: <RefreshCw className="w-3 h-3" /> }]
+                      ...(submission.gradingCount != null && submission.gradingCount > 1
+                        ? [{ label: submission.gradingCount === 2 ? '2nd grading' : submission.gradingCount === 3 ? '3rd grading' : `${submission.gradingCount}th grading`, icon: <RefreshCw className="w-3 h-3" /> }]
                         : []),
                       { label: submission.analysis?.sentiment || 'Positive Sentiment', icon: <ThumbsUp className="w-3 h-3" /> },
                       { 
@@ -1204,17 +1174,14 @@ RULES:
                       </div>
                     </div>
 
-                    {/* Speech Delivery - Metrics with class averages (rest of assignment) */}
+                    {/* Speech Delivery - Metrics only, no videos */}
                     <div className="bg-white rounded-2xl border border-surface-200 p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <Mic className="w-4 h-4 text-primary-500" />
-                          <h3 className="text-sm font-semibold text-surface-900">Speech Delivery</h3>
-                        </div>
-                        {classSpeechStats?.count != null && classSpeechStats.count > 0 && (
-                          <span className="text-[10px] text-surface-500">Assignment avg (n={classSpeechStats.count})</span>
-                        )}
+                      <div className="flex items-center gap-2 mb-3">
+                        <Mic className="w-4 h-4 text-primary-500" />
+                        <h3 className="text-sm font-semibold text-surface-900">Speech Delivery</h3>
                       </div>
+                      
+                      {/* Metrics - compact */}
                       <div className="grid grid-cols-3 gap-2 text-center">
                         {/* Filler Word Count */}
                         <div className="bg-surface-50 rounded-lg p-3">
@@ -1230,8 +1197,8 @@ RULES:
                           <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.fillerWordCount}</div>
                           <p className="text-[10px] text-surface-500 mb-0.5">Filler Words</p>
                           <p className="text-[9px] text-surface-600 leading-tight">
-                            {classSpeechStats?.fillerWordAvg != null && classSpeechStats.count > 0 ? (
-                              <>Assignment avg: <span className="font-semibold">{Number(classSpeechStats.fillerWordAvg) === Math.floor(classSpeechStats.fillerWordAvg) ? Math.round(classSpeechStats.fillerWordAvg) : classSpeechStats.fillerWordAvg}</span></>
+                            {classSpeechStats?.fillerWordAvg != null ? (
+                              <>Class Avg: <span className="font-medium">{classSpeechStats.fillerWordAvg}</span> — Lower filler use improves clarity.</>
                             ) : (
                               <>Lower filler use improves clarity.</>
                             )}
@@ -1254,8 +1221,8 @@ RULES:
                           <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.speakingRateWpm}</div>
                           <p className="text-[10px] text-surface-500 mb-0.5">Words/min</p>
                           <p className="text-[9px] text-surface-600 leading-tight">
-                            {classSpeechStats?.wpmAvg != null && classSpeechStats.count > 0 ? (
-                              <>Assignment avg: <span className="font-semibold">{Math.round(classSpeechStats.wpmAvg)}</span> wpm</>
+                            {classSpeechStats?.wpmAvg != null ? (
+                              <>Class Avg: <span className="font-medium">{classSpeechStats.wpmAvg}</span> — Ideal range 120–180 for comprehension.</>
                             ) : (
                               <>Ideal range 120–180 for comprehension.</>
                             )}
@@ -1276,8 +1243,8 @@ RULES:
                           <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.pauseFrequency.toFixed(1)}</div>
                           <p className="text-[10px] text-surface-500 mb-0.5">Pauses/min</p>
                           <p className="text-[9px] text-surface-600 leading-tight">
-                            {classSpeechStats?.pausesPerMinAvg != null && classSpeechStats.count > 0 ? (
-                              <>Assignment avg: <span className="font-semibold">{Number(classSpeechStats.pausesPerMinAvg) === Math.floor(classSpeechStats.pausesPerMinAvg) ? Math.round(classSpeechStats.pausesPerMinAvg) : classSpeechStats.pausesPerMinAvg}</span>/min</>
+                            {classSpeechStats?.pausesPerMinAvg != null ? (
+                              <>Class Avg: <span className="font-medium">{classSpeechStats.pausesPerMinAvg}</span> — Strategic pauses aid emphasis.</>
                             ) : (
                               <>Strategic pauses aid emphasis.</>
                             )}
@@ -1330,35 +1297,9 @@ RULES:
                                 </div>
                                 <p className="text-xs text-surface-600 leading-relaxed">{c.feedback || c.rationale || 'See rubric for details.'}</p>
                                 {batchInfo?.courseId && (
-                                  <div className="mt-2 pt-2 border-t border-surface-100 relative group">
-                                    <p className="text-[10px] text-primary-600 mb-1 cursor-help">📚 Course Materials</p>
-                                    {/* Hover popover: show materials + link to source */}
-                                    <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-50 w-72 rounded-lg border border-surface-200 bg-white shadow-lg p-3">
-                                      <p className="text-xs font-semibold text-surface-900 mb-2">Referenced materials</p>
-                                      {courseDocuments.length > 0 ? (
-                                        <ul className="space-y-1.5 mb-3 max-h-32 overflow-y-auto">
-                                          {courseDocuments.slice(0, 8).map((doc) => (
-                                            <li key={doc.id} className="text-[11px] text-surface-700">
-                                              {doc.name}
-                                              <span className="text-surface-400 ml-1">({doc.type.replace('_', ' ')})</span>
-                                            </li>
-                                          ))}
-                                          {courseDocuments.length > 8 && (
-                                            <li className="text-[10px] text-surface-500">+{courseDocuments.length - 8} more</li>
-                                          )}
-                                        </ul>
-                                      ) : (
-                                        <p className="text-[11px] text-surface-500 mb-3">Based on uploaded {batchInfo.courseName || 'course'} content</p>
-                                      )}
-                                      <Link
-                                        href={`/courses/${batchInfo.courseId}/content`}
-                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 rounded border border-primary-200 transition-colors"
-                                      >
-                                        <BookOpen className="w-3.5 h-3.5" />
-                                        View course materials
-                                      </Link>
-                                    </div>
-                                    <p className="text-[9px] text-surface-500">Hover to see materials · Click link to open</p>
+                                  <div className="mt-2 pt-2 border-t border-surface-100">
+                                    <p className="text-[10px] text-primary-600 mb-1">📚 Referenced: Course Materials</p>
+                                    <p className="text-[9px] text-surface-500">Based on uploaded {batchInfo.courseName || 'course'} content</p>
                                   </div>
                                 )}
                               </div>
@@ -1879,19 +1820,16 @@ RULES:
                                     initialInsights={criterionInsights[c.criterion] || null}
                                     citationSegments={sortedSegments.map(seg => ({ timestamp: normalizeTimestamp(seg.timestamp), text: seg.text }))}
                                     courseReferences={[
-                                      { id: 'rubric', title: c.criterion, type: 'rubric' as const, explanation: (c.rationale || c.feedback || `This rubric criterion applies to the insight above.`).slice(0, 300), documentUrl: batchInfo?.courseId ? `/courses/${batchInfo.courseId}/content` : undefined },
-                                      ...(batchInfo?.courseId ? [{ id: 'course', title: batchInfo.courseName || 'Course materials', type: 'course' as const, excerpt: `Relevant lecture slides, readings, or course materials define or reinforce expectations for ${c.criterion}. See course content for full materials.`, documentUrl: `/courses/${batchInfo.courseId}/content` }] : []),
+                                      // B = rubric for THIS criterion — excerpt = this part of source; explanation = why it aligns
+                                      { id: 'B', title: c.criterion, excerpt: (c.feedback || c.rationale || 'Rubric criterion').slice(0, 200), type: 'rubric' as const, explanation: (c.rationale || c.feedback || `This criterion applies to the insight above.`).slice(0, 200) },
                                     ]}
                                     videoUrl={videoUrl}
                                     criterionIndex={selectedCriterionIndex}
                                     totalCriteria={effectiveCriteria.length}
                                     onInsightsGenerated={(criterionTitle, insights) => {
-                                      setCriterionInsights(prev => {
-                                        const next = insights ? { ...prev, [criterionTitle]: insights } : (() => { const { [criterionTitle]: _, ...rest } = prev; return rest; })();
-                                        // Persist so Babblet insights run once and stay consistent on future visits
-                                        fetch('/api/bulk/submissions', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submissionId, criterionInsights: next }) }).catch(() => {});
-                                        return next;
-                                      });
+                                      setCriterionInsights(prev => 
+                                        insights ? { ...prev, [criterionTitle]: insights } : (() => { const { [criterionTitle]: _, ...rest } = prev; return rest; })()
+                                      );
                                     }}
                                     onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
                                     onRequestMoreInsights={handleRequestCriterionInsights}

@@ -280,11 +280,12 @@ export default function HomePage() {
               >
                 Create Free Account
               </Link>
-              <button
+              <a
+                href="mailto:eric@babblet.io"
                 className="inline-flex items-center px-6 py-3 text-base font-medium text-white border border-white/30 hover:bg-white/10 rounded-lg transition-colors"
               >
                 Talk to Sales
-              </button>
+              </a>
             </div>
           </motion.div>
         </div>
@@ -293,49 +294,17 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="py-12 border-t border-surface-200 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-5 gap-8">
+          <div>
             {/* Logo & Description */}
-            <div className="md:col-span-2">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 text-white" />
-                </div>
-                <span className="text-xl font-semibold text-surface-900">Babblet</span>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-white" />
               </div>
-              <p className="text-sm text-surface-600 leading-relaxed">
-                Modern grading solutions for modern educators. Enabling faster, more consistent feedback.
-              </p>
+              <span className="text-xl font-semibold text-surface-900">Babblet</span>
             </div>
-
-            {/* Product */}
-            <div>
-              <h4 className="text-sm font-semibold text-surface-900 mb-4">Product</h4>
-              <ul className="space-y-3">
-                <li><a href="#" className="text-sm text-surface-600 hover:text-primary-600 transition-colors">Features</a></li>
-                <li><a href="#" className="text-sm text-surface-600 hover:text-primary-600 transition-colors">Security</a></li>
-                <li><a href="#" className="text-sm text-surface-600 hover:text-primary-600 transition-colors">Integrations</a></li>
-              </ul>
-            </div>
-
-            {/* Resources */}
-            <div>
-              <h4 className="text-sm font-semibold text-surface-900 mb-4">Resources</h4>
-              <ul className="space-y-3">
-                <li><a href="#" className="text-sm text-surface-600 hover:text-primary-600 transition-colors">Help Center</a></li>
-                <li><a href="#" className="text-sm text-surface-600 hover:text-primary-600 transition-colors">Webinars</a></li>
-                <li><a href="#" className="text-sm text-surface-600 hover:text-primary-600 transition-colors">Case Studies</a></li>
-              </ul>
-            </div>
-
-            {/* Legal */}
-            <div>
-              <h4 className="text-sm font-semibold text-surface-900 mb-4">Legal</h4>
-              <ul className="space-y-3">
-                <li><a href="#" className="text-sm text-surface-600 hover:text-primary-600 transition-colors">Privacy Policy</a></li>
-                <li><a href="#" className="text-sm text-surface-600 hover:text-primary-600 transition-colors">Terms of Service</a></li>
-                <li><a href="#" className="text-sm text-surface-600 hover:text-primary-600 transition-colors">Cookie Policy</a></li>
-              </ul>
-            </div>
+            <p className="text-sm text-surface-600 leading-relaxed max-w-md">
+              Modern grading solutions for modern educators. Enabling faster, more consistent feedback.
+            </p>
           </div>
 
           {/* Bottom Bar */}

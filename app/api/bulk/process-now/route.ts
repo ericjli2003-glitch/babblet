@@ -383,9 +383,14 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
         };
       }
 
+      // Preserve regrade version: set to 1 on first grading, keep existing on regrade
+      const gradingCount = submission.gradingCount ?? 1;
+
       await updateSubmission(submissionId, {
         // Store the bundleVersionId used for grading
         bundleVersionId: bundleVersionId,
+        // Regrade version: 1 = original, 2+ = 2nd/3rd grading (set by regrade route when queuing)
+        gradingCount,
         // Store citations from retrieved documents
         contextCitations: retrievedContext?.citations || undefined,
         // Store retrieval quality metrics for transparency

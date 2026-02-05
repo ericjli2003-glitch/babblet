@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   Download, RefreshCw, ChevronLeft, ChevronRight, Filter,
   Loader2, AlertTriangle, TrendingUp, Clock, Flag, Eye,
-  Play, AlertCircle, CheckCircle, ArrowLeft, Trash2, MoreVertical, Upload, Plus
+  Play, AlertCircle, CheckCircle, ArrowLeft, Trash2, MoreVertical, Upload, Plus, X
 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 
@@ -38,9 +38,7 @@ interface Submission {
   videoLength?: string;
   flagged?: boolean;
   flagReason?: string;
-  /** Set when this submission was re-graded (2nd+ grading) */
-  regradedAt?: number;
-  /** 1 = first grading, 2 = second, etc. For "Xth grading" UI */
+  /** Regrade version: 1 = original (no badge), 2+ = show "2nd grading", "3rd grading", etc. */
   gradingCount?: number;
 }
 
@@ -83,32 +81,12 @@ function getInitials(name: string): string {
 
 function getTimeAgo(timestamp: number): string {
   const diff = Date.now() - timestamp;
-  const minutes = Math.floor(diff / (1000 * 60));
   const hours = Math.floor(diff / (1000 * 60 * 60));
   const days = Math.floor(hours / 24);
   
-  if (days > 0) return `${days}d ago`;
-  if (hours > 0) return `${hours}h ago`;
-  if (minutes > 0) return `${minutes}m ago`;
-  return 'Just now';
-}
-
-function formatUploadDate(timestamp: number): string {
-  const date = new Date(timestamp);
-  return date.toLocaleDateString('en-US', { 
-    month: 'short', 
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  });
-}
-
-function ordinalGradingLabel(count: number): string {
-  if (count <= 1) return '';
-  const n = count % 100;
-  const suffix = n >= 11 && n <= 13 ? 'th' : (count % 10 === 1 ? 'st' : count % 10 === 2 ? 'nd' : count % 10 === 3 ? 'rd' : 'th');
-  return `${count}${suffix} grading`;
+  if (days > 0) return `Submitted ${days}d ago`;
+  if (hours > 0) return `Submitted ${hours}h ago`;
+  return 'Just submitted';
 }
 
 function getSentimentColor(sentiment?: string): string {
@@ -120,6 +98,18 @@ function getSentimentColor(sentiment?: string): string {
     case 'Uncertain': return 'text-red-600';
     default: return 'text-surface-400';
   }
+}
+
+function ordinalGradingLabel(count: number): string {
+  if (count <= 1) return '';
+  const ordinals: Record<number, string> = {
+    2: '2nd',
+    3: '3rd',
+    4: '4th',
+    5: '5th',
+  };
+  const ord = ordinals[count] || `${count}th`;
+  return `${ord} grading`;
 }
 
 function getSentimentIcon(sentiment?: string) {
@@ -154,11 +144,9 @@ export default function AssignmentDashboardPage() {
   const urlExpectedUploads = parseInt(searchParams.get('uploading') || '0', 10);
 
   const [loading, setLoading] = useState(true);
-  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [batch, setBatch] = useState<BatchInfo | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const loadIdRef = useRef(0);
   // ============================================
   // HIGH WATER MARK: Prevent counts from going backwards
   // Once we've seen N submissions, never show fewer than N
@@ -179,7 +167,6 @@ export default function AssignmentDashboardPage() {
     message: '',
   });
   const [isRegrading, setIsRegrading] = useState(false);
-  const [regradingCount, setRegradingCount] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -190,6 +177,10 @@ export default function AssignmentDashboardPage() {
   // ============================================
   const [regradeMode, setRegradeMode] = useState(false);
   const [selectedForRegrade, setSelectedForRegrade] = useState<Set<string>>(new Set());
+  /** IDs currently being regraded; block View link until they have hasGradeData again */
+  const [submissionIdsRegrading, setSubmissionIdsRegrading] = useState<Set<string>>(new Set());
+  /** AbortController for current regrade session; abort when a new regrade starts */
+  const regradeAbortRef = useRef<AbortController | null>(null);
 
   // ============================================
   // ADD MORE UPLOADS: State for uploading additional files
@@ -197,19 +188,12 @@ export default function AssignmentDashboardPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState<{id: string; name: string; progress: number}[]>([]);
-  const submissionStateCacheRef = useRef<Record<string, { hasGradeData?: boolean; overallScore?: number | null; videoLength?: string }>>({});
-
-  // Minimum time to show loading screen (prevents flash of empty state)
-  const MIN_LOADING_MS = 1200;
 
   // Load batch and submissions
   useEffect(() => {
-    setInitialLoadComplete(false);
-    setLoading(true);
-    const loadId = ++loadIdRef.current;
     const loadData = async () => {
-      const start = Date.now();
       try {
+        setLoading(true);
 
         // Fetch batch status and course info
         const [batchRes, courseRes] = await Promise.all([
@@ -263,44 +247,21 @@ export default function AssignmentDashboardPage() {
         }
 
         // Map submissions - use hasGradeData from API
-        const subs: Submission[] = (batchData.submissions || []).map((sub: any) => {
-          const cached = submissionStateCacheRef.current[sub.id] || {};
-          const incomingHasGrade = sub.hasGradeData ?? false;
-          const hasGradeData = incomingHasGrade || cached.hasGradeData || false;
-          const overallScore = hasGradeData
-            ? (sub.overallScore ?? cached.overallScore ?? null)
-            : null;
-          const videoLength = sub.duration
-            ? formatDuration(sub.duration)
-            : cached.videoLength;
-
-          const submissionEntry: Submission = {
-            id: sub.id,
-            studentName: sub.studentName || 'Unknown Student',
-            originalFilename: sub.originalFilename || 'Unknown',
-            status: sub.status,
-            createdAt: sub.createdAt || Date.now(),
-            completedAt: sub.completedAt,
-            overallScore,
-            hasGradeData,
-            videoLength,
-            aiSentiment: sub.analysis?.sentiment || (hasGradeData ? 'Confident' : undefined),
-            flagged: sub.flagged,
-            flagReason: sub.flagReason,
-            regradedAt: sub.regradedAt,
-            gradingCount: sub.gradingCount,
-          };
-
-          submissionStateCacheRef.current[sub.id] = {
-            ...submissionStateCacheRef.current[sub.id],
-            ...(submissionEntry.videoLength ? { videoLength: submissionEntry.videoLength } : {}),
-            ...(submissionEntry.hasGradeData && submissionEntry.overallScore != null
-              ? { hasGradeData: true, overallScore: submissionEntry.overallScore }
-              : {}),
-          };
-
-          return submissionEntry;
-        });
+        const subs: Submission[] = (batchData.submissions || []).map((sub: any) => ({
+          id: sub.id,
+          studentName: sub.studentName || 'Unknown Student',
+          originalFilename: sub.originalFilename || 'Unknown',
+          status: sub.status,
+          createdAt: sub.createdAt || Date.now(),
+          completedAt: sub.completedAt,
+          overallScore: sub.overallScore,
+          hasGradeData: sub.hasGradeData ?? false,
+          videoLength: sub.duration ? formatDuration(sub.duration) : undefined,
+          aiSentiment: sub.analysis?.sentiment || (sub.hasGradeData ? 'Confident' : undefined),
+          flagged: sub.flagged,
+          flagReason: sub.flagReason,
+          gradingCount: sub.gradingCount,
+        }));
 
         // Update submissions and high water mark
         setSubmissions(subs);
@@ -309,16 +270,6 @@ export default function AssignmentDashboardPage() {
         console.error('[AssignmentDashboard] Error:', err);
         setError('Failed to load data');
       } finally {
-        // Only apply result if this is still the latest load (avoids Strict Mode / fast nav race)
-        if (loadId !== loadIdRef.current) return;
-        // Keep loading screen visible for minimum time so owl always shows
-        const elapsed = Date.now() - start;
-        const remaining = Math.max(0, MIN_LOADING_MS - elapsed);
-        if (remaining > 0) {
-          await new Promise(r => setTimeout(r, remaining));
-        }
-        if (loadId !== loadIdRef.current) return;
-        setInitialLoadComplete(true);
         setLoading(false);
       }
     };
@@ -436,6 +387,17 @@ export default function AssignmentDashboardPage() {
       setGradingStartTime(null);
     }
   }, [allProcessed, gradingStarted, activeWorkers]);
+
+  // Clear submissionIdsRegrading once all those submissions have grades again
+  useEffect(() => {
+    if (submissionIdsRegrading.size === 0) return;
+    const idList = Array.from(submissionIdsRegrading);
+    const allDone = idList.every(id => {
+      const s = submissions.find(x => x.id === id);
+      return s?.hasGradeData === true;
+    });
+    if (allDone) setSubmissionIdsRegrading(new Set());
+  }, [submissions, submissionIdsRegrading]);
 
   // ============================================
   // AUTO-RESUME: Continue grading on page refresh
@@ -571,69 +533,75 @@ export default function AssignmentDashboardPage() {
             }
           }
           
-          // Map fresh data from server (with videoLength)
-          const updatedSubs: Submission[] = data.submissions.map((sub: any) => {
-            const cached = submissionStateCacheRef.current[sub.id] || {};
-            const hasGradeData = sub.hasGradeData ?? false;
-            const overallScore = hasGradeData ? (sub.overallScore ?? cached.overallScore ?? null) : null;
-            const videoLength = sub.duration ? formatDuration(sub.duration) : cached.videoLength;
-            return {
-              id: sub.id,
-              studentName: sub.studentName || 'Unknown Student',
-              originalFilename: sub.originalFilename || 'Unknown',
-              status: sub.status,
-              createdAt: sub.createdAt || Date.now(),
-              completedAt: sub.completedAt,
-              overallScore,
-              hasGradeData: hasGradeData || cached.hasGradeData || false,
-              videoLength,
-              aiSentiment: sub.analysis?.sentiment || (hasGradeData ? 'Confident' : undefined),
-              flagged: sub.flagged,
-              flagReason: sub.flagReason,
-              regradedAt: sub.regradedAt,
-              gradingCount: sub.gradingCount,
-            };
-          });
-          const updatedMap = new Map(updatedSubs.map(s => [s.id, s]));
+          // Map fresh data from server
+          const updatedSubs: Submission[] = data.submissions.map((sub: any) => ({
+            id: sub.id,
+            studentName: sub.studentName || 'Unknown Student',
+            originalFilename: sub.originalFilename || 'Unknown',
+            status: sub.status,
+            createdAt: sub.createdAt || Date.now(),
+            completedAt: sub.completedAt,
+            overallScore: sub.overallScore,
+            hasGradeData: sub.hasGradeData ?? false,
+            videoLength: undefined,
+            aiSentiment: sub.analysis?.sentiment || (sub.hasGradeData ? 'Confident' : undefined),
+            flagged: sub.flagged,
+            flagReason: sub.flagReason,
+            gradingCount: sub.gradingCount,
+          }));
           
           // ============================================
-          // SUBMISSION UPDATE: Merge server data WITHOUT changing order
-          // - Preserve current dashboard order (createdAt) so rows don't jump
-          // - Update each existing row in place; append any new IDs at end
+          // SUBMISSION UPDATE: Merge server data with local state
+          // - If submission was explicitly regraded (status='queued'), use new data
+          // - Otherwise preserve grade data to prevent flicker
+          // - Never show fewer submissions than we've seen
           // ============================================
           setSubmissions(prev => {
             const prevMap = new Map(prev.map(s => [s.id, s]));
             
-            const mergeOne = (existing: Submission, incoming: Submission): Submission => {
-              if (['queued', 'transcribing', 'analyzing'].includes(incoming.status)) return incoming;
-              if (existing.hasGradeData && existing.overallScore != null && (!incoming.hasGradeData || incoming.overallScore == null)) return existing;
-              return {
-                ...incoming,
-                aiSentiment: incoming.aiSentiment ?? existing.aiSentiment,
-                flagged: incoming.flagged ?? existing.flagged,
-                flagReason: incoming.flagReason ?? existing.flagReason,
-                videoLength: incoming.videoLength ?? existing.videoLength,
-                regradedAt: incoming.regradedAt ?? existing.regradedAt,
-                gradingCount: incoming.gradingCount ?? existing.gradingCount,
-              };
-            };
-            
-            // Keep same order as prev: update each by id
-            const inOrder = prev.map(s => {
-              const inc = updatedMap.get(s.id);
-              if (!inc) return s;
-              return mergeOne(s, inc);
+            // Merge submissions
+            const mergedSubs = updatedSubs.map(newSub => {
+              const existingSub = prevMap.get(newSub.id);
+              
+              // If submission is now queued/processing, it's being regraded - use server data
+              // This allows regrades to show proper status even if previously graded
+              if (['queued', 'transcribing', 'analyzing'].includes(newSub.status)) {
+                return newSub;
+              }
+              
+              // If existing submission has grade data and new doesn't, preserve existing
+              // (protects against transient API inconsistencies during normal grading)
+              if (existingSub?.hasGradeData && existingSub.overallScore != null) {
+                if (newSub.hasGradeData && newSub.overallScore != null) {
+                  return newSub; // New grade available, use it
+                }
+                // Keep existing graded data (prevents flicker)
+                return existingSub;
+              }
+              
+              return newSub;
             });
             
-            // Append any new submissions from API (e.g. recovery) at end, by createdAt
-            const newSubs = updatedSubs.filter(s => !prevMap.has(s.id));
-            if (newSubs.length === 0) {
-              setSubmissionHighWaterMark(mark => Math.max(mark, inOrder.length));
-              return inOrder;
+            if (mergedSubs.length >= prev.length) {
+              setSubmissionHighWaterMark(mark => Math.max(mark, mergedSubs.length));
+              return mergedSubs;
+            } else {
+              // Fewer submissions from server - merge into existing to prevent count drop
+              const mergedMap = new Map(mergedSubs.map(s => [s.id, s]));
+              return prev.map(s => {
+                const updated = mergedMap.get(s.id);
+                if (!updated) return s;
+                // If regrading (queued status), use server data
+                if (['queued', 'transcribing', 'analyzing'].includes(updated.status)) {
+                  return updated;
+                }
+                // Preserve grade if existing has it and new doesn't
+                if (s.hasGradeData && s.overallScore != null && (!updated.hasGradeData || updated.overallScore == null)) {
+                  return s;
+                }
+                return updated;
+              });
             }
-            const appended = [...inOrder, ...newSubs.sort((a, b) => a.createdAt - b.createdAt)];
-            setSubmissionHighWaterMark(mark => Math.max(mark, appended.length));
-            return appended;
           });
           
           if (data.batch) {
@@ -741,21 +709,9 @@ export default function AssignmentDashboardPage() {
     };
   }, [gradingStatus, stats]);
 
-  // Clear regrade banner when grading is complete (e.g. user returned to page after server finished)
-  useEffect(() => {
-    if (regradingCount > 0 && stats.total > 0 && stats.graded === stats.total) {
-      setRegradingCount(0);
-    }
-  }, [regradingCount, stats.graded, stats.total]);
-
-  // Sort submissions by createdAt ascending (oldest first, newest at end)
-  const sortedSubmissions = useMemo(() => {
-    return [...submissions].sort((a, b) => a.createdAt - b.createdAt);
-  }, [submissions]);
-
   // Pagination
-  const totalPages = Math.ceil(sortedSubmissions.length / itemsPerPage);
-  const paginatedSubmissions = sortedSubmissions.slice(
+  const totalPages = Math.ceil(submissions.length / itemsPerPage);
+  const paginatedSubmissions = submissions.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
@@ -786,95 +742,115 @@ export default function AssignmentDashboardPage() {
     });
   };
 
+  const handleCancelRegrade = () => {
+    regradeAbortRef.current?.abort();
+    setSubmissionIdsRegrading(new Set());
+    setIsRegrading(false);
+  };
+
   const handleRegradeSelected = async () => {
     if (selectedForRegrade.size === 0) return;
     
+    // Cancel any in-flight regrade (previous API + worker requests)
+    regradeAbortRef.current?.abort();
+    const controller = new AbortController();
+    regradeAbortRef.current = controller;
+    const signal = controller.signal;
+
     const submissionIdsToRegrade = Array.from(selectedForRegrade);
     setIsRegrading(true);
-    setRegradingCount(submissionIdsToRegrade.length);
+    setSubmissionIdsRegrading(new Set(submissionIdsToRegrade));
     try {
-      console.log(`[Regrade] Starting regrade for ${submissionIdsToRegrade.length} submissions`);
+      console.log(`[Regrade] Starting regrade for ${submissionIdsToRegrade.length} submissions (selected only)`);
       
       const regradeRes = await fetch(`/api/bulk/regrade`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batchId, submissionIds: submissionIdsToRegrade })
+        body: JSON.stringify({ submissionIds: submissionIdsToRegrade }),
+        signal,
       });
       const regradeData = await regradeRes.json();
       console.log(`[Regrade] API response:`, regradeData);
       
-      if (!regradeRes.ok || !regradeData.success) {
-        const msg = regradeData?.error || regradeData?.message || 'Regrade request failed';
-        alert(`Regrade failed: ${msg}. Please try again.`);
-        setIsRegrading(false);
-        setRegradingCount(0);
-        return;
-      }
+      if (signal.aborted) return;
       
+      // Exit regrade mode and clear selections
       setRegradeMode(false);
       setSelectedForRegrade(new Set());
+      
+      // Unlock status to allow showing processing
       statusLockedRef.current = null;
       setGradingStarted(true);
       setGradingStartTime(Date.now());
       
-      // Refetch and merge WITHOUT changing row order
-      const res = await fetch(`/api/bulk/status?batchId=${batchId}`);
+      // Refetch data immediately
+      const res = await fetch(`/api/bulk/status?batchId=${batchId}`, { signal });
       const data = await res.json();
+      if (signal.aborted) return;
       if (data.submissions) {
-        const incomingMap = new Map<string, Submission>();
-        for (const sub of data.submissions as any[]) {
-          const cached = submissionStateCacheRef.current[sub.id] || {};
-          const hasGradeData = sub.hasGradeData ?? false;
-          const entry: Submission = {
-            id: sub.id,
-            studentName: sub.studentName || 'Unknown Student',
-            originalFilename: sub.originalFilename || 'Unknown',
-            status: sub.status,
-            createdAt: sub.createdAt || Date.now(),
-            completedAt: sub.completedAt,
-            overallScore: hasGradeData ? (sub.overallScore ?? cached.overallScore ?? null) : null,
-            hasGradeData: hasGradeData || !!cached.hasGradeData,
-            videoLength: sub.duration ? formatDuration(sub.duration) : cached.videoLength,
-            aiSentiment: sub.analysis?.sentiment || (hasGradeData ? 'Confident' : undefined),
-            flagged: sub.flagged,
-            flagReason: sub.flagReason,
-            regradedAt: sub.regradedAt,
-            gradingCount: sub.gradingCount,
-          };
-          submissionStateCacheRef.current[sub.id] = {
-            ...cached,
-            ...(entry.videoLength ? { videoLength: entry.videoLength } : {}),
-            ...(entry.hasGradeData && entry.overallScore != null ? { hasGradeData: true, overallScore: entry.overallScore } : {}),
-          };
-          incomingMap.set(sub.id, entry);
-        }
-        setSubmissions(prev => prev.map(s => {
-          const inc = incomingMap.get(s.id);
-          if (!inc) return s;
-          return {
-            ...s,
-            ...inc,
-            aiSentiment: inc.aiSentiment ?? s.aiSentiment,
-            flagged: inc.flagged ?? s.flagged,
-            flagReason: inc.flagReason ?? s.flagReason,
-          };
+        const subs = data.submissions.map((sub: any) => ({
+          id: sub.id,
+          studentName: sub.studentName || 'Unknown Student',
+          originalFilename: sub.originalFilename || 'Unknown',
+          status: sub.status,
+          createdAt: sub.createdAt || Date.now(),
+          completedAt: sub.completedAt,
+          overallScore: sub.overallScore,
+          hasGradeData: sub.hasGradeData ?? false,
+          videoLength: sub.duration ? formatDuration(sub.duration) : undefined,
+          aiSentiment: sub.analysis?.sentiment,
+          flagged: sub.flagged,
+          flagReason: sub.flagReason,
+          gradingCount: sub.gradingCount,
         }));
-        if (data.gradingStatus) setGradingStatus(data.gradingStatus);
+        setSubmissions(subs);
+        
+        // Update grading status
+        if (data.gradingStatus) {
+          setGradingStatus(data.gradingStatus);
+        }
       }
       
-      // Start server-side batch processing (continues even when user navigates away)
-      fetch('/api/bulk/process-batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batchId }),
-      }).catch(() => {});
+      // Start workers; they respect the same abort signal so a new regrade cancels these
+      const MAX_WORKERS = 10;
+      const numWorkers = Math.min(submissionIdsToRegrade.length, MAX_WORKERS);
+      
+      const workerPromises = Array.from({ length: numWorkers }, async (_, i) => {
+        const workerId = i + 1;
+        while (!signal.aborted) {
+          try {
+            const workerRes = await fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST', signal });
+            const workerData = await workerRes.json();
+            if (signal.aborted) break;
+            if (workerData.processed > 0) {
+              await new Promise(r => setTimeout(r, 500));
+            } else {
+              break;
+            }
+          } catch (err) {
+            if (err instanceof Error && err.name === 'AbortError') break;
+            console.error(`[Regrade] Worker ${workerId} error:`, err);
+            break;
+          }
+        }
+      });
+      
+      // Run workers in background; don't await so we can exit and let new regrade abort these
+      Promise.all(workerPromises).then(() => {
+        if (!signal.aborted) console.log(`[Regrade] All workers finished`);
+      });
       
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.log('[Regrade] Previous regrade aborted');
+        return;
+      }
       console.error('[AssignmentDashboard] Regrade error:', err);
-      alert('Regrade failed. Please try again.');
-      setRegradingCount(0);
     } finally {
-      setIsRegrading(false);
+      // Only clear if this session is still the active one (not superseded by a new regrade)
+      if (regradeAbortRef.current === controller) {
+        setIsRegrading(false);
+      }
     }
   };
 
@@ -1082,42 +1058,21 @@ export default function AssignmentDashboardPage() {
       const res = await fetch(`/api/bulk/status?batchId=${batchId}`);
       const data = await res.json();
       if (data.submissions) {
-        const subs = data.submissions.map((sub: any) => {
-          const cached = submissionStateCacheRef.current[sub.id] || {};
-          const incomingHasGrade = sub.hasGradeData ?? false;
-          const hasGradeData = incomingHasGrade || cached.hasGradeData || false;
-          const overallScore = hasGradeData
-            ? (sub.overallScore ?? cached.overallScore ?? null)
-            : null;
-          const videoLength = sub.duration
-            ? formatDuration(sub.duration)
-            : cached.videoLength;
-
-          const submissionEntry: Submission = {
-            id: sub.id,
-            studentName: sub.studentName || 'Unknown Student',
-            originalFilename: sub.originalFilename || 'Unknown',
-            status: sub.status,
-            createdAt: sub.createdAt || Date.now(),
-            completedAt: sub.completedAt,
-            overallScore,
-            hasGradeData,
-            videoLength,
-            aiSentiment: sub.analysis?.sentiment || (hasGradeData ? 'Confident' : undefined),
-            flagged: sub.flagged,
-            flagReason: sub.flagReason,
-          };
-
-          submissionStateCacheRef.current[sub.id] = {
-            ...submissionStateCacheRef.current[sub.id],
-            ...(submissionEntry.videoLength ? { videoLength: submissionEntry.videoLength } : {}),
-            ...(submissionEntry.hasGradeData && submissionEntry.overallScore != null
-              ? { hasGradeData: true, overallScore: submissionEntry.overallScore }
-              : {}),
-          };
-
-          return submissionEntry;
-        });
+        const subs = data.submissions.map((sub: any) => ({
+          id: sub.id,
+          studentName: sub.studentName || 'Unknown Student',
+          originalFilename: sub.originalFilename || 'Unknown',
+          status: sub.status,
+          createdAt: sub.createdAt || Date.now(),
+          completedAt: sub.completedAt,
+          overallScore: sub.overallScore,
+          hasGradeData: sub.hasGradeData ?? false,
+          videoLength: undefined,
+          aiSentiment: sub.analysis?.sentiment,
+          flagged: sub.flagged,
+          flagReason: sub.flagReason,
+          gradingCount: sub.gradingCount,
+        }));
         setSubmissions(subs);
         setSubmissionHighWaterMark(prev => Math.max(prev, subs.length));
 
@@ -1180,43 +1135,12 @@ export default function AssignmentDashboardPage() {
     }
   }, [batchId, batch, submissions.length, inferStudentName]);
 
-  // Always show owl until first load has fully completed (prevents flash of empty state)
-  if (loading || !initialLoadComplete) {
+  if (loading) {
     return (
       <DashboardLayout>
-        <style dangerouslySetInnerHTML={{ __html: `
-          @keyframes owl-bounce {
-            0%, 100% { transform: translateY(0) scale(1); }
-            25% { transform: translateY(-12px) scale(1.05); }
-            50% { transform: translateY(0) scale(1); }
-            75% { transform: translateY(-6px) scale(1.02); }
-          }
-          @keyframes owl-float {
-            0%, 100% { transform: translateY(0) rotate(-2deg); }
-            50% { transform: translateY(-8px) rotate(2deg); }
-          }
-          .owl-loading-emoji {
-            animation: owl-bounce 1.2s ease-in-out infinite;
-            display: inline-block;
-          }
-          .owl-loading-shadow {
-            animation: owl-float 2s ease-in-out infinite;
-          }
-        `}} />
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="flex flex-col items-center justify-center text-center">
-            <div className="relative mb-5">
-              <div className="owl-loading-emoji text-7xl" role="img" aria-label="Loading">🦉</div>
-              <div className="owl-loading-shadow absolute -bottom-2 left-1/2 -translate-x-1/2 w-14 h-2.5 bg-surface-300 rounded-full opacity-40" />
-            </div>
-            <h3 className="text-lg font-semibold text-surface-900 mb-1">
-              Loading assignment...
-            </h3>
-            <p className="text-sm text-surface-500">
-              Babblet is fetching your data
-            </p>
-          </div>
-        </div>
+        <div className="flex items-center justify-center h-full">
+          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+      </div>
       </DashboardLayout>
     );
   }
@@ -1405,71 +1329,85 @@ export default function AssignmentDashboardPage() {
         </div>
       </div>
 
-        {/* Upload Progress Banner with Owl */}
-        {(uploadsInProgress || (isUploading && uploadingFiles.length > 0)) && (
-          <div className="mb-6 bg-gradient-to-br from-primary-50 to-violet-50 border border-primary-200 rounded-xl p-6">
-            <style dangerouslySetInnerHTML={{ __html: `
-              @keyframes owl-bounce-sm { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-6px) scale(1.03); } }
-              .owl-upload-emoji { animation: owl-bounce-sm 1s ease-in-out infinite; display: inline-block; }
-            `}} />
-            <div className="flex items-center gap-6">
-              {/* Fun character - animated owl */}
-              <div className="relative flex-shrink-0">
-                <div className="owl-upload-emoji text-5xl" role="img" aria-label="Uploading">🦉</div>
-                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-2 bg-surface-200 rounded-full opacity-30 animate-pulse" />
-              </div>
-              
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-surface-900 mb-1">
-                  {isUploading ? 'Uploading files...' : 'Processing uploads...'}
-                </h3>
-                <p className="text-sm text-surface-600 mb-3">
-                  {isUploading && uploadingFiles.length > 0 
-                    ? `${uploadingFiles.filter(f => f.progress === 100).length} of ${uploadingFiles.length} files uploaded`
-                    : `${submissions.length} of ${expectedUploads} submissions ready`
-                  }
-                </p>
-                
-                {/* Progress bar */}
-                <div className="h-3 bg-primary-100 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-primary-500 to-violet-500 rounded-full transition-all duration-500"
-                    style={{ 
-                      width: `${isUploading && uploadingFiles.length > 0 
-                        ? Math.round(uploadingFiles.filter(f => f.progress === 100).length / uploadingFiles.length * 100)
-                        : uploadProgress
-                      }%` 
-                    }}
-                  />
+        {/* Upload Progress Banner */}
+        {uploadsInProgress && (
+          <div className="mb-6 bg-primary-50 border border-primary-200 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
+                  <Upload className="w-5 h-5 text-primary-600" />
                 </div>
-                <p className="text-sm font-medium text-primary-700 mt-2">
-                  {isUploading && uploadingFiles.length > 0 
-                    ? `${Math.round(uploadingFiles.filter(f => f.progress === 100).length / uploadingFiles.length * 100)}%`
-                    : `${uploadProgress}%`
-                  } complete
+                <div>
+                  <h3 className="font-semibold text-surface-900">Uploading Files</h3>
+                  <p className="text-sm text-surface-600">
+                    {submissions.length} of {expectedUploads} files uploaded
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-5 h-5 text-primary-600 animate-spin" />
+                <span className="text-sm font-medium text-primary-700">{uploadProgress}%</span>
+              </div>
+            </div>
+            <div className="h-2 bg-primary-100 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-primary-500 rounded-full transition-all duration-500"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Additional Uploads Progress Banner */}
+        {isUploading && uploadingFiles.length > 0 && (
+          <div className="mb-6 bg-primary-50 border border-primary-200 rounded-xl p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
+                <Plus className="w-5 h-5 text-primary-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-surface-900">Adding Submissions</h3>
+                <p className="text-sm text-surface-600">
+                  Uploading {uploadingFiles.filter(f => f.progress < 100).length} of {uploadingFiles.length} files
                 </p>
               </div>
             </div>
-            
-            {/* Individual file progress when uploading */}
-            {isUploading && uploadingFiles.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-primary-200/50 space-y-2">
-                {uploadingFiles.map(file => (
-                  <div key={file.id} className="flex items-center gap-3">
-                    <span className="text-sm text-surface-700 truncate flex-1 max-w-xs">{file.name}</span>
-                    <div className="flex-1 h-2 bg-primary-100 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-primary-500 rounded-full transition-all duration-300"
-                        style={{ width: `${file.progress}%` }}
-                      />
-                    </div>
-                    <span className="text-xs text-surface-500 w-10 text-right">
-                      {file.progress === 100 ? '✓' : `${file.progress}%`}
-                    </span>
+            <div className="space-y-2">
+              {uploadingFiles.map(file => (
+                <div key={file.id} className="flex items-center gap-3">
+                  <span className="text-sm text-surface-700 truncate flex-1 max-w-xs">{file.name}</span>
+                  <div className="flex-1 h-2 bg-primary-100 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-primary-500 rounded-full transition-all duration-300"
+                      style={{ width: `${file.progress}%` }}
+                    />
                   </div>
-                ))}
+                  <span className="text-xs text-surface-500 w-10 text-right">{file.progress}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Re-grading in progress: Cancel control */}
+        {submissionIdsRegrading.size > 0 && (
+          <div className="mb-4 flex items-center justify-between gap-4 rounded-xl border border-violet-200 bg-violet-50/80 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-100">
+                <RefreshCw className="h-4 w-4 text-violet-600 animate-spin" />
               </div>
-            )}
+              <p className="text-sm font-medium text-violet-900">
+                Re-grading {submissionIdsRegrading.size} submission{submissionIdsRegrading.size !== 1 ? 's' : ''} in progress
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleCancelRegrade}
+              className="inline-flex items-center gap-2 rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm font-medium text-violet-700 shadow-sm transition-colors hover:bg-violet-50 hover:border-violet-300"
+            >
+              <X className="h-4 w-4" />
+              Cancel re-grade
+            </button>
           </div>
         )}
 
@@ -1551,31 +1489,8 @@ export default function AssignmentDashboardPage() {
           </div>
         )}
 
-        {/* Re-grade in progress banner - pleasing UI, does not affect table order */}
-        {(regradingCount > 0 || isRegrading) && (
-          <div className="mb-6 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-5 shadow-sm">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-                <RefreshCw className="w-6 h-6 text-amber-600 animate-spin" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-surface-900">Re-grading in progress</h3>
-                <p className="text-sm text-surface-600 mt-0.5">
-                  {regradingCount > 0
-                    ? `Re-evaluating ${regradingCount} submission${regradingCount === 1 ? '' : 's'}. Rows stay in place—scores will update when done.`
-                    : 'Queuing submissions…'}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-100/80 rounded-lg">
-                <Loader2 className="w-4 h-4 text-amber-700 animate-spin" />
-                <span className="text-sm font-medium text-amber-800">Processing</span>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Grading Complete Banner - shows when all submissions are graded OR displayGradingStatus is completed */}
-        {(displayGradingStatus.status === 'completed' || (stats.total > 0 && stats.graded === stats.total)) && submissions.length > 0 && !regradingCount && (
+        {(displayGradingStatus.status === 'completed' || (stats.total > 0 && stats.graded === stats.total)) && submissions.length > 0 && (
           <div className="mb-6 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
@@ -1748,10 +1663,15 @@ export default function AssignmentDashboardPage() {
                           {getInitials(submission.studentName)}
                         </div>
                         <div>
-                          <p className="font-medium text-surface-900">{submission.studentName}</p>
-                          <p className="text-xs text-surface-500">
-                            {formatUploadDate(submission.createdAt)} <span className="text-surface-400">({getTimeAgo(submission.createdAt)})</span>
-                          </p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium text-surface-900">{submission.studentName}</p>
+                            {submission.gradingCount != null && submission.gradingCount > 1 && (
+                              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-violet-100 text-violet-700">
+                                {ordinalGradingLabel(submission.gradingCount)}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-surface-500">{getTimeAgo(submission.createdAt)}</p>
                         </div>
                       </div>
                     </td>
@@ -1761,26 +1681,18 @@ export default function AssignmentDashboardPage() {
                     <td className="px-6 py-4">
                       {/* GRADING STATUS: Automated grading - system states only */}
                       {submission.hasGradeData && submission.overallScore != null ? (
-                        <div className="flex flex-col gap-1.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-surface-900">
-                              {Math.round(submission.overallScore)}/100
-                            </span>
-                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                              submission.overallScore >= 90 ? 'bg-emerald-100 text-emerald-700' :
-                              submission.overallScore >= 70 ? 'bg-blue-100 text-blue-700' :
-                              'bg-red-100 text-red-700'
-                            }`}>
-                              {submission.overallScore >= 90 ? 'PASS' : 
-                               submission.overallScore >= 70 ? 'GRADED' : 'FLAGGED'}
-                            </span>
-                            {(submission.gradingCount ?? 0) >= 2 && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-violet-100 text-violet-700" title="This submission was re-graded">
-                                <RefreshCw className="w-3 h-3" />
-                                {ordinalGradingLabel(submission.gradingCount!)}
-                              </span>
-                            )}
-                          </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-surface-900">
+                            {Math.round(submission.overallScore)}/100
+                          </span>
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                            submission.overallScore >= 90 ? 'bg-emerald-100 text-emerald-700' :
+                            submission.overallScore >= 70 ? 'bg-blue-100 text-blue-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {submission.overallScore >= 90 ? 'PASS' : 
+                             submission.overallScore >= 70 ? 'GRADED' : 'FLAGGED'}
+                          </span>
                         </div>
                       ) : submission.status === 'failed' ? (
                         <span className="text-amber-600 text-sm flex items-center gap-1">
@@ -1828,7 +1740,7 @@ export default function AssignmentDashboardPage() {
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {/* Actions: System-owned states for automated grading */}
-                        {submission.hasGradeData ? (
+                        {submission.hasGradeData && !submissionIdsRegrading.has(submission.id) ? (
                           <Link
                             href={`/bulk/submission/${submission.id}`}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors"
@@ -1836,6 +1748,11 @@ export default function AssignmentDashboardPage() {
                             <Eye className="w-4 h-4" />
                             View
                           </Link>
+                        ) : submissionIdsRegrading.has(submission.id) && !submission.hasGradeData ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-surface-500 cursor-not-allowed" title="Re-grading in progress">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Re-grading…
+                          </span>
                         ) : submission.status === 'failed' ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-amber-600">
                             <RefreshCw className="w-4 h-4" />
@@ -1945,18 +1862,18 @@ export default function AssignmentDashboardPage() {
                 </div>
           )}
 
-          {/* Empty State - only show after loading complete and no uploads in progress */}
-          {submissions.length === 0 && !loading && !uploadsInProgress && !isUploading && (
+          {/* Empty State */}
+          {submissions.length === 0 && (
             <div className="text-center py-12">
               <p className="text-surface-500">No submissions yet</p>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium"
+                <Link
+                href={`/bulk?batchId=${batchId}`}
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium"
                 >
-                  Upload Submissions
-                </button>
+                Upload Submissions
+                </Link>
               </div>
-          )}
+        )}
         </div>
     </div>
     </DashboardLayout>

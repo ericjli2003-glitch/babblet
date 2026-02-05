@@ -7,7 +7,6 @@ import {
   updateSubmission, 
   updateBatchStats,
   getBatch,
-  getBatchSubmissions,
   requeue,
 } from '@/lib/batch-store';
 import { getBundleVersions, getBundleVersion } from '@/lib/context-store';
@@ -27,15 +26,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Handle single or multiple submissions
-    let idsToRegrade = submissionIds || (submissionId ? [submissionId] : []);
+    // Use only explicitly provided IDs when present (never regrade whole batch unless no IDs given)
+    const explicitIds = Array.isArray(submissionIds) ? submissionIds : (submissionId ? [submissionId] : []);
+    let idsToRegrade: string[];
 
-    // If batchId provided but no specific IDs, re-grade all submissions in batch
-    if (batchId && idsToRegrade.length === 0) {
-      const submissions = await getBatchSubmissions(batchId);
-      if (submissions.length > 0) {
-        idsToRegrade = submissions.map(s => s.id);
-      }
+    if (explicitIds.length > 0) {
+      idsToRegrade = explicitIds;
+    } else if (batchId) {
+      const batch = await getBatch(batchId);
+      idsToRegrade = batch?.submissionIds ?? [];
+    } else {
+      idsToRegrade = [];
     }
 
     if (idsToRegrade.length === 0) {
@@ -51,10 +52,13 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      // Increment regrade version so UI shows "2nd grading", "3rd grading", etc. (only when > 1)
+      const nextGradingCount = (submission.gradingCount ?? 1) + 1;
+
       // Reset submission to queued state, optionally with new bundle version
-      const currentCount = (submission as { gradingCount?: number }).gradingCount ?? 1;
       const updateData: Record<string, unknown> = {
         status: 'queued',
+        gradingCount: nextGradingCount,
         // Clear previous results
         analysis: undefined,
         rubricEvaluation: undefined,
@@ -64,8 +68,6 @@ export async function POST(request: NextRequest) {
         errorMessage: undefined,
         startedAt: undefined,
         completedAt: undefined,
-        regradedAt: Date.now(),
-        gradingCount: currentCount + 1, // 2nd, 3rd, 4th... grading
       };
       
       if (bundleVersionId) {
