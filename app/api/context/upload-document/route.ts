@@ -72,6 +72,7 @@ async function processDocument(
     type: finalDocumentType as 'lecture_notes' | 'reading' | 'slides' | 'policy' | 'example' | 'recording' | 'other',
     rawText: extraction.text,
     fileKey,
+    fileSize: buffer.length,
   });
 
   console.log(`[UploadDocument] Created document ${document.id} with type: ${finalDocumentType}`);
@@ -99,8 +100,12 @@ async function processDocument(
     success: true,
     document: {
       id: document.id,
+      courseId,
       name: document.name,
       type: document.type,
+      fileSize: buffer.length,
+      createdAt: document.createdAt,
+      indexed: true,
       wordCount: extraction.wordCount,
       pageCount: extraction.pageCount,
       fileType: extraction.fileType,

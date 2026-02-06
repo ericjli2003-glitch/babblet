@@ -97,6 +97,7 @@ export interface Document {
   name: string;
   type: 'lecture_notes' | 'reading' | 'slides' | 'policy' | 'example' | 'recording' | 'other';
   fileKey?: string; // R2 key if uploaded
+  fileSize?: number; // File size in bytes
   rawText: string;
   createdAt: number;
 }
@@ -371,6 +372,7 @@ export async function createDocument(params: {
   type: Document['type'];
   rawText: string;
   fileKey?: string;
+  fileSize?: number;
 }): Promise<Document> {
   const doc: Document = {
     id: uuidv4(),
@@ -380,6 +382,7 @@ export async function createDocument(params: {
     type: params.type,
     rawText: params.rawText,
     fileKey: params.fileKey,
+    fileSize: params.fileSize,
     createdAt: Date.now(),
   };
 

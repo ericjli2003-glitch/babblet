@@ -64,6 +64,8 @@ function formatFileSize(bytes: number): string {
 }
 
 function formatTimeAgo(timestamp: number): string {
+  if (!timestamp || isNaN(timestamp)) return 'Just now';
+  
   const now = Date.now();
   const diff = now - timestamp;
   const minutes = Math.floor(diff / 60000);
