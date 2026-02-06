@@ -16,14 +16,14 @@ import {
 import Link from 'next/link';
 
 const FEATURES = [
-  { icon: Upload, label: 'Bulk Upload' },
-  { icon: ClipboardCheck, label: 'Rubric Scoring' },
-  { icon: FileText, label: 'Instant Reports' },
-  { icon: BarChart3, label: 'Speech Metrics' },
-  { icon: ShieldCheck, label: 'Verification' },
-  { icon: RefreshCw, label: 'Re-grading' },
-  { icon: MessageSquareText, label: 'AI Assistant' },
-  { icon: Brain, label: 'Content Alignment' },
+  { icon: Upload, label: 'Bulk Upload', sub: 'Drag & drop an entire class at once.' },
+  { icon: ClipboardCheck, label: 'Rubric Scoring', sub: 'Scored against your criteria automatically.' },
+  { icon: FileText, label: 'Instant Reports', sub: 'Strengths, improvements, and summaries.' },
+  { icon: BarChart3, label: 'Speech Metrics', sub: 'Pace, filler words, and pause analysis.' },
+  { icon: ShieldCheck, label: 'Verification', sub: 'Integrity and accuracy signals built in.' },
+  { icon: RefreshCw, label: 'Re-grading', sub: 'Re-grade with full version history.' },
+  { icon: MessageSquareText, label: 'AI Assistant', sub: 'Ask questions about any highlighted text.' },
+  { icon: Brain, label: 'Content Alignment', sub: 'Match depth and terminology to your goals.' },
 ];
 
 export default function HomePage() {
@@ -104,6 +104,7 @@ export default function HomePage() {
                   <f.icon className="w-6 h-6 text-primary-700" />
                 </div>
                 <span className="text-sm font-semibold text-surface-900 text-center">{f.label}</span>
+                <span className="text-xs text-surface-500 text-center leading-snug">{f.sub}</span>
               </motion.div>
             ))}
           </div>
