@@ -365,7 +365,7 @@ const assignmentGradients = [
 interface CreateCourseModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (newCourseId: string) => void;
 }
 
 function CreateCourseModal({ isOpen, onClose, onSuccess }: CreateCourseModalProps) {
@@ -398,7 +398,7 @@ function CreateCourseModal({ isOpen, onClose, onSuccess }: CreateCourseModalProp
 
       if (data.success) {
         setFormData({ name: '', courseCode: '', term: '', description: '' });
-        onSuccess();
+        onSuccess(data.course?.id || data.id || '');
         onClose();
       } else {
         setError(data.error || 'Failed to create course');
@@ -758,7 +758,7 @@ function CoursesContent() {
   const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const loadCoursesAndBatches = async () => {
+  const loadCoursesAndBatches = async (selectCourseId?: string) => {
     try {
       // Fetch courses and batches in parallel (no-store so list and detail stay in sync)
       const [coursesRes, batchesRes] = await Promise.all([
@@ -823,8 +823,13 @@ function CoursesContent() {
         
         setCourses(mappedCourses);
         
-        // Auto-select course from URL param or update existing selection
-        if (courseIdParam) {
+        // Auto-select: explicit selectCourseId > URL param > existing selection
+        if (selectCourseId) {
+          const newCourse = mappedCourses.find(c => c.id === selectCourseId);
+          if (newCourse) {
+            setSelectedCourse(newCourse);
+          }
+        } else if (courseIdParam) {
           const courseFromParam = mappedCourses.find(c => c.id === courseIdParam);
           if (courseFromParam) {
             setSelectedCourse(courseFromParam);
@@ -930,7 +935,7 @@ function CoursesContent() {
         <CreateCourseModal
           isOpen={showCreateCourse}
           onClose={() => setShowCreateCourse(false)}
-          onSuccess={loadCoursesAndBatches}
+          onSuccess={(newCourseId) => loadCoursesAndBatches(newCourseId)}
         />
 
         {/* Delete Course Confirmation Modal */}

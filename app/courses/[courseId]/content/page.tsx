@@ -252,6 +252,7 @@ export default function ContextLibraryPage() {
   const [uploadType, setUploadType] = useState<Document['type'] | 'auto'>('auto');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
+  const uploadCancelledRef = useRef(false);
 
   // Content summary stats
   const contentSummary = useMemo(() => {
@@ -383,16 +384,28 @@ export default function ContextLibraryPage() {
     if (e.target) e.target.value = '';
   };
 
+  // Cancel upload
+  const cancelUpload = () => {
+    uploadCancelledRef.current = true;
+    setUploading(false);
+    setUploadProgress(null);
+    setShowUploadModal(false);
+    setUploadFiles([]);
+  };
+
   // Upload files
   const uploadDocuments = async () => {
     if (uploadFiles.length === 0) return;
 
+    uploadCancelledRef.current = false;
     setUploading(true);
     setUploadProgress({ current: 0, total: uploadFiles.length });
 
     const results: { success: boolean; name: string; error?: string }[] = [];
 
     for (let i = 0; i < uploadFiles.length; i++) {
+      if (uploadCancelledRef.current) break;
+
       const file = uploadFiles[i];
       setUploadProgress({ current: i + 1, total: uploadFiles.length });
 
@@ -407,6 +420,8 @@ export default function ContextLibraryPage() {
           body: formData,
         });
 
+        if (uploadCancelledRef.current) break;
+
         const data = await res.json();
         
         if (data.duplicate) {
@@ -418,9 +433,13 @@ export default function ContextLibraryPage() {
           }
         }
       } catch {
-        results.push({ success: false, name: file.name });
+        if (!uploadCancelledRef.current) {
+          results.push({ success: false, name: file.name });
+        }
       }
     }
+
+    if (uploadCancelledRef.current) return;
 
     setUploading(false);
     setUploadProgress(null);
@@ -673,7 +692,7 @@ export default function ContextLibraryPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-            onClick={() => !uploading && setShowUploadModal(false)}
+            onClick={() => uploading ? cancelUpload() : (setShowUploadModal(false), setUploadFiles([]))}
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
@@ -772,19 +791,20 @@ export default function ContextLibraryPage() {
 
               <div className="flex justify-end gap-3 mt-6">
                 <button
-                  onClick={() => {
+                  type="button"
+                  onClick={uploading ? cancelUpload : () => {
                     setShowUploadModal(false);
                     setUploadFiles([]);
                   }}
-                  disabled={uploading}
-                  className="px-4 py-2.5 text-surface-600 hover:bg-surface-100 rounded-xl disabled:opacity-50"
+                  className="px-4 py-2.5 text-surface-600 hover:bg-surface-100 rounded-xl border border-surface-200 font-medium text-sm transition-colors"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={uploadDocuments}
                   disabled={uploadFiles.length === 0 || uploading}
-                  className="px-5 py-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+                  className="px-5 py-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2 font-medium text-sm transition-colors"
                 >
                   {uploading ? (
                     <>
