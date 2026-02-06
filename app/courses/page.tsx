@@ -33,6 +33,7 @@ interface Course {
   section?: string;
   assignments: Assignment[];
   totalSubmissions: number;
+  documentCount: number;
   submissionGrowth?: number;
   flaggedStudents?: Array<{
     name: string;
@@ -52,6 +53,7 @@ const mockCourses: Course[] = [
     term: 'Fall 2023 Semester',
     section: 'Section A & B',
     totalSubmissions: 150,
+    documentCount: 0,
     submissionGrowth: 12,
     assignments: [
       {
@@ -760,7 +762,7 @@ function CoursesContent() {
 
   const loadCoursesAndBatches = async (selectCourseId?: string) => {
     try {
-      // Fetch courses and batches in parallel (no-store so list and detail stay in sync)
+      // Fetch courses, batches, and documents in parallel
       const [coursesRes, batchesRes] = await Promise.all([
         fetch('/api/context/courses', { cache: 'no-store' }),
         fetch('/api/bulk/batches', { cache: 'no-store' }),
@@ -768,6 +770,22 @@ function CoursesContent() {
       
       const coursesData = await coursesRes.json();
       const batchesData = await batchesRes.json();
+
+      // Fetch document counts per course in parallel
+      const docCountsByCourse: Record<string, number> = {};
+      if (coursesData.success && coursesData.courses) {
+        const docFetches = await Promise.all(
+          coursesData.courses.map((c: { id: string }) =>
+            fetch(`/api/context/documents?courseId=${c.id}`, { cache: 'no-store' })
+              .then(r => r.json())
+              .then(d => ({ courseId: c.id, count: d.documents?.length || 0 }))
+              .catch(() => ({ courseId: c.id, count: 0 }))
+          )
+        );
+        for (const { courseId, count } of docFetches) {
+          docCountsByCourse[courseId] = count;
+        }
+      }
 
       if (coursesData.success && coursesData.courses && coursesData.courses.length > 0) {
         // Create a map of courseId -> batches
@@ -818,6 +836,7 @@ function CoursesContent() {
             section: '',
             assignments: courseAssignments,
             totalSubmissions,
+            documentCount: docCountsByCourse[c.id] || 0,
           };
         });
         
@@ -913,6 +932,7 @@ function CoursesContent() {
                 <div className="flex items-center gap-4 mt-4 text-sm text-surface-600">
                   <span>{course.assignments.length} Assignments</span>
                   <span>{course.totalSubmissions} Submissions</span>
+                  <span>{course.documentCount} Materials</span>
                 </div>
               </motion.div>
             ))}
