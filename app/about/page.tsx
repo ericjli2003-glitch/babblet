@@ -23,8 +23,7 @@ export default function AboutPage() {
               <Link href="/contact" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">Contact</Link>
             </div>
             <div className="flex items-center gap-4">
-              <Link href="/courses" className="px-4 py-2 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors">Sign Up</Link>
-              <Link href="/courses" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">Login</Link>
+              <Link href="/login" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">Login</Link>
             </div>
           </nav>
         </div>
