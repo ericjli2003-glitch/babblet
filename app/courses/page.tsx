@@ -755,6 +755,8 @@ function CoursesContent() {
   const [loading, setLoading] = useState(true);
   const [showBatchWizard, setShowBatchWizard] = useState(false);
   const [showCreateCourse, setShowCreateCourse] = useState(false);
+  const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadCoursesAndBatches = async () => {
     try {
@@ -879,13 +881,25 @@ function CoursesContent() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {courses.map((course) => (
-              <motion.button
+              <motion.div
                 key={course.id}
-                onClick={() => setSelectedCourse(course)}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-2xl border border-surface-200 p-6 text-left hover:shadow-lg hover:border-primary-200 transition-all"
+                className="group relative bg-white rounded-2xl border border-surface-200 p-6 text-left hover:shadow-lg hover:border-primary-200 transition-all cursor-pointer"
+                onClick={() => setSelectedCourse(course)}
               >
+                {/* Delete button - top right, visible on hover */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCourseToDelete(course);
+                  }}
+                  className="absolute top-4 right-4 p-2 rounded-lg text-surface-300 opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-500 transition-all"
+                  title="Delete course"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center mb-4">
                   <BookOpen className="w-6 h-6 text-white" />
                 </div>
@@ -895,10 +909,9 @@ function CoursesContent() {
                   <span>{course.assignments.length} Assignments</span>
                   <span>{course.totalSubmissions} Submissions</span>
                 </div>
-              </motion.button>
+              </motion.div>
             ))}
 
-            {/* Add Course Card */}
             {/* Add Course Card */}
             <button 
               onClick={() => setShowCreateCourse(true)}
@@ -919,6 +932,70 @@ function CoursesContent() {
           onClose={() => setShowCreateCourse(false)}
           onSuccess={loadCoursesAndBatches}
         />
+
+        {/* Delete Course Confirmation Modal */}
+        {courseToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => !isDeleting && setCourseToDelete(null)}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="p-6 text-center">
+                {/* Warning Icon */}
+                <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+                  <AlertCircle className="w-7 h-7 text-red-500" />
+                </div>
+                <h3 className="text-lg font-semibold text-surface-900 mb-2">Delete Course</h3>
+                <p className="text-sm text-surface-500 mb-1">
+                  Are you sure you want to delete <span className="font-medium text-surface-700">{courseToDelete.name}</span>?
+                </p>
+                <p className="text-xs text-surface-400 mb-6">
+                  This will permanently remove the course and all {courseToDelete.assignments.length} assignment{courseToDelete.assignments.length !== 1 ? 's' : ''}. This action cannot be undone.
+                </p>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCourseToDelete(null)}
+                    disabled={isDeleting}
+                    className="flex-1 px-4 py-2.5 text-sm font-medium text-surface-600 bg-white border border-surface-200 rounded-lg hover:bg-surface-50 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setIsDeleting(true);
+                      try {
+                        const res = await fetch(`/api/context/courses?id=${courseToDelete.id}`, {
+                          method: 'DELETE',
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                          setCourses(prev => prev.filter(c => c.id !== courseToDelete.id));
+                          setCourseToDelete(null);
+                        } else {
+                          alert('Failed to delete course: ' + (data.error || 'Unknown error'));
+                        }
+                      } catch {
+                        alert('Failed to delete course. Please try again.');
+                      } finally {
+                        setIsDeleting(false);
+                      }
+                    }}
+                    disabled={isDeleting}
+                    className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isDeleting && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {isDeleting ? 'Deleting...' : 'Delete Course'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </DashboardLayout>
     );
   }
