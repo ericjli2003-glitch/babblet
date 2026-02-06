@@ -70,12 +70,6 @@ export default function HomePage() {
             </p>
             <div className="mt-10 flex justify-center gap-4">
               <Link
-                href="/courses"
-                className="px-8 py-3.5 text-base font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-xl transition-colors shadow-soft hover:shadow-glow"
-              >
-                Get Started
-              </Link>
-              <Link
                 href="/contact"
                 className="px-8 py-3.5 text-base font-medium text-surface-700 bg-white/80 border border-surface-200 hover:border-surface-300 rounded-xl transition-colors shadow-soft"
               >
@@ -140,9 +134,6 @@ export default function HomePage() {
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">Reclaim your grading hours</h2>
           <div className="mt-8 flex justify-center gap-4">
-            <Link href="/courses" className="px-8 py-3.5 text-base font-medium text-sky-700 bg-white hover:bg-surface-50 rounded-xl transition-colors shadow-soft">
-              Get Started
-            </Link>
             <Link href="/contact" className="px-8 py-3.5 text-base font-medium text-white border border-white/30 hover:bg-white/10 rounded-xl transition-colors">
               Talk to Sales
             </Link>
