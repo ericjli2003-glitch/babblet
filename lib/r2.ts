@@ -101,6 +101,37 @@ export async function uploadFile(key: string, body: Buffer, contentType: string)
   }));
 }
 
+/**
+ * Download a file from R2 and return it as a Buffer
+ */
+export async function downloadFile(key: string): Promise<{ buffer: Buffer; contentType: string }> {
+  const client = getR2Client();
+  const bucket = getBucket();
+
+  const command = new GetObjectCommand({
+    Bucket: bucket,
+    Key: key,
+  });
+
+  const response = await client.send(command);
+  
+  if (!response.Body) {
+    throw new Error(`No body returned for key: ${key}`);
+  }
+
+  // Convert stream to buffer
+  const chunks: Uint8Array[] = [];
+  const stream = response.Body as AsyncIterable<Uint8Array>;
+  for await (const chunk of stream) {
+    chunks.push(chunk);
+  }
+  
+  return {
+    buffer: Buffer.concat(chunks),
+    contentType: response.ContentType || 'application/octet-stream',
+  };
+}
+
 export async function deleteFile(key: string): Promise<void> {
   const client = getR2Client();
   const bucket = getBucket();

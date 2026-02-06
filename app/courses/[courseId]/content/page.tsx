@@ -393,6 +393,75 @@ export default function ContextLibraryPage() {
     setUploadFiles([]);
   };
 
+  // Size threshold: files >= 4MB use presigned URL flow to avoid Vercel payload limit
+  const DIRECT_UPLOAD_LIMIT = 4 * 1024 * 1024; // 4MB
+
+  // Upload a single file - picks direct or presigned-URL strategy based on size
+  const uploadSingleFile = async (file: File): Promise<{ success: boolean; name: string; error?: string; document?: any }> => {
+    const usePresigned = file.size >= DIRECT_UPLOAD_LIMIT;
+
+    if (usePresigned) {
+      // ── Presigned URL flow: upload to R2 first, then process ──
+      // Step 1: Get presigned URL
+      const presignedRes = await fetch(
+        `/api/context/upload-document?filename=${encodeURIComponent(file.name)}&courseId=${encodeURIComponent(courseId)}`
+      );
+      const presignedData = await presignedRes.json();
+
+      if (!presignedData.success) {
+        return { success: false, name: file.name, error: presignedData.error || 'Failed to get upload URL' };
+      }
+
+      // Step 2: Upload directly to R2
+      const r2Res = await fetch(presignedData.presignedUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      });
+
+      if (!r2Res.ok) {
+        return { success: false, name: file.name, error: 'Failed to upload file to storage' };
+      }
+
+      // Step 3: Tell the server to process the uploaded file
+      const processRes = await fetch('/api/context/upload-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileKey: presignedData.fileKey,
+          fileName: file.name,
+          courseId,
+          type: uploadType,
+        }),
+      });
+
+      const processData = await processRes.json();
+
+      if (processData.duplicate) {
+        return { success: false, name: file.name, error: 'duplicate' };
+      }
+      return { success: processData.success, name: file.name, document: processData.document };
+    } else {
+      // ── Direct upload flow (small files) ──
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('courseId', courseId);
+      formData.append('type', uploadType);
+
+      const res = await fetch('/api/context/upload-document', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (data.duplicate) {
+        return { success: false, name: file.name, error: 'duplicate' };
+      }
+      return { success: data.success, name: file.name, document: data.document };
+    }
+  };
+
   // Upload files
   const uploadDocuments = async () => {
     if (uploadFiles.length === 0) return;
@@ -410,27 +479,13 @@ export default function ContextLibraryPage() {
       setUploadProgress({ current: i + 1, total: uploadFiles.length });
 
       try {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('courseId', courseId);
-        formData.append('type', uploadType);
-
-        const res = await fetch('/api/context/upload-document', {
-          method: 'POST',
-          body: formData,
-        });
+        const result = await uploadSingleFile(file);
 
         if (uploadCancelledRef.current) break;
 
-        const data = await res.json();
-        
-        if (data.duplicate) {
-          results.push({ success: false, name: file.name, error: 'duplicate' });
-        } else {
-          results.push({ success: data.success, name: file.name });
-          if (data.success && data.document) {
-            setDocuments((prev) => [data.document, ...prev]);
-          }
+        results.push(result);
+        if (result.success && result.document) {
+          setDocuments((prev) => [result.document, ...prev]);
         }
       } catch {
         if (!uploadCancelledRef.current) {
