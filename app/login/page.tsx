@@ -3,15 +3,15 @@
 import { Suspense, useState } from 'react';
 import { Sparkles, Lock, Loader2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 
 function LoginForm() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const next = searchParams.get('next') || '/courses';
+  const nextParam = searchParams.get('next');
+  const next = nextParam && nextParam.startsWith('/') ? nextParam : '/courses';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,12 +22,14 @@ function LoginForm() {
       const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password: password.trim() }),
       });
       const data = await res.json();
 
       if (data.success) {
-        router.push(next);
+        // Full page redirect so the auth cookie is sent; always go to courses
+        window.location.replace(next.startsWith('/') ? next : '/courses');
+        return;
       } else {
         setError('Incorrect password.');
         setPassword('');
