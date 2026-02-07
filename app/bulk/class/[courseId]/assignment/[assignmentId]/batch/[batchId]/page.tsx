@@ -1705,7 +1705,7 @@ export default function AssignmentDashboardPage() {
                           <Loader2 className="w-3 h-3 animate-spin" />
                           Finalizing
                         </span>
-                      ) : ['transcribing', 'analyzing'].includes(submission.status) ? (
+                      ) : ['transcribing', 'analyzing'].includes(submission.status) || (submission.status === 'queued' && gradingStarted) ? (
                         <span className="text-amber-600 text-sm flex items-center gap-1">
                           <Loader2 className="w-3 h-3 animate-spin" />
                           Grading
@@ -1725,6 +1725,8 @@ export default function AssignmentDashboardPage() {
                             {submission.aiSentiment || '--'}
                           </span>
                         </div>
+                      ) : submission.status === 'queued' && gradingStarted ? (
+                        <span className="text-amber-600 text-sm">Grading...</span>
                       ) : submission.status === 'queued' ? (
                         <span className="text-surface-400 text-sm">Queued</span>
                       ) : ['transcribing', 'analyzing'].includes(submission.status) ? (
@@ -1768,7 +1770,7 @@ export default function AssignmentDashboardPage() {
                             <Flag className="w-4 h-4" />
                             Audit
                           </button>
-                        ) : ['transcribing', 'analyzing'].includes(submission.status) ? (
+                        ) : ['transcribing', 'analyzing'].includes(submission.status) || (submission.status === 'queued' && gradingStarted) ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-amber-600">
                             <Loader2 className="w-4 h-4 animate-spin" />
                             Grading
