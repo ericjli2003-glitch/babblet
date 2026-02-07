@@ -98,8 +98,8 @@ export const config = {
     // MODELS
     // ==========================================
     models: {
-        /** AI model for questions and analysis */
-        claude: 'claude-sonnet-4-20250514',
+        /** AI model for questions and analysis (Opus 4.6) */
+        claude: 'claude-opus-4-6',
         /** Fast AI model for lightweight tasks (classification, etc.) */
         claudeFast: 'claude-3-5-haiku-20241022',
         /** OpenAI model for fallback */
