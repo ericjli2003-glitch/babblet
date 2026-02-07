@@ -1410,8 +1410,8 @@ export async function classifyDocumentType(
 
   const client = getAnthropicClient();
   
-  // Truncate content to avoid token limits
-  const truncatedContent = textContent.slice(0, 4000);
+  // Truncate content — 1500 chars is enough for type classification
+  const truncatedContent = textContent.slice(0, 1500);
 
   const prompt = `Analyze this document and classify it into one of these educational material categories:
 
@@ -1431,19 +1431,17 @@ ${truncatedContent}
 
 Analyze the content structure, language, and format to determine the document type.
 
-Respond in JSON format:
+Respond in JSON format only:
 {
   "type": "one of the categories above",
   "confidence": "high" | "medium" | "low",
-  "reasoning": "Brief explanation of why this classification",
-  "keyTopics": ["main topics covered"],
-  "suggestedName": "A cleaner name for this document if the filename is unclear"
+  "reasoning": "One sentence why"
 }`;
 
   try {
     const response = await client.messages.create({
-      model: config.models.claude,
-      max_tokens: 500,
+      model: config.models.claudeFast,
+      max_tokens: 150,
       messages: [{ role: 'user', content: prompt }],
     });
 

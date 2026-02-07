@@ -100,6 +100,8 @@ export const config = {
     models: {
         /** AI model for questions and analysis */
         claude: 'claude-sonnet-4-20250514',
+        /** Fast AI model for lightweight tasks (classification, etc.) */
+        claudeFast: 'claude-3-5-haiku-20241022',
         /** OpenAI model for fallback */
         openai: 'gpt-4o-mini',
         /** Whisper model for transcription */

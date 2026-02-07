@@ -6,11 +6,39 @@ import { createDocument, checkDocumentDuplicate } from '@/lib/context-store';
 import { storeDocumentChunks, isEmbeddingsConfigured } from '@/lib/embeddings';
 import { extractText, isSupportedFile, SUPPORTED_EXTENSIONS } from '@/lib/text-extraction';
 import { uploadFile, downloadFile, getPresignedUploadUrl, isR2Configured } from '@/lib/r2';
-import { classifyDocumentType, isClaudeConfigured } from '@/lib/claude';
+import { classifyDocumentType } from '@/lib/claude';
 import { v4 as uuidv4 } from 'uuid';
 
+// ── Fast filename-based document type detection (no API call) ──
+function detectDocumentType(filename: string): string {
+  const lowerName = filename.toLowerCase();
+  const ext = lowerName.split('.').pop() || '';
+
+  // Extension-based detection
+  if (['mp4', 'mov', 'avi', 'webm', 'mkv', 'mp3', 'wav', 'm4a'].includes(ext)) return 'recording';
+  if (['pptx', 'ppt', 'key', 'odp'].includes(ext)) return 'slides';
+
+  // Keyword-based detection
+  const patterns: { type: string; keywords: string[] }[] = [
+    { type: 'slides', keywords: ['slide', 'presentation', 'deck', 'powerpoint'] },
+    { type: 'lecture_notes', keywords: ['lecture', 'notes', 'class notes', 'lesson', 'session', 'week'] },
+    { type: 'reading', keywords: ['reading', 'article', 'paper', 'chapter', 'textbook', 'journal'] },
+    { type: 'policy', keywords: ['syllabus', 'policy', 'guidelines', 'requirements', 'grading', 'rubric'] },
+    { type: 'example', keywords: ['example', 'sample', 'template', 'model', 'demo', 'exemplar'] },
+    { type: 'recording', keywords: ['recording', 'video', 'audio', 'zoom', 'meet'] },
+  ];
+
+  for (const p of patterns) {
+    if (p.keywords.some(k => lowerName.includes(k))) return p.type;
+  }
+
+  return 'other';
+}
+
 /**
- * Shared processing logic for a document (from buffer)
+ * Shared processing logic for a document (from buffer).
+ * - Uses Haiku for fast AI classification (in parallel with R2 upload)
+ * - Defers embeddings to background (fire-and-forget)
  */
 async function processDocument(
   buffer: Buffer,
@@ -21,7 +49,7 @@ async function processDocument(
   documentType: string,
   existingFileKey?: string,
 ) {
-  // Extract text
+  // Step 1: Extract text (required, can't skip)
   const extraction = await extractText(buffer, fileName, fileType);
 
   if (!extraction.success) {
@@ -38,33 +66,55 @@ async function processDocument(
 
   console.log(`[UploadDocument] Extracted ${extraction.wordCount} words from ${fileName}`);
 
-  // AI-powered document type classification
-  let finalDocumentType = documentType;
-  let classification = null;
-  
-  if (documentType === 'auto' || documentType === 'other') {
-    try {
-      classification = await classifyDocumentType(fileName, extraction.text);
-      finalDocumentType = classification.type;
-      console.log(`[UploadDocument] AI classified as: ${classification.type} (${classification.confidence}) - ${classification.reasoning}`);
-    } catch (classifyError) {
-      console.error('[UploadDocument] AI classification failed, using provided type:', classifyError);
-    }
-  }
-
-  // Store original file in R2 if not already there
+  // Step 2: Run AI classification + R2 upload IN PARALLEL
+  const needsClassification = documentType === 'auto' || documentType === 'other';
+  const needsR2Upload = !existingFileKey && isR2Configured();
   let fileKey = existingFileKey;
-  if (!fileKey && isR2Configured()) {
-    try {
-      fileKey = `documents/${courseId}/${uuidv4()}-${fileName}`;
-      await uploadFile(fileKey, buffer, fileType);
-      console.log(`[UploadDocument] Stored original in R2: ${fileKey}`);
-    } catch (r2Error) {
-      console.error('[UploadDocument] R2 upload failed, continuing without:', r2Error);
-    }
+  const newFileKey = needsR2Upload ? `documents/${courseId}/${uuidv4()}-${fileName}` : undefined;
+
+  // Build parallel tasks
+  const parallelTasks: Promise<any>[] = [];
+
+  // Task A: AI classification via Haiku (fast model, truncated input)
+  if (needsClassification) {
+    parallelTasks.push(
+      classifyDocumentType(fileName, extraction.text)
+        .catch(err => {
+          console.error('[UploadDocument] AI classification failed, using filename fallback:', err);
+          return { type: detectDocumentType(fileName), confidence: 'low', reasoning: 'Filename-based fallback' };
+        })
+    );
+  } else {
+    parallelTasks.push(Promise.resolve(null));
   }
 
-  // Create document record
+  // Task B: R2 upload
+  if (needsR2Upload && newFileKey) {
+    parallelTasks.push(
+      uploadFile(newFileKey, buffer, fileType)
+        .then(() => { console.log(`[UploadDocument] Stored in R2: ${newFileKey}`); return true; })
+        .catch(err => { console.error('[UploadDocument] R2 upload failed:', err); return false; })
+    );
+  } else {
+    parallelTasks.push(Promise.resolve(null));
+  }
+
+  // Wait for both — we pay for max(classification, r2) not the sum
+  const [classificationResult, r2Result] = await Promise.all(parallelTasks);
+
+  // Resolve final document type
+  let finalDocumentType = documentType;
+  if (needsClassification && classificationResult) {
+    finalDocumentType = classificationResult.type;
+    console.log(`[UploadDocument] AI classified as: ${classificationResult.type} (${classificationResult.confidence}) - ${classificationResult.reasoning}`);
+  }
+
+  // Resolve file key
+  if (needsR2Upload && r2Result && newFileKey) {
+    fileKey = newFileKey;
+  }
+
+  // Step 3: Create document record (fast KV write)
   const document = await createDocument({
     courseId,
     assignmentId,
@@ -77,25 +127,21 @@ async function processDocument(
 
   console.log(`[UploadDocument] Created document ${document.id} with type: ${finalDocumentType}`);
 
-  // Generate embeddings
-  let chunkCount = 0;
+  // Step 4: Generate embeddings in background (fire-and-forget)
   if (isEmbeddingsConfigured()) {
-    try {
-      const chunks = await storeDocumentChunks(
-        document.id,
-        document.name,
-        document.type,
-        courseId,
-        assignmentId,
-        extraction.text
-      );
-      chunkCount = chunks.length;
-      console.log(`[UploadDocument] Generated ${chunkCount} chunks with embeddings`);
-    } catch (embError) {
-      console.error('[UploadDocument] Embedding generation failed:', embError);
-    }
+    storeDocumentChunks(
+      document.id,
+      document.name,
+      document.type,
+      courseId,
+      assignmentId,
+      extraction.text
+    )
+      .then(chunks => console.log(`[UploadDocument] Background: generated ${chunks.length} chunks for ${document.id}`))
+      .catch(err => console.error('[UploadDocument] Background embedding failed:', err));
   }
 
+  // Return immediately — don't wait for embeddings
   return NextResponse.json({
     success: true,
     document: {
@@ -105,20 +151,11 @@ async function processDocument(
       type: document.type,
       fileSize: buffer.length,
       createdAt: document.createdAt,
-      indexed: true,
+      indexed: isEmbeddingsConfigured(),
       wordCount: extraction.wordCount,
       pageCount: extraction.pageCount,
       fileType: extraction.fileType,
     },
-    chunkCount,
-    embeddingsEnabled: isEmbeddingsConfigured(),
-    aiClassification: classification ? {
-      detected: true,
-      type: classification.type,
-      confidence: classification.confidence,
-      reasoning: classification.reasoning,
-      keyTopics: classification.keyTopics,
-    } : null,
   });
 }
 
