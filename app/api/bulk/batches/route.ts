@@ -116,7 +116,17 @@ export async function GET() {
           s!.status === 'transcribing' || s!.status === 'analyzing' || s!.status === 'queued'
         ).length;
         
-        console.log(`[Batches] Batch ${batch.id}: ${validSubmissions.length} submissions, graded=${gradedCount}, ready=${readyCount}, failed=${failedCount}, processing=${processingCount}`);
+        // ============================================
+        // CLASS AVERAGE: Compute from graded submission scores
+        // ============================================
+        const scores = validSubmissions
+          .filter(s => s!.rubricEvaluation?.overallScore !== undefined && s!.rubricEvaluation?.overallScore !== null)
+          .map(s => s!.rubricEvaluation!.overallScore);
+        const averageScore = scores.length > 0
+          ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+          : undefined;
+        
+        console.log(`[Batches] Batch ${batch.id}: ${validSubmissions.length} submissions, graded=${gradedCount}, ready=${readyCount}, failed=${failedCount}, processing=${processingCount}, avg=${averageScore ?? '--'}`);
         
         // ============================================
         // GRADING STATUS: Compute from actual grade data
@@ -152,6 +162,7 @@ export async function GET() {
           processedCount: gradedCount, // Use gradedCount for accurate reporting
           failedCount,
           status,
+          averageScore,
           // Clear expected count once all files are uploaded
           expectedUploadCount: uploadsComplete ? undefined : batch.expectedUploadCount,
         };
