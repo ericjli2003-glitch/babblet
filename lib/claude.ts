@@ -537,7 +537,7 @@ CRITICAL: Output ONLY the JSON object, no other text.`;
     console.log('[Babblet AI] Generating questions...');
 
     const response = await client.messages.create({
-      model: config.models.claude,
+      model: config.models.claudeSecondary,
       max_tokens: config.api.questionMaxTokens,
       messages: [
         {
@@ -720,7 +720,7 @@ Respond ONLY with valid JSON.`;
 
   try {
     const response = await client.messages.create({
-      model: config.models.claude,
+      model: config.models.claudeSecondary,
       max_tokens: 2048,
       messages: [{ role: 'user', content: userPrompt }],
       system: systemPrompt,
@@ -859,7 +859,7 @@ Respond ONLY with the JSON.`;
     console.log('[Babblet AI] Analyzing transcript...');
 
     const response = await client.messages.create({
-      model: config.models.claude,
+      model: config.models.claudeSecondary,
       max_tokens: config.api.analysisMaxTokens,
       messages: [
         {

@@ -168,7 +168,7 @@ RULES:
 
   const client = getClient();
   const response = await client.messages.create({
-    model: config.models.claude,
+    model: config.models.claudeSecondary,
     max_tokens: 2048,
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }],

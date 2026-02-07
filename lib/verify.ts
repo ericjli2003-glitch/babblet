@@ -136,7 +136,7 @@ Return JSON only in this schema:
 If unsure whether something is a verifiable fact, DO NOT include it.`;
 
   const resp = await c.messages.create({
-    model: config.models.claude,
+    model: config.models.claudeSecondary,
     max_tokens: config.api.verificationMaxTokens,
     system,
     messages: [{ role: 'user', content: user }],

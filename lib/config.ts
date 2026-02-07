@@ -98,8 +98,10 @@ export const config = {
     // MODELS
     // ==========================================
     models: {
-        /** AI model for questions and analysis (Opus 4.6) */
+        /** Primary AI model for rubric evaluation/grading (Opus 4.6) */
         claude: 'claude-opus-4-6',
+        /** Secondary AI model for analysis, questions, verification (Sonnet 4.5 — faster) */
+        claudeSecondary: 'claude-sonnet-4-5',
         /** Fast AI model for lightweight tasks (classification, etc.) */
         claudeFast: 'claude-3-5-haiku-20241022',
         /** OpenAI model for fallback */

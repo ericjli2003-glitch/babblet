@@ -318,7 +318,7 @@ export async function POST(request: NextRequest) {
     const isRubricInsight = context.sourceType === 'rubric';
     
     const response = await client.messages.create({
-      model: config.models.claude,
+      model: config.models.claudeSecondary,
       max_tokens: isRubricInsight ? 2048 : 1024,
       system: systemPrompt,
       messages,

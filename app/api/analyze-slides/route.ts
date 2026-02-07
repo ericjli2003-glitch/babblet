@@ -182,7 +182,7 @@ async function analyzeImagesWithClaude(
       }));
 
       const response = await client.messages.create({
-        model: config.models.claude,
+        model: config.models.claudeSecondary,
         max_tokens: 1024,
         messages: [
           {
@@ -230,7 +230,7 @@ async function analyzeTextWithClaude(
   data?: string[];
 }> {
   const response = await client.messages.create({
-    model: config.models.claude,
+    model: config.models.claudeSecondary,
     max_tokens: config.api.analysisMaxTokens,
     messages: [
       {
@@ -362,7 +362,7 @@ export async function POST(request: NextRequest) {
       const mediaType = slidesFile.type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
 
       const response = await client.messages.create({
-        model: config.models.claude,
+        model: config.models.claudeSecondary,
         max_tokens: config.api.analysisMaxTokens,
         messages: [
           {
