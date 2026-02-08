@@ -7,20 +7,12 @@ import Link from 'next/link';
 
 const SHOWCASE_FEATURES = [
   {
-    title: 'Course Management',
+    title: 'Course & Assignment Setup',
     description:
-      'Organize your classes in one place. Create courses, import from your LMS, or set them up manually in seconds. Each course holds its own assignments, rubrics, and materials, giving you a clean workspace for every section you teach.',
+      'Create courses, attach rubrics, and upload student videos in just a few clicks. Babblet handles transcription, analysis, and scoring automatically so you can focus on the feedback that matters.',
     image: '/features/feature-courses.png',
     video: '/features/feature-courses.mp4',
-    alt: 'Course dashboard showing the Your Courses view with option to add a new course',
-  },
-  {
-    title: 'Assignment Setup & Grading',
-    description:
-      'Create assignments within any course, attach your rubric, and start grading immediately. Upload an entire batch of student videos at once and Babblet handles transcription, analysis, and scoring automatically so you can focus on the feedback that matters.',
-    image: '/features/feature-assignments.png',
-    video: '/features/feature-assignments.mp4',
-    alt: 'Assignment view within a course showing the Create Assignment option',
+    alt: 'Creating a course and setting up an assignment with rubric and video uploads',
   },
   {
     title: 'Targeted Follow-Up Questions',
