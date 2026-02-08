@@ -1,31 +1,9 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import {
-  BarChart3,
-  Brain,
-  CheckCircle,
-  ClipboardCheck,
-  FileText,
-  MessageSquareText,
-  RefreshCw,
-  ShieldCheck,
-  Sparkles,
-  Upload,
-} from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-
-const ICON_FEATURES = [
-  { icon: Upload, label: 'Bulk Upload', sub: 'Drag & drop an entire class at once.' },
-  { icon: ClipboardCheck, label: 'Rubric Scoring', sub: 'Scored against your criteria automatically.' },
-  { icon: FileText, label: 'Instant Reports', sub: 'Strengths, improvements, and summaries.' },
-  { icon: BarChart3, label: 'Speech Metrics', sub: 'Pace, filler words, and pause analysis.' },
-  { icon: ShieldCheck, label: 'Verification', sub: 'Integrity and accuracy signals built in.' },
-  { icon: RefreshCw, label: 'Re-grading', sub: 'Re-grade with full version history.' },
-  { icon: MessageSquareText, label: 'AI Assistant', sub: 'Ask questions about any highlighted text.' },
-  { icon: Brain, label: 'Content Alignment', sub: 'Match depth and terminology to your goals.' },
-];
 
 const SHOWCASE_FEATURES = [
   {
@@ -43,7 +21,7 @@ const SHOWCASE_FEATURES = [
     alt: 'Assignment view within a course showing the Create Assignment option',
   },
   {
-    title: 'AI-Generated Follow-Up Questions',
+    title: 'Targeted Follow-Up Questions',
     description:
       'Babblet automatically generates targeted follow-up questions based on each student\'s transcript. Questions are categorized by cognitive level — from evidence requests to counterarguments — and linked directly to specific moments in the presentation so instructors can probe deeper where it matters most.',
     image: '/features/feature-questions.png',
@@ -52,7 +30,7 @@ const SHOWCASE_FEATURES = [
   {
     title: 'Performance Overview & Insights',
     description:
-      'Get a high-level snapshot of every submission at a glance. The overview surfaces an overall performance score, sentiment analysis, speech delivery metrics like word count and pace, and AI-identified spotlight moments — the key turning points that defined the student\'s presentation.',
+      'Get a high-level snapshot of every submission at a glance. The overview surfaces an overall performance score, sentiment analysis, speech delivery metrics like word count and pace, and Babblet-identified spotlight moments — the key turning points that defined the student\'s presentation.',
     image: '/features/feature-overview.png',
     alt: 'Submission overview showing performance score, speech metrics, and evidence mapping',
   },
@@ -61,7 +39,7 @@ const SHOWCASE_FEATURES = [
     description:
       'Each submission is evaluated against your exact rubric criteria with per-criterion scores, detailed feedback, and Babblet Insights that explain what worked, what didn\'t, and why. Instructors can review, adjust, and finalize grades with full transparency into how each score was determined.',
     image: '/features/feature-rubric.png',
-    alt: 'Grading rubric interface with per-criterion scoring and AI-generated insights',
+    alt: 'Grading rubric interface with per-criterion scoring and Babblet-generated insights',
   },
 ];
 
@@ -119,30 +97,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Feature Icons Row */}
-      <section className="py-16">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {ICON_FEATURES.map((f, i) => (
-              <motion.div
-                key={f.label}
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.3, delay: i * 0.05 }}
-                className="flex flex-col items-center gap-3 rounded-2xl border border-surface-200 bg-white/70 backdrop-blur p-6 shadow-soft hover:shadow-soft-lg transition-shadow"
-              >
-                <div className="w-12 h-12 rounded-xl bg-primary-50 border border-primary-100 flex items-center justify-center">
-                  <f.icon className="w-6 h-6 text-primary-700" />
-                </div>
-                <span className="text-sm font-semibold text-surface-900 text-center">{f.label}</span>
-                <span className="text-xs text-surface-500 text-center leading-snug">{f.sub}</span>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ====== Feature Showcase ====== */}
       <section id="features" className="py-24 relative">
         {/* Section background accent */}
@@ -162,7 +116,7 @@ export default function HomePage() {
               See it in action
             </h2>
             <p className="mt-4 text-lg text-surface-500 max-w-2xl mx-auto">
-              From AI-powered questions to rubric-aligned grading, every feature is designed to save you time and give students better feedback.
+              From targeted follow-up questions to rubric-aligned grading, every feature is designed to save you time and give students better feedback.
             </p>
           </motion.div>
 
@@ -215,31 +169,6 @@ export default function HomePage() {
                 </motion.div>
               );
             })}
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works - 3 steps */}
-      <section className="py-16">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-surface-900 text-center mb-10">How it works</h2>
-          <div className="grid sm:grid-cols-3 gap-6">
-            {[
-              { n: '1', icon: Upload, title: 'Upload', sub: 'Drag & drop a batch of videos.' },
-              { n: '2', icon: Brain, title: 'Analyze', sub: 'Rubric scoring + speech metrics.' },
-              { n: '3', icon: RefreshCw, title: 'Review', sub: 'Feedback, re-grade, repeat.' },
-            ].map((s) => (
-              <div key={s.n} className="relative rounded-2xl border border-surface-200 bg-white/70 backdrop-blur p-6 shadow-soft text-center">
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-7 h-7 rounded-full bg-sky-500 text-white text-xs font-bold flex items-center justify-center shadow-soft">
-                  {s.n}
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-sky-50 border border-sky-100 flex items-center justify-center mx-auto mt-2 mb-3">
-                  <s.icon className="w-6 h-6 text-sky-700" />
-                </div>
-                <div className="text-base font-semibold text-surface-900">{s.title}</div>
-                <div className="mt-1 text-sm text-surface-500">{s.sub}</div>
-              </div>
-            ))}
           </div>
         </div>
       </section>
