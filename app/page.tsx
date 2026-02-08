@@ -9,28 +9,28 @@ const SHOWCASE_FEATURES = [
   {
     title: 'Course Management',
     description:
-      'Organize your classes in one place. Create courses, import from your LMS, or set them up manually in seconds. Each course holds its own assignments, rubrics, and materials — giving you a clean workspace for every section you teach.',
+      'Organize your classes in one place. Create courses, import from your LMS, or set them up manually in seconds. Each course holds its own assignments, rubrics, and materials, giving you a clean workspace for every section you teach.',
     image: '/features/feature-courses.png',
     alt: 'Course dashboard showing the Your Courses view with option to add a new course',
   },
   {
     title: 'Assignment Setup & Grading',
     description:
-      'Create assignments within any course, attach your rubric, and start grading immediately. Upload an entire batch of student videos at once — Babblet handles transcription, analysis, and scoring automatically so you can focus on the feedback that matters.',
+      'Create assignments within any course, attach your rubric, and start grading immediately. Upload an entire batch of student videos at once and Babblet handles transcription, analysis, and scoring automatically so you can focus on the feedback that matters.',
     image: '/features/feature-assignments.png',
     alt: 'Assignment view within a course showing the Create Assignment option',
   },
   {
     title: 'Targeted Follow-Up Questions',
     description:
-      'Babblet automatically generates targeted follow-up questions based on each student\'s transcript. Questions are categorized by cognitive level — from evidence requests to counterarguments — and linked directly to specific moments in the presentation so instructors can probe deeper where it matters most.',
+      'Babblet automatically generates targeted follow-up questions based on each student\'s transcript. Questions are categorized by cognitive level, from evidence requests to counterarguments, and linked directly to specific moments in the presentation so instructors can probe deeper where it matters most.',
     image: '/features/feature-questions.png',
     alt: 'Follow-up questions interface showing categorized questions with branch functionality',
   },
   {
     title: 'Performance Overview & Insights',
     description:
-      'Get a high-level snapshot of every submission at a glance. The overview surfaces an overall performance score, sentiment analysis, speech delivery metrics like word count and pace, and Babblet-identified spotlight moments — the key turning points that defined the student\'s presentation.',
+      'Get a high-level snapshot of every submission at a glance. The overview surfaces an overall performance score, sentiment analysis, speech delivery metrics like word count and pace, and Babblet-identified spotlight moments that capture the key turning points in each student\'s presentation.',
     image: '/features/feature-overview.png',
     alt: 'Submission overview showing performance score, speech metrics, and evidence mapping',
   },
@@ -83,7 +83,7 @@ export default function HomePage() {
               Grade presentations<br />at scale
             </h1>
             <p className="mt-6 text-xl text-surface-500 max-w-2xl mx-auto">
-              Upload. Evaluate. Feedback. Done.
+              Scale grading across courses with lightning fast analytics.
             </p>
             <div className="mt-10 flex justify-center gap-4">
               <Link
