@@ -13,9 +13,10 @@ import {
   Sparkles,
   Upload,
 } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 
-const FEATURES = [
+const ICON_FEATURES = [
   { icon: Upload, label: 'Bulk Upload', sub: 'Drag & drop an entire class at once.' },
   { icon: ClipboardCheck, label: 'Rubric Scoring', sub: 'Scored against your criteria automatically.' },
   { icon: FileText, label: 'Instant Reports', sub: 'Strengths, improvements, and summaries.' },
@@ -24,6 +25,44 @@ const FEATURES = [
   { icon: RefreshCw, label: 'Re-grading', sub: 'Re-grade with full version history.' },
   { icon: MessageSquareText, label: 'AI Assistant', sub: 'Ask questions about any highlighted text.' },
   { icon: Brain, label: 'Content Alignment', sub: 'Match depth and terminology to your goals.' },
+];
+
+const SHOWCASE_FEATURES = [
+  {
+    title: 'Course Management',
+    description:
+      'Organize your classes in one place. Create courses, import from your LMS, or set them up manually in seconds. Each course holds its own assignments, rubrics, and materials — giving you a clean workspace for every section you teach.',
+    image: '/features/feature-courses.png',
+    alt: 'Course dashboard showing the Your Courses view with option to add a new course',
+  },
+  {
+    title: 'Assignment Setup & Grading',
+    description:
+      'Create assignments within any course, attach your rubric, and start grading immediately. Upload an entire batch of student videos at once — Babblet handles transcription, analysis, and scoring automatically so you can focus on the feedback that matters.',
+    image: '/features/feature-assignments.png',
+    alt: 'Assignment view within a course showing the Create Assignment option',
+  },
+  {
+    title: 'AI-Generated Follow-Up Questions',
+    description:
+      'Babblet automatically generates targeted follow-up questions based on each student\'s transcript. Questions are categorized by cognitive level — from evidence requests to counterarguments — and linked directly to specific moments in the presentation so instructors can probe deeper where it matters most.',
+    image: '/features/feature-questions.png',
+    alt: 'Follow-up questions interface showing categorized questions with branch functionality',
+  },
+  {
+    title: 'Performance Overview & Insights',
+    description:
+      'Get a high-level snapshot of every submission at a glance. The overview surfaces an overall performance score, sentiment analysis, speech delivery metrics like word count and pace, and AI-identified spotlight moments — the key turning points that defined the student\'s presentation.',
+    image: '/features/feature-overview.png',
+    alt: 'Submission overview showing performance score, speech metrics, and evidence mapping',
+  },
+  {
+    title: 'Criterion-Level Rubric Grading',
+    description:
+      'Each submission is evaluated against your exact rubric criteria with per-criterion scores, detailed feedback, and Babblet Insights that explain what worked, what didn\'t, and why. Instructors can review, adjust, and finalize grades with full transparency into how each score was determined.',
+    image: '/features/feature-rubric.png',
+    alt: 'Grading rubric interface with per-criterion scoring and AI-generated insights',
+  },
 ];
 
 export default function HomePage() {
@@ -81,10 +120,10 @@ export default function HomePage() {
       </section>
 
       {/* Feature Icons Row */}
-      <section id="features" className="py-16">
+      <section className="py-16">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {FEATURES.map((f, i) => (
+            {ICON_FEATURES.map((f, i) => (
               <motion.div
                 key={f.label}
                 initial={{ opacity: 0, y: 16 }}
@@ -100,6 +139,82 @@ export default function HomePage() {
                 <span className="text-xs text-surface-500 text-center leading-snug">{f.sub}</span>
               </motion.div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ====== Feature Showcase ====== */}
+      <section id="features" className="py-24 relative">
+        {/* Section background accent */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full bg-sky-100/40 blur-3xl" />
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="text-center mb-20"
+          >
+            <h2 className="text-4xl sm:text-5xl font-bold text-surface-900 tracking-tight">
+              See it in action
+            </h2>
+            <p className="mt-4 text-lg text-surface-500 max-w-2xl mx-auto">
+              From AI-powered questions to rubric-aligned grading, every feature is designed to save you time and give students better feedback.
+            </p>
+          </motion.div>
+
+          <div className="space-y-32">
+            {SHOWCASE_FEATURES.map((feature, idx) => {
+              const isReversed = idx % 2 !== 0;
+
+              return (
+                <motion.div
+                  key={feature.title}
+                  initial={{ opacity: 0, y: 40 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: '-100px' }}
+                  transition={{ duration: 0.6, delay: 0.1 }}
+                  className={`flex flex-col gap-12 items-center ${
+                    isReversed ? 'lg:flex-row-reverse' : 'lg:flex-row'
+                  }`}
+                >
+                  {/* Text */}
+                  <div className="lg:w-5/12 flex-shrink-0">
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-sky-500 text-white text-sm font-bold shadow-sm">
+                        {idx + 1}
+                      </span>
+                      <div className="h-px flex-1 bg-gradient-to-r from-sky-200 to-transparent" />
+                    </div>
+                    <h3 className="text-2xl sm:text-3xl font-bold text-surface-900 leading-snug">
+                      {feature.title}
+                    </h3>
+                    <p className="mt-4 text-base text-surface-500 leading-relaxed">
+                      {feature.description}
+                    </p>
+                  </div>
+
+                  {/* Image */}
+                  <div className="lg:w-7/12 flex-shrink-0">
+                    <div className="relative rounded-2xl overflow-hidden border border-surface-200 shadow-xl bg-white">
+                      <div className="absolute inset-0 bg-gradient-to-tr from-sky-50/50 via-transparent to-blue-50/30 pointer-events-none z-10 rounded-2xl" />
+                      <Image
+                        src={feature.image}
+                        alt={feature.alt}
+                        width={1200}
+                        height={750}
+                        className="w-full h-auto"
+                        quality={95}
+                        priority={idx === 0}
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
       </section>
