@@ -27,6 +27,7 @@ const SHOWCASE_FEATURES = [
     description:
       'Get a high-level snapshot of every submission at a glance. The overview surfaces an overall performance score, sentiment analysis, speech delivery metrics like word count and pace, and Babblet-identified spotlight moments that capture the key turning points in each student\'s presentation.',
     image: '/features/feature-overview.png',
+    video: '/features/feature-overview.mp4',
     alt: 'Submission overview showing performance score, speech metrics, and evidence mapping',
   },
   {
@@ -34,6 +35,7 @@ const SHOWCASE_FEATURES = [
     description:
       'Each submission is evaluated against your exact rubric criteria with per-criterion scores, detailed feedback, and Babblet Insights that explain what worked, what didn\'t, and why. Instructors can review, adjust, and finalize grades with full transparency into how each score was determined.',
     image: '/features/feature-rubric.png',
+    video: '/features/feature-rubric.mp4',
     alt: 'Grading rubric interface with per-criterion scoring and Babblet-generated insights',
   },
 ];
