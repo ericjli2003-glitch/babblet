@@ -11,6 +11,7 @@ const SHOWCASE_FEATURES = [
     description:
       'Organize your classes in one place. Create courses, import from your LMS, or set them up manually in seconds. Each course holds its own assignments, rubrics, and materials, giving you a clean workspace for every section you teach.',
     image: '/features/feature-courses.png',
+    video: '/features/feature-courses.mp4',
     alt: 'Course dashboard showing the Your Courses view with option to add a new course',
   },
   {
@@ -18,6 +19,7 @@ const SHOWCASE_FEATURES = [
     description:
       'Create assignments within any course, attach your rubric, and start grading immediately. Upload an entire batch of student videos at once and Babblet handles transcription, analysis, and scoring automatically so you can focus on the feedback that matters.',
     image: '/features/feature-assignments.png',
+    video: '/features/feature-assignments.mp4',
     alt: 'Assignment view within a course showing the Create Assignment option',
   },
   {
@@ -25,6 +27,7 @@ const SHOWCASE_FEATURES = [
     description:
       'Babblet automatically generates targeted follow-up questions based on each student\'s transcript. Questions are categorized by cognitive level, from evidence requests to counterarguments, and linked directly to specific moments in the presentation so instructors can probe deeper where it matters most.',
     image: '/features/feature-questions.png',
+    video: '/features/feature-questions.mp4',
     alt: 'Follow-up questions interface showing categorized questions with branch functionality',
   },
   {
@@ -151,19 +154,32 @@ export default function HomePage() {
                     </p>
                   </div>
 
-                  {/* Image */}
+                  {/* Media: video (loop) or image */}
                   <div className="lg:w-7/12 flex-shrink-0">
                     <div className="relative rounded-2xl overflow-hidden border border-surface-200 shadow-xl bg-white">
                       <div className="absolute inset-0 bg-gradient-to-tr from-sky-50/50 via-transparent to-blue-50/30 pointer-events-none z-10 rounded-2xl" />
-                      <Image
-                        src={feature.image}
-                        alt={feature.alt}
-                        width={1200}
-                        height={750}
-                        className="w-full h-auto"
-                        quality={95}
-                        priority={idx === 0}
-                      />
+                      {feature.video ? (
+                        <video
+                          src={feature.video}
+                          autoPlay
+                          muted
+                          loop
+                          playsInline
+                          className="w-full h-auto"
+                          poster={feature.image}
+                          aria-label={feature.alt}
+                        />
+                      ) : (
+                        <Image
+                          src={feature.image}
+                          alt={feature.alt}
+                          width={1200}
+                          height={750}
+                          className="w-full h-auto"
+                          quality={95}
+                          priority={idx === 0}
+                        />
+                      )}
                     </div>
                   </div>
                 </motion.div>
