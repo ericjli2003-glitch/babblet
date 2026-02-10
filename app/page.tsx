@@ -87,7 +87,7 @@ export default function HomePage() {
                 href="/contact"
                 className="px-8 py-3.5 text-base font-medium text-surface-700 bg-white/80 border border-surface-200 hover:border-surface-300 rounded-xl transition-colors shadow-soft"
               >
-                Talk to Sales
+                Book a Demo
               </Link>
             </div>
           </motion.div>
@@ -189,7 +189,7 @@ export default function HomePage() {
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">Reclaim your grading hours</h2>
           <div className="mt-8 flex justify-center gap-4">
             <Link href="/contact" className="px-8 py-3.5 text-base font-medium text-white border border-white/30 hover:bg-white/10 rounded-xl transition-colors">
-              Talk to Sales
+              Book a Demo
             </Link>
           </div>
         </div>
