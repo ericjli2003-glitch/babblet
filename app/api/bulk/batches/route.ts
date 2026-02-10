@@ -34,7 +34,7 @@ async function recoverBatchSubmissions(batchId: string, existingIds: Set<string>
   const maxScans = 20; // Match status route for consistency
 
   do {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line
     const result: [number, string[]] = await kv.scan(cursor, { match: 'submission:*', count: 100 }) as any;
     cursor = result[0];
     const keys = result[1];

@@ -158,7 +158,7 @@ export default function ContextualChatPanel() {
                 {sourceConfig.label}
               </span>
               <p className="text-xs text-surface-600 line-clamp-2 flex-1">
-                "{currentHighlight.text.slice(0, 100)}{currentHighlight.text.length > 100 ? '...' : ''}"
+                &ldquo;{currentHighlight.text.slice(0, 100)}{currentHighlight.text.length > 100 ? '...' : ''}&rdquo;
               </p>
             </div>
             <button

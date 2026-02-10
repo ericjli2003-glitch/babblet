@@ -1478,7 +1478,7 @@ Presentation within time limits"
                                 Click to upload your rubric PDF
                               </p>
                               <p className="text-sm text-surface-500 mt-1">
-                                We'll extract and parse the criteria automatically
+                                We&apos;ll extract and parse the criteria automatically
                               </p>
                             </>
                           )}

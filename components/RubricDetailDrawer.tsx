@@ -374,7 +374,7 @@ export default function RubricDetailDrawer({
                                   className="mt-2 text-xs text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
                                 >
                                   <Clock className="w-3 h-3" />
-                                  {formatTimestamp(ref.timestamp)} - "{ref.snippet.slice(0, 40)}..."
+                                  {formatTimestamp(ref.timestamp)} - &ldquo;{ref.snippet.slice(0, 40)}...&rdquo;
                                 </button>
                               ))}
                             </div>
@@ -403,7 +403,7 @@ export default function RubricDetailDrawer({
                                   className="mt-2 text-xs text-amber-600 hover:text-amber-700 flex items-center gap-1"
                                 >
                                   <Clock className="w-3 h-3" />
-                                  {formatTimestamp(ref.timestamp)} - "{ref.snippet.slice(0, 40)}..."
+                                  {formatTimestamp(ref.timestamp)} - &ldquo;{ref.snippet.slice(0, 40)}...&rdquo;
                                 </button>
                               ))}
                             </div>
@@ -423,7 +423,7 @@ export default function RubricDetailDrawer({
                           {criterion.citations.map((c, i) => (
                             <div key={i} className="p-3 bg-violet-50 rounded-lg border border-violet-200">
                               <p className="text-xs font-medium text-violet-700 mb-1">{c.documentName}</p>
-                              <p className="text-sm text-surface-600 italic">"{c.snippet}"</p>
+                              <p className="text-sm text-surface-600 italic">&ldquo;{c.snippet}&rdquo;</p>
                             </div>
                           ))}
                         </div>
@@ -452,7 +452,7 @@ export default function RubricDetailDrawer({
                               {formatTimestamp(ref.timestamp)}
                             </span>
                           </div>
-                          <p className="text-sm text-surface-700">"{ref.snippet}"</p>
+                          <p className="text-sm text-surface-700">&ldquo;{ref.snippet}&rdquo;</p>
                         </button>
                       ))}
                     </div>
