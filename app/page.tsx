@@ -6,7 +6,7 @@ import { Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 
-/** Video that autoplays when in viewport (fixes browser autoplay restrictions) */
+/** Video that reliably autoplays across all browsers */
 function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -14,27 +14,56 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
     const video = videoRef.current;
     if (!video) return;
 
+    // Force muted (Chrome requires the property, not just the attribute)
+    video.muted = true;
+    video.defaultMuted = true;
+
+    // Try to play immediately
+    const tryPlay = () => {
+      if (video.paused) {
+        video.play().catch(() => {});
+      }
+    };
+
+    // Attempt 1: play as soon as metadata loads
+    video.addEventListener('loadeddata', tryPlay);
+
+    // Attempt 2: play when visible in viewport
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            video.play().catch(() => {});
-          } else {
-            video.pause();
-          }
+          if (entry.isIntersecting) tryPlay();
         });
       },
-      { threshold: 0.25, rootMargin: '50px' }
+      { threshold: 0.1 }
     );
-
     observer.observe(video);
-    return () => observer.disconnect();
+
+    // Attempt 3: play on first user interaction (scroll, click, touch)
+    const onInteraction = () => {
+      document.querySelectorAll('video').forEach((v) => {
+        if (v.paused && v.muted) v.play().catch(() => {});
+      });
+    };
+    window.addEventListener('scroll', onInteraction, { once: true, passive: true });
+    window.addEventListener('click', onInteraction, { once: true });
+    window.addEventListener('touchstart', onInteraction, { once: true, passive: true });
+
+    // Attempt 4: try again after a short delay (some browsers need a tick)
+    const timer = setTimeout(tryPlay, 500);
+
+    return () => {
+      observer.disconnect();
+      clearTimeout(timer);
+      video.removeEventListener('loadeddata', tryPlay);
+    };
   }, []);
 
   return (
     <video
       ref={videoRef}
       src={src}
+      autoPlay
       muted
       loop
       playsInline
