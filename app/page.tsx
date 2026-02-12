@@ -6,73 +6,80 @@ import { Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 
-/** Video that reliably autoplays across all browsers */
+/**
+ * Video that reliably autoplays in Chrome.
+ *
+ * React has a long-standing bug where it sets the HTML `muted` *attribute*
+ * (via `defaultMuted`) but never the DOM `.muted` *property*. Chrome's
+ * autoplay policy checks the **property**, sees it as `false`, and blocks
+ * playback.  We bypass React entirely by creating the <video> element
+ * with the native DOM API so `.muted = true` is set before the browser
+ * ever evaluates autoplay.
+ */
 function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: string }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+    const container = containerRef.current;
+    if (!container) return;
 
-    // Force muted (Chrome requires the property, not just the attribute)
-    video.muted = true;
-    video.defaultMuted = true;
+    // Build the <video> element outside of React
+    const video = document.createElement('video');
+    video.src = src;
+    video.muted = true;           // DOM property — the one Chrome actually checks
+    video.defaultMuted = true;    // HTML attribute mirror
+    video.loop = true;
+    video.playsInline = true;
+    video.autoplay = true;
+    video.preload = 'auto';
+    video.className = 'w-full h-auto';
+    video.setAttribute('playsinline', '');   // iOS Safari needs the attribute too
+    video.setAttribute('webkit-playsinline', '');
+    if (poster) video.poster = poster;
+    if (alt) video.setAttribute('aria-label', alt);
 
-    // Try to play immediately
+    container.appendChild(video);
+
+    // Retry helper
     const tryPlay = () => {
-      if (video.paused) {
-        video.play().catch(() => {});
-      }
+      if (video.paused) video.play().catch(() => {});
     };
 
-    // Attempt 1: play as soon as metadata loads
-    video.addEventListener('loadeddata', tryPlay);
+    // Play as soon as enough data is buffered
+    video.addEventListener('canplay', tryPlay);
 
-    // Attempt 2: play when visible in viewport
+    // Play when scrolled into view
     const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) tryPlay();
-        });
-      },
-      { threshold: 0.1 }
+      (entries) => { if (entries[0]?.isIntersecting) tryPlay(); },
+      { threshold: 0.1 },
     );
     observer.observe(video);
 
-    // Attempt 3: play on first user interaction (scroll, click, touch)
-    const onInteraction = () => {
+    // Fallback: play on first user gesture
+    const onGesture = () => {
       document.querySelectorAll('video').forEach((v) => {
         if (v.paused && v.muted) v.play().catch(() => {});
       });
     };
-    window.addEventListener('scroll', onInteraction, { once: true, passive: true });
-    window.addEventListener('click', onInteraction, { once: true });
-    window.addEventListener('touchstart', onInteraction, { once: true, passive: true });
+    window.addEventListener('scroll', onGesture, { once: true, passive: true });
+    window.addEventListener('click', onGesture, { once: true });
+    window.addEventListener('touchstart', onGesture, { once: true, passive: true });
 
-    // Attempt 4: try again after a short delay (some browsers need a tick)
-    const timer = setTimeout(tryPlay, 500);
+    // Extra delayed attempt
+    const t = setTimeout(tryPlay, 800);
 
     return () => {
       observer.disconnect();
-      clearTimeout(timer);
-      video.removeEventListener('loadeddata', tryPlay);
+      clearTimeout(t);
+      video.removeEventListener('canplay', tryPlay);
+      video.pause();
+      video.removeAttribute('src');
+      video.load();                // release network resources
+      container.removeChild(video);
     };
-  }, []);
+  }, [src, poster, alt]);
 
-  return (
-    <video
-      ref={videoRef}
-      src={src}
-      autoPlay
-      muted
-      loop
-      playsInline
-      preload="auto"
-      className="w-full h-auto"
-      poster={poster}
-      aria-label={alt}
-    />
-  );
+  return <div ref={containerRef} className="w-full" />;
 }
 
 const SHOWCASE_FEATURES = [
