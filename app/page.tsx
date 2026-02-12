@@ -1,9 +1,50 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
+
+/** Video that autoplays when in viewport (fixes browser autoplay restrictions) */
+function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            video.play().catch(() => {});
+          } else {
+            video.pause();
+          }
+        });
+      },
+      { threshold: 0.25, rootMargin: '50px' }
+    );
+
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      muted
+      loop
+      playsInline
+      preload="auto"
+      className="w-full h-auto"
+      poster={poster}
+      aria-label={alt}
+    />
+  );
+}
 
 const SHOWCASE_FEATURES = [
   {
@@ -153,15 +194,10 @@ export default function HomePage() {
                     <div className="relative rounded-2xl overflow-hidden border border-surface-200 shadow-xl bg-white">
                       <div className="absolute inset-0 bg-gradient-to-tr from-sky-50/50 via-transparent to-blue-50/30 pointer-events-none z-10 rounded-2xl" />
                       {feature.video ? (
-                        <video
+                        <FeatureVideo
                           src={feature.video}
-                          autoPlay
-                          muted
-                          loop
-                          playsInline
-                          className="w-full h-auto"
                           poster={feature.image}
-                          aria-label={feature.alt}
+                          alt={feature.alt}
                         />
                       ) : (
                         <Image
