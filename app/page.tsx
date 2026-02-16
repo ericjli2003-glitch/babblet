@@ -199,18 +199,20 @@ export default function HomePage() {
               const isReversed = idx % 2 !== 0;
 
               return (
-                <motion.div
+                <div
                   key={feature.title}
-                  initial={{ opacity: 0, y: 40 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, margin: '-100px' }}
-                  transition={{ duration: 0.6, delay: 0.1 }}
                   className={`flex flex-col gap-12 items-center ${
                     isReversed ? 'lg:flex-row-reverse' : 'lg:flex-row'
                   }`}
                 >
-                  {/* Text */}
-                  <div className="lg:w-5/12 flex-shrink-0">
+                  {/* Text — animated with translate */}
+                  <motion.div
+                    className="lg:w-5/12 flex-shrink-0"
+                    initial={{ opacity: 0, y: 40 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: '-100px' }}
+                    transition={{ duration: 0.6, delay: 0.1 }}
+                  >
                     <div className="flex items-center gap-3 mb-4">
                       <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-sky-500 text-white text-sm font-bold shadow-sm">
                         {idx + 1}
@@ -223,11 +225,17 @@ export default function HomePage() {
                     <p className="mt-4 text-base text-surface-500 leading-relaxed">
                       {feature.description}
                     </p>
-                  </div>
+                  </motion.div>
 
-                  {/* Media: video (loop) or image */}
-                  <div className="lg:w-7/12 flex-shrink-0">
-                    <div className="relative rounded-2xl overflow-hidden border border-surface-200 shadow-xl bg-white">
+                  {/* Media — opacity-only animation to keep video pixel-sharp */}
+                  <motion.div
+                    className="lg:w-7/12 flex-shrink-0"
+                    initial={{ opacity: 0 }}
+                    whileInView={{ opacity: 1 }}
+                    viewport={{ once: true, margin: '-100px' }}
+                    transition={{ duration: 0.6, delay: 0.2 }}
+                  >
+                    <div className="rounded-2xl overflow-hidden border border-surface-200 shadow-xl bg-white">
                       {feature.video ? (
                         <FeatureVideo
                           src={feature.video}
@@ -246,8 +254,8 @@ export default function HomePage() {
                         />
                       )}
                     </div>
-                  </div>
-                </motion.div>
+                  </motion.div>
+                </div>
               );
             })}
           </div>
