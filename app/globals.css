@@ -201,6 +201,13 @@
   background-color: #94a3b8;
 }
 
+/* Ensure crisp video rendering */
+video {
+  image-rendering: auto;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
 /* Hide timeline and time display for clip players (keep play/pause, mute, fullscreen) */
 video.clip-video::-webkit-media-controls-timeline {
   display: none !important;

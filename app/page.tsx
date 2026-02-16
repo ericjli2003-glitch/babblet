@@ -32,7 +32,7 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
     video.playsInline = true;
     video.autoplay = true;
     video.preload = 'auto';
-    video.className = 'w-full h-auto';
+    video.className = 'w-full h-auto block';
     video.setAttribute('playsinline', '');   // iOS Safari needs the attribute too
     video.setAttribute('webkit-playsinline', '');
     if (poster) video.poster = poster;
@@ -228,7 +228,6 @@ export default function HomePage() {
                   {/* Media: video (loop) or image */}
                   <div className="lg:w-7/12 flex-shrink-0">
                     <div className="relative rounded-2xl overflow-hidden border border-surface-200 shadow-xl bg-white">
-                      <div className="absolute inset-0 bg-gradient-to-tr from-sky-50/50 via-transparent to-blue-50/30 pointer-events-none z-10 rounded-2xl" />
                       {feature.video ? (
                         <FeatureVideo
                           src={feature.video}
