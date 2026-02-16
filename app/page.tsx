@@ -135,7 +135,7 @@ export default function HomePage() {
               <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
-              <span className="text-xl font-semibold text-surface-900">Babblet</span>
+              <span className="font-display text-xl font-semibold text-surface-900">Babblet</span>
             </Link>
             <div className="hidden md:flex items-center gap-8">
               <a href="#features" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">Features</a>
@@ -153,8 +153,8 @@ export default function HomePage() {
       <section className="py-20 lg:py-32">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold text-surface-900 leading-[1.1] tracking-tight">
-              Grade presentations<br />at scale
+            <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl font-bold text-surface-900 leading-[1.1] tracking-tight">
+              Grade presentations<br />at <em className="not-italic">scale</em>
             </h1>
             <p className="mt-6 text-xl text-surface-500 max-w-2xl mx-auto">
               Scale grading across courses with lightning fast analytics.
@@ -186,7 +186,7 @@ export default function HomePage() {
             transition={{ duration: 0.5 }}
             className="text-center mb-20"
           >
-            <h2 className="text-4xl sm:text-5xl font-bold text-surface-900 tracking-tight">
+            <h2 className="font-display text-4xl sm:text-5xl font-bold text-surface-900 tracking-tight">
               See it in action
             </h2>
             <p className="mt-4 text-lg text-surface-500 max-w-2xl mx-auto">
@@ -217,7 +217,7 @@ export default function HomePage() {
                       </span>
                       <div className="h-px flex-1 bg-gradient-to-r from-sky-200 to-transparent" />
                     </div>
-                    <h3 className="text-2xl sm:text-3xl font-bold text-surface-900 leading-snug">
+                    <h3 className="font-display text-2xl sm:text-3xl font-bold text-surface-900 leading-snug">
                       {feature.title}
                     </h3>
                     <p className="mt-4 text-base text-surface-500 leading-relaxed">
@@ -258,7 +258,7 @@ export default function HomePage() {
       {/* CTA */}
       <section className="py-20 bg-gradient-to-r from-sky-500 to-cyan-500">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">Reclaim your grading hours</h2>
+          <h2 className="font-display text-3xl sm:text-4xl font-bold text-white mb-4">Reclaim your grading hours</h2>
           <div className="mt-8 flex justify-center gap-4">
             <Link href="/contact" className="px-8 py-3.5 text-base font-medium text-white border border-white/30 hover:bg-white/10 rounded-xl transition-colors">
               Book a Demo
@@ -274,7 +274,7 @@ export default function HomePage() {
             <div className="w-7 h-7 rounded-lg bg-gradient-primary flex items-center justify-center">
               <Sparkles className="w-3.5 h-3.5 text-white" />
             </div>
-            <span className="text-lg font-semibold text-surface-900">Babblet</span>
+            <span className="font-display text-lg font-semibold text-surface-900">Babblet</span>
           </div>
           <p className="text-xs text-surface-500">© 2026 Babblet Inc. All rights reserved.</p>
         </div>
