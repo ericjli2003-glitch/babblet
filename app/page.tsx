@@ -198,8 +198,8 @@ export default function HomePage() {
             <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl font-bold text-surface-900 leading-[1.1] tracking-tight">
               Grade presentations at scale.
             </h1>
-            <p className="mt-6 text-xl text-surface-500 max-w-2xl mx-auto">
-              Hundreds graded in the time it takes to grade one.
+            <p className="font-display mt-6 text-xl text-surface-500 max-w-2xl mx-auto">
+              Empower your faculty to grade hundreds in the time it takes to grade one.
             </p>
             <div className="mt-10 flex justify-center gap-4">
               <Link
@@ -245,7 +245,7 @@ export default function HomePage() {
               return (
                 <Fragment key={feature.title}>
                   <div
-                    className={`flex flex-col gap-8 items-center overflow-visible ${
+                    className={`flex flex-col gap-8 items-center overflow-visible md:justify-center ${
                       isReversed ? 'md:flex-row-reverse' : 'md:flex-row'
                     }`}
                   >
