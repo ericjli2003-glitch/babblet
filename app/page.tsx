@@ -178,7 +178,7 @@ export default function HomePage() {
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full bg-sky-100/40 blur-3xl" />
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -201,13 +201,13 @@ export default function HomePage() {
               return (
                 <div
                   key={feature.title}
-                  className={`flex flex-col gap-12 items-center ${
-                    isReversed ? 'lg:flex-row-reverse' : 'lg:flex-row'
+                  className={`flex flex-col gap-10 items-center ${
+                    isReversed ? 'md:flex-row-reverse' : 'md:flex-row'
                   }`}
                 >
                   {/* Text — animated with translate */}
                   <motion.div
-                    className="lg:w-4/12 flex-shrink-0"
+                    className="md:w-4/12 flex-shrink-0"
                     initial={{ opacity: 0, y: 40 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, margin: '-100px' }}
@@ -229,7 +229,7 @@ export default function HomePage() {
 
                   {/* Media — opacity-only animation to keep video pixel-sharp */}
                   <motion.div
-                    className="lg:w-8/12 flex-shrink-0"
+                    className="md:w-8/12 flex-shrink-0"
                     initial={{ opacity: 0 }}
                     whileInView={{ opacity: 1 }}
                     viewport={{ once: true, margin: '-100px' }}
