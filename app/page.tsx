@@ -196,10 +196,10 @@ export default function HomePage() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
             <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl font-bold text-surface-900 leading-[1.1] tracking-tight">
-              Grade presentations<br />at <em className="not-italic">scale</em>
+              Grade presentations at scale.
             </h1>
             <p className="mt-6 text-xl text-surface-500 max-w-2xl mx-auto">
-              Scale grading across courses with lightning fast analytics.
+              Hundreds graded in the time it takes to grade one.
             </p>
             <div className="mt-10 flex justify-center gap-4">
               <Link
