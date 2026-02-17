@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
 import Image from 'next/image';
@@ -80,6 +80,51 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
   }, [src, poster, alt]);
 
   return <div ref={containerRef} className="w-full" />;
+}
+
+/** Curvy dashed "bee-flight" connector between feature blocks */
+const BEE_PATHS = {
+  rightToLeft: [
+    'M 600,5 C 615,30 580,55 540,58',
+    'C 500,61 475,38 435,52',
+    'C 395,66 365,88 320,92',
+    'C 275,96 250,78 210,95',
+  ].join(' '),
+  leftToRight: [
+    'M 200,5 C 185,30 220,55 260,58',
+    'C 300,61 325,38 365,52',
+    'C 405,66 435,88 480,92',
+    'C 525,96 550,78 590,95',
+  ].join(' '),
+};
+
+function BeePathConnector({ direction }: { direction: 'rightToLeft' | 'leftToRight' }) {
+  return (
+    <div className="hidden md:block py-4" aria-hidden>
+      <motion.svg
+        viewBox="0 0 800 100"
+        className="w-full h-24"
+        fill="none"
+        preserveAspectRatio="xMidYMid meet"
+        initial={{ pathLength: 0, opacity: 0 }}
+        whileInView={{ pathLength: 1, opacity: 1 }}
+        viewport={{ once: true }}
+      >
+        <motion.path
+          d={BEE_PATHS[direction]}
+          stroke="#1e293b"
+          strokeWidth="1.5"
+          strokeDasharray="20 10"
+          strokeLinecap="round"
+          fill="none"
+          initial={{ pathLength: 0 }}
+          whileInView={{ pathLength: 1 }}
+          viewport={{ once: true }}
+          transition={{ duration: 1.2, ease: 'easeInOut' }}
+        />
+      </motion.svg>
+    </div>
+  );
 }
 
 const SHOWCASE_FEATURES = [
@@ -194,68 +239,74 @@ export default function HomePage() {
             </p>
           </motion.div>
 
-          <div className="space-y-32">
+          <div>
             {SHOWCASE_FEATURES.map((feature, idx) => {
               const isReversed = idx % 2 !== 0;
+              const isLast = idx === SHOWCASE_FEATURES.length - 1;
+              const connectorDir = isReversed ? 'leftToRight' : 'rightToLeft';
 
               return (
-                <div
-                  key={feature.title}
-                  className={`flex flex-col gap-10 items-center ${
-                    isReversed ? 'md:flex-row-reverse' : 'md:flex-row'
-                  }`}
-                >
-                  {/* Text — animated with translate */}
-                  <motion.div
-                    className="md:w-4/12 flex-shrink-0"
-                    initial={{ opacity: 0, y: 40 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: '-100px' }}
-                    transition={{ duration: 0.6, delay: 0.1 }}
+                <Fragment key={feature.title}>
+                  <div
+                    className={`flex flex-col gap-10 items-center ${
+                      isReversed ? 'md:flex-row-reverse' : 'md:flex-row'
+                    }`}
                   >
-                    <div className="flex items-center gap-3 mb-4">
-                      <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-sky-500 text-white text-sm font-bold shadow-sm">
-                        {idx + 1}
-                      </span>
-                      <div className="h-px flex-1 bg-gradient-to-r from-sky-200 to-transparent" />
-                    </div>
-                    <h3 className="font-display text-2xl sm:text-3xl font-bold text-surface-900 leading-snug">
-                      {feature.title}
-                    </h3>
-                    <p className="mt-4 text-base text-surface-500 leading-relaxed">
-                      {feature.description}
-                    </p>
-                  </motion.div>
+                    {/* Text — animated with translate */}
+                    <motion.div
+                      className="md:w-4/12 flex-shrink-0"
+                      initial={{ opacity: 0, y: 40 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true, margin: '-100px' }}
+                      transition={{ duration: 0.6, delay: 0.1 }}
+                    >
+                      <div className="flex items-center gap-3 mb-4">
+                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-sky-500 text-white text-sm font-bold shadow-sm">
+                          {idx + 1}
+                        </span>
+                        <div className="h-px flex-1 bg-gradient-to-r from-sky-200 to-transparent" />
+                      </div>
+                      <h3 className="font-display text-2xl sm:text-3xl font-bold text-surface-900 leading-snug">
+                        {feature.title}
+                      </h3>
+                      <p className="mt-4 text-base text-surface-500 leading-relaxed">
+                        {feature.description}
+                      </p>
+                    </motion.div>
 
-                  {/* Media — opacity-only animation to keep video pixel-sharp */}
-                  <motion.div
-                    className="md:w-8/12 flex-shrink-0"
-                    initial={{ opacity: 0 }}
-                    whileInView={{ opacity: 1 }}
-                    viewport={{ once: true, margin: '-100px' }}
-                    transition={{ duration: 0.6, delay: 0.2 }}
-                  >
-                    <div className="rounded-2xl overflow-hidden border border-surface-200 shadow-xl bg-white">
-                      {feature.video ? (
-                        <FeatureVideo
-                          src={feature.video}
-                          poster={feature.image}
-                          alt={feature.alt}
-                        />
-                      ) : (
-                        <Image
-                          src={feature.image}
-                          alt={feature.alt}
-                          width={1200}
-                          height={750}
-                          className="w-full h-auto"
-                          quality={95}
-                          priority={idx === 0}
-                        />
-                      )}
-                    </div>
-                  </motion.div>
-                </div>
+                    {/* Media — opacity-only animation to keep video pixel-sharp */}
+                    <motion.div
+                      className="md:w-8/12 flex-shrink-0"
+                      initial={{ opacity: 0 }}
+                      whileInView={{ opacity: 1 }}
+                      viewport={{ once: true, margin: '-100px' }}
+                      transition={{ duration: 0.6, delay: 0.2 }}
+                    >
+                      <div className="rounded-2xl overflow-hidden border border-surface-200 shadow-xl bg-white">
+                        {feature.video ? (
+                          <FeatureVideo
+                            src={feature.video}
+                            poster={feature.image}
+                            alt={feature.alt}
+                          />
+                        ) : (
+                          <Image
+                            src={feature.image}
+                            alt={feature.alt}
+                            width={1200}
+                            height={750}
+                            className="w-full h-auto"
+                            quality={95}
+                            priority={idx === 0}
+                          />
+                        )}
+                      </div>
+                    </motion.div>
+                  </div>
+
+                  {/* Bee-flight connector to next feature */}
+                  {!isLast && <BeePathConnector direction={connectorDir} />}
+                </Fragment>
               );
             })}
           </div>
