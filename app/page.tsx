@@ -83,35 +83,24 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
 }
 
 /** Curvy dashed "bee-flight" connector between feature blocks */
-const BEE_PATHS = {
-  rightToLeft: [
-    'M 600,5 C 615,30 580,55 540,58',
-    'C 500,61 475,38 435,52',
-    'C 395,66 365,88 320,92',
-    'C 275,96 250,78 210,95',
-  ].join(' '),
-  leftToRight: [
-    'M 200,5 C 185,30 220,55 260,58',
-    'C 300,61 325,38 365,52',
-    'C 405,66 435,88 480,92',
-    'C 525,96 550,78 590,95',
-  ].join(' '),
-};
+const BEE_PATHS = [
+  'M 400,0 C 440,25 480,35 470,55 C 460,75 420,70 400,90 C 380,110 340,115 350,135 C 360,155 400,150 400,170',
+  'M 400,0 C 360,25 320,35 330,55 C 340,75 380,70 400,90 C 420,110 460,115 450,135 C 440,155 400,150 400,170',
+  'M 400,0 C 450,20 460,40 440,60 C 420,80 370,75 360,95 C 350,115 380,130 400,170',
+];
 
 function BeePathConnector({ direction }: { direction: 'rightToLeft' | 'leftToRight' }) {
+  const pathIdx = direction === 'rightToLeft' ? 0 : 1;
   return (
-    <div className="hidden md:block py-4" aria-hidden>
+    <div className="py-6 flex justify-center" aria-hidden>
       <motion.svg
-        viewBox="0 0 800 100"
-        className="w-full h-24"
+        viewBox="0 0 800 170"
+        className="w-64 h-20"
         fill="none"
         preserveAspectRatio="xMidYMid meet"
-        initial={{ pathLength: 0, opacity: 0 }}
-        whileInView={{ pathLength: 1, opacity: 1 }}
-        viewport={{ once: true }}
       >
         <motion.path
-          d={BEE_PATHS[direction]}
+          d={BEE_PATHS[pathIdx]}
           stroke="#1e293b"
           strokeWidth="1.5"
           strokeDasharray="20 10"
@@ -247,36 +236,30 @@ export default function HomePage() {
 
               return (
                 <Fragment key={feature.title}>
-                  <div
-                    className={`flex flex-col gap-10 items-center ${
-                      isReversed ? 'md:flex-row-reverse' : 'md:flex-row'
-                    }`}
-                  >
-                    {/* Text — animated with translate */}
+                  <div className="flex flex-col gap-6">
+                    {/* Text */}
                     <motion.div
-                      className="md:w-3/12 flex-shrink-0"
-                      initial={{ opacity: 0, y: 40 }}
+                      className="max-w-2xl"
+                      initial={{ opacity: 0, y: 30 }}
                       whileInView={{ opacity: 1, y: 0 }}
                       viewport={{ once: true, margin: '-100px' }}
-                      transition={{ duration: 0.6, delay: 0.1 }}
+                      transition={{ duration: 0.5, delay: 0.1 }}
                     >
-                      <div className="flex items-center gap-3 mb-4">
+                      <div className="flex items-center gap-3 mb-3">
                         <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-sky-500 text-white text-sm font-bold shadow-sm">
                           {idx + 1}
                         </span>
-                        <div className="h-px flex-1 bg-gradient-to-r from-sky-200 to-transparent" />
+                        <h3 className="font-display text-2xl sm:text-3xl font-bold text-surface-900 leading-snug">
+                          {feature.title}
+                        </h3>
                       </div>
-                      <h3 className="font-display text-2xl sm:text-3xl font-bold text-surface-900 leading-snug">
-                        {feature.title}
-                      </h3>
-                      <p className="mt-4 text-base text-surface-500 leading-relaxed">
+                      <p className="text-base text-surface-500 leading-relaxed pl-11">
                         {feature.description}
                       </p>
                     </motion.div>
 
-                    {/* Media — opacity-only animation to keep video pixel-sharp */}
+                    {/* Full-width video */}
                     <motion.div
-                      className="md:w-9/12 flex-shrink-0"
                       initial={{ opacity: 0 }}
                       whileInView={{ opacity: 1 }}
                       viewport={{ once: true, margin: '-100px' }}
@@ -293,8 +276,8 @@ export default function HomePage() {
                           <Image
                             src={feature.image}
                             alt={feature.alt}
-                            width={1200}
-                            height={750}
+                            width={1920}
+                            height={1080}
                             className="w-full h-auto"
                             quality={95}
                             priority={idx === 0}
