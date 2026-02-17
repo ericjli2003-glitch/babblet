@@ -251,7 +251,7 @@ export default function HomePage() {
                   >
                     {/* Text — animated with translate */}
                     <motion.div
-                      className="md:w-3/12 flex-shrink-0"
+                      className="md:w-2/12 flex-shrink-0"
                       initial={{ opacity: 0, y: 40 }}
                       whileInView={{ opacity: 1, y: 0 }}
                       viewport={{ once: true, margin: '-100px' }}
@@ -273,7 +273,7 @@ export default function HomePage() {
 
                     {/* Media — opacity-only animation to keep video pixel-sharp */}
                     <motion.div
-                      className="md:w-9/12 flex-shrink-0"
+                      className="md:w-10/12 flex-shrink-0"
                       initial={{ opacity: 0 }}
                       whileInView={{ opacity: 1 }}
                       viewport={{ once: true, margin: '-100px' }}
