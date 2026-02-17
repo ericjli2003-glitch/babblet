@@ -220,7 +220,7 @@ export default function HomePage() {
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full bg-sky-100/40 blur-3xl" />
         </div>
 
-        <div className="max-w-[1220px] mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div className="max-w-[1220px] mx-auto px-4 sm:px-6 lg:px-8 relative overflow-visible">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -245,13 +245,13 @@ export default function HomePage() {
               return (
                 <Fragment key={feature.title}>
                   <div
-                    className={`flex flex-col gap-10 items-center ${
+                    className={`flex flex-col gap-8 items-center overflow-visible ${
                       isReversed ? 'md:flex-row-reverse' : 'md:flex-row'
                     }`}
                   >
                     {/* Text — animated with translate */}
                     <motion.div
-                      className="md:w-2/12 flex-shrink-0"
+                      className="md:w-4/12 flex-shrink-0"
                       initial={{ opacity: 0, y: 40 }}
                       whileInView={{ opacity: 1, y: 0 }}
                       viewport={{ once: true, margin: '-100px' }}
