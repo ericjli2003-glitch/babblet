@@ -48,10 +48,10 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
     // Play as soon as enough data is buffered
     video.addEventListener('canplay', tryPlay);
 
-    // Play when scrolled into view
+    // Play when any part of the video enters (or is about to enter) the viewport
     const observer = new IntersectionObserver(
       (entries) => { if (entries[0]?.isIntersecting) tryPlay(); },
-      { threshold: 0.1 },
+      { threshold: 0, rootMargin: '200px' },
     );
     observer.observe(video);
 
@@ -199,7 +199,7 @@ export default function HomePage() {
               Grade presentations at scale.
             </h1>
             <p className="font-display mt-6 text-xl text-surface-500 max-w-2xl mx-auto">
-              Empower your faculty to grade hundreds in the time it takes to grade one.
+              Grade and deliver feedback for hundreds in the time it takes to grade one.
             </p>
             <div className="mt-10 flex justify-center gap-4">
               <Link
