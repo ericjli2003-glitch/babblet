@@ -29,7 +29,7 @@
 
   body {
     @apply bg-[var(--background)] text-[var(--foreground)];
-    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
+    font-family: var(--font-playfair), 'Playfair Display', Georgia, 'Times New Roman', serif;
   }
 }
 

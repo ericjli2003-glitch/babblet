@@ -10,13 +10,11 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: [
-          'var(--font-inter)',
-          'SF Pro Display',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          'Inter',
-          'system-ui',
-          'sans-serif',
+          'var(--font-playfair)',
+          'Playfair Display',
+          'Georgia',
+          'Times New Roman',
+          'serif',
         ],
         display: [
           'var(--font-playfair)',
