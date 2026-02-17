@@ -199,7 +199,7 @@ export default function HomePage() {
               Grade presentations at scale.
             </h1>
             <p className="font-display mt-6 text-xl text-surface-500 max-w-2xl mx-auto">
-              Grade and deliver feedback for hundreds in the time it takes to grade one.
+              Deliver feedback for hundreds in the time it used to take one.
             </p>
             <div className="mt-10 flex justify-center gap-4">
               <Link
