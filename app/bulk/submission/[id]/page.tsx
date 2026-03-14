@@ -1039,338 +1039,155 @@ RULES:
                     </p>
                 </div>
 
-                  {/* Score Card */}
-                  <ScoreCard
-                    score={Math.round(normalizedScore)}
-                    maxScore={100}
-                    performanceLabel={performance.label}
-                    percentileBadge={performance.percentile}
-                    summary={
-                      `${submission.studentName} demonstrated a solid understanding of the core concepts. ` +
-                      `The presentation structure was logical and easy to follow. ` +
-                      (submission.analysis?.overallStrength && submission.analysis.overallStrength >= 4
-                        ? 'The pacing was excellent with clear enunciation throughout.'
-                        : 'There were minor areas where clarity could be improved.')
-                    }
-                    badges={[
-                      ...(submission.gradingCount != null && submission.gradingCount > 1
-                        ? [{ label: submission.gradingCount === 2 ? '2nd grading' : submission.gradingCount === 3 ? '3rd grading' : `${submission.gradingCount}th grading`, icon: <RefreshCw className="w-3 h-3" /> }]
-                        : []),
-                      { label: submission.analysis?.sentiment || 'Positive Sentiment', icon: <ThumbsUp className="w-3 h-3" /> },
-                      { 
-                        label: submission.analysis?.duration 
-                          ? `${Math.floor(submission.analysis.duration / 60)}m ${Math.floor(submission.analysis.duration % 60)}s Duration`
-                          : (sortedSegments.length > 0 
-                              ? `${Math.floor(normalizeTimestamp(sortedSegments[sortedSegments.length - 1].timestamp) / 60000)}m ${Math.floor((normalizeTimestamp(sortedSegments[sortedSegments.length - 1].timestamp) % 60000) / 1000)}s Duration`
-                              : 'Duration unavailable'),
-                        icon: <Clock className="w-3 h-3" /> 
-                      },
-                    ]}
-                  />
+                  {/* Feedback Remarks — positives and areas for improvement with transcript citations */}
+                  {(() => {
+                    const positives = (rubric?.strengths?.length ? rubric.strengths : []).slice(0, 2);
+                    const negatives = (rubric?.improvements?.length ? rubric.improvements : []).slice(0, 2);
+                    const hasRemarks = positives.length > 0 || negatives.length > 0;
 
-                  {/* Presentation Highlights and Speech Delivery - Side by Side */}
-                  <div className="grid grid-cols-2 gap-6">
-                    {/* The Spotlight - Key algorithmic-identified moments (image reference style) */}
-                    <div className="bg-white rounded-2xl border border-surface-200 p-4">
-                      <div className="mb-3">
-                        <h3 className="text-base font-bold text-surface-900">The Spotlight</h3>
-                        <p className="text-xs text-surface-500 mt-0.5">Key algorithmic-identified moments from the presentation.</p>
-                      </div>
-                      
-                      {/* Compact 10s clips - three cards side-by-side, expand on click */}
-                      <div className="grid grid-cols-3 gap-3">
-                        {(submission.analysis?.keyClaims?.slice(0, 3) || sortedSegments.slice(0, 3)).map((item, idx) => {
-                          const seg = sortedSegments[Math.min(idx * Math.floor(Math.max(1, sortedSegments.length) / 3), sortedSegments.length - 1)];
-                          const timestamp = seg ? formatTimestamp(seg.timestamp) : `${idx}:00`;
-                          const timestampMs = seg ? normalizeTimestamp(seg.timestamp) : idx * 60000;
-                          const fullText = 'claim' in item ? item.claim : ('text' in item ? item.text : 'Key moment');
-                          const previewText = typeof fullText === 'string' ? fullText.slice(0, 80) + (fullText.length > 80 ? '...' : '') : 'Key moment';
-                          const spotlightLabels = ['IMPACT MOMENT', 'AI INSIGHT', 'CRITIQUE POINT'];
-                          const CLIP_DURATION_SEC = 10;
-                          const clipStart = timestampMs / 1000;
-                          const clipEnd = clipStart + CLIP_DURATION_SEC;
-                          const isSelected = selectedSpotlightIndex === idx;
-                          
-                          return (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={() => setSelectedSpotlightIndex(selectedSpotlightIndex === idx ? null : idx)}
-                              className={`flex flex-col text-left rounded-lg transition-all duration-300 ${
-                                isSelected 
-                                  ? 'ring-2 ring-primary-500 bg-primary-50/50 scale-105 z-10 shadow-lg' 
-                                  : 'hover:ring-2 hover:ring-primary-200 hover:scale-[1.02]'
-                              }`}
-                            >
-                              {/* 10s clip - enlarges slightly when selected */}
-                              <div className={`relative w-full rounded-t-lg overflow-hidden bg-surface-900 transition-all duration-300 ${
-                                isSelected ? 'aspect-[4/3]' : 'aspect-video max-h-40'
-                              }`}>
-                                {videoUrl ? (
-                                  <video
-                                    data-spotlight-idx={idx}
-                                    src={videoUrl}
-                                    className="clip-video absolute inset-0 w-full h-full object-cover"
-                                    controls
-                                    preload="metadata"
-                                    playsInline
-                                    disablePictureInPicture
-                                    controlsList="nodownload noremoteplayback"
-                                    onLoadedMetadata={(e) => {
-                                      const video = e.target as HTMLVideoElement;
-                                      video.currentTime = clipStart;
-                                    }}
-                                    onPlay={(e) => {
-                                      const v = e.target as HTMLVideoElement;
-                                      if (v.currentTime < clipStart || v.currentTime >= clipEnd) v.currentTime = clipStart;
-                                      // Pause all other spotlight videos
-                                      document.querySelectorAll('video[data-spotlight-idx]').forEach((vid) => {
-                                        if (vid !== v && vid instanceof HTMLVideoElement) {
-                                          vid.pause();
-                                        }
-                                      });
-                                    }}
-                                    onTimeUpdate={(e) => {
-                                      const v = e.target as HTMLVideoElement;
-                                      if (v.currentTime >= clipEnd - 0.3) {
-                                        v.pause();
-                                        v.currentTime = clipStart;
-                                      }
-                                    }}
-                                    onSeeked={(e) => {
-                                      const v = e.target as HTMLVideoElement;
-                                      if (v.currentTime >= clipEnd || v.currentTime < clipStart) v.currentTime = clipStart;
-                                    }}
-                                  />
-                                ) : (
-                                  <div className="absolute inset-0 bg-surface-700 flex items-center justify-center">
-                                    <PlayCircle className="w-8 h-8 text-white/60" />
-                                  </div>
-                                )}
-                                <div className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/70 rounded text-white text-[9px] font-mono z-10">
-                                  {timestamp}
-                                </div>
-                              </div>
-                              {/* Label + description - full insight when selected */}
-                              <div className={`p-2 rounded-b-lg border border-t-0 border-surface-200 ${isSelected ? 'bg-primary-50/80' : 'bg-surface-50'}`}>
-                                <p className="text-[10px] font-bold text-primary-600 uppercase tracking-wide mb-1">
-                                  {spotlightLabels[idx % spotlightLabels.length]}
-                                </p>
-                                <p className={`text-xs text-surface-600 leading-snug ${isSelected ? '' : 'line-clamp-2'}`}>
-                                  {typeof fullText === 'string' ? fullText : previewText}
-                                </p>
-                              </div>
-                            </button>
-                          );
-                        })}
-                        {sortedSegments.length === 0 && (
-                          <div className="col-span-3 flex items-center justify-center py-8 text-sm text-surface-500">
-                            <div className="text-center">
-                              <PlayCircle className="w-6 h-6 mx-auto mb-2 text-surface-300" />
-                              <p className="text-xs">No highlights yet</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    if (!hasRemarks) return null;
 
-                    {/* Speech Delivery - Metrics only, no videos */}
-                    <div className="bg-white rounded-2xl border border-surface-200 p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Mic className="w-4 h-4 text-primary-500" />
-                        <h3 className="text-sm font-semibold text-surface-900">Speech Delivery</h3>
-                      </div>
-                      
-                      {/* Metrics - compact */}
-                      <div className="grid grid-cols-3 gap-2 text-center">
-                        {/* Filler Word Count */}
-                        <div className="bg-surface-50 rounded-lg p-3">
-                          <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full mb-1 ${
-                            speechMetrics.fillerWordCount <= 10 
-                              ? 'bg-emerald-100 text-emerald-700' 
-                              : speechMetrics.fillerWordCount <= 20
-                                ? 'bg-amber-100 text-amber-700'
-                                : 'bg-red-100 text-red-700'
-                          }`}>
-                            {speechMetrics.fillerWordCount <= 10 ? 'Good' : speechMetrics.fillerWordCount <= 20 ? 'Moderate' : 'High'}
-                          </span>
-                          <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.fillerWordCount}</div>
-                          <p className="text-[10px] text-surface-500 mb-0.5">Filler Words</p>
-                          <p className="text-[9px] text-surface-600 leading-tight">
-                            {classSpeechStats?.fillerWordAvg != null ? (
-                              <>Class Avg: <span className="font-medium">{classSpeechStats.fillerWordAvg}</span> — Lower filler use improves clarity.</>
-                            ) : (
-                              <>Lower filler use improves clarity.</>
-                            )}
-                          </p>
+                    return (
+                      <div className="bg-white rounded-2xl border border-surface-200 p-5 space-y-4">
+                        <div>
+                          <h3 className="text-sm font-semibold text-surface-900">Feedback Remarks</h3>
+                          <p className="text-xs text-surface-500 mt-0.5">Key observations drawn from the presentation with transcript references.</p>
                         </div>
 
-                        {/* Speaking Rate */}
-                        <div className="bg-surface-50 rounded-lg p-3">
-                          <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full mb-1 ${
-                            speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180
-                              ? 'bg-emerald-100 text-emerald-700' 
-                              : speechMetrics.speakingRateWpm < 100 || speechMetrics.speakingRateWpm > 200
-                                ? 'bg-red-100 text-red-700'
-                                : 'bg-amber-100 text-amber-700'
-                          }`}>
-                            {speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180 
-                              ? 'Optimal' 
-                              : speechMetrics.speakingRateWpm < 120 ? 'Slow' : 'Fast'}
-                          </span>
-                          <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.speakingRateWpm}</div>
-                          <p className="text-[10px] text-surface-500 mb-0.5">Words/min</p>
-                          <p className="text-[9px] text-surface-600 leading-tight">
-                            {classSpeechStats?.wpmAvg != null ? (
-                              <>Class Avg: <span className="font-medium">{classSpeechStats.wpmAvg}</span> — Ideal range 120–180 for comprehension.</>
-                            ) : (
-                              <>Ideal range 120–180 for comprehension.</>
-                            )}
-                          </p>
-                        </div>
-
-                        {/* Pause Frequency */}
-                        <div className="bg-surface-50 rounded-lg p-3">
-                          <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full mb-1 ${
-                            speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8
-                              ? 'bg-emerald-100 text-emerald-700' 
-                              : speechMetrics.pauseFrequency > 8
-                                ? 'bg-red-100 text-red-700'
-                                : 'bg-amber-100 text-amber-700'
-                          }`}>
-                            {speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8 ? 'Good' : speechMetrics.pauseFrequency > 8 ? 'High' : 'Low'}
-                          </span>
-                          <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.pauseFrequency.toFixed(1)}</div>
-                          <p className="text-[10px] text-surface-500 mb-0.5">Pauses/min</p>
-                          <p className="text-[9px] text-surface-600 leading-tight">
-                            {classSpeechStats?.pausesPerMinAvg != null ? (
-                              <>Class Avg: <span className="font-medium">{classSpeechStats.pausesPerMinAvg}</span> — Strategic pauses aid emphasis.</>
-                            ) : (
-                              <>Strategic pauses aid emphasis.</>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Evidence Mapping - Course Material Alignment */}
-                  <CollapsibleSection
-                    title="Evidence Mapping"
-                    subtitle="Student evidence mapped to course materials"
-                    icon={<FileSearch className="w-4 h-4" />}
-                    defaultExpanded={true}
-                  >
-                    <div className="space-y-3">
-                      {effectiveCriteria.map((c, idx) => {
-                        const pct = c.maxScore ? Math.round((c.score / c.maxScore) * 100) : c.score;
-                        // Get a relevant segment for this criterion
-                        const segmentIndex = Math.min(
-                          Math.floor((idx / Math.max(effectiveCriteria.length, 1)) * sortedSegments.length),
-                          sortedSegments.length - 1
-                        );
-                        const evidenceSegment = sortedSegments[segmentIndex];
-                        const timestamp = evidenceSegment ? formatTimestamp(evidenceSegment.timestamp) : '--';
-                        const timestampMs = evidenceSegment ? normalizeTimestamp(evidenceSegment.timestamp) : 0;
-                        const quote = evidenceSegment?.text?.slice(0, 150) || c.feedback?.slice(0, 150) || 'Evidence from presentation';
-                        
-                        return (
-                          <div key={idx} className="border border-surface-200 rounded-lg p-3 bg-white hover:border-primary-300 transition-colors">
-                            <div className="grid grid-cols-2 gap-4">
-                              {/* Left: Course Material / Rubric Criterion */}
-                              <div>
-                                <div className="flex items-start justify-between mb-2">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-7 h-7 rounded bg-primary-100 flex items-center justify-center">
-                                      <BookOpen className="w-3.5 h-3.5 text-primary-600" />
-                                    </div>
-                                    <div>
-                                      <h4 className="text-xs font-bold text-surface-900 uppercase tracking-wide">{c.criterion}</h4>
-                                      <p className="text-[10px] text-surface-500">Rubric Criterion</p>
-                                    </div>
-                                  </div>
-                                  <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
-                                    pct >= 80 ? 'bg-emerald-100 text-emerald-700' : pct >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                                  }`}>
-                                    {pct >= 80 ? 'Strong' : pct >= 60 ? 'Moderate' : 'Developing'} ({pct}%)
-                                  </span>
-                                </div>
-                                <p className="text-xs text-surface-600 leading-relaxed">{c.feedback || c.rationale || 'See rubric for details.'}</p>
-                                {batchInfo?.courseId && (
-                                  <div className="mt-2 pt-2 border-t border-surface-100">
-                                    <p className="text-[10px] text-primary-600 mb-1">📚 Referenced: Course Materials</p>
-                                    <p className="text-[9px] text-surface-500">Based on uploaded {batchInfo.courseName || 'course'} content</p>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Right: Student Evidence from Video */}
-                              <div className="bg-blue-50/30 rounded-lg p-2.5 border border-blue-100">
-                                <div className="flex items-center justify-between mb-1.5">
-                                  <p className="text-[10px] font-bold text-blue-700 uppercase tracking-wide">Student Evidence ({timestamp})</p>
-                                  {evidenceSegment && (
+                        <div className="grid grid-cols-2 gap-4">
+                          {/* Positives */}
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1">
+                              <ThumbsUp className="w-3 h-3" /> Strengths
+                            </p>
+                            {positives.map((s, i) => {
+                              const item = typeof s === 'string' ? { text: s } : s as { text: string; transcriptRefs?: Array<{ timestamp: number; snippet: string }> };
+                              const ref = item.transcriptRefs?.[0];
+                              const ts = ref ? formatTimestamp(ref.timestamp) : null;
+                              return (
+                                <div key={i} className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl space-y-1.5">
+                                  <p className="text-xs text-surface-800 leading-relaxed">{item.text}</p>
+                                  {ref && (
                                     <button
-                                      onClick={() => videoPanelRef.current?.seekTo(timestampMs)}
-                                      className="flex items-center gap-1 px-2 py-0.5 bg-blue-600 text-white rounded text-[9px] font-medium hover:bg-blue-700 transition-colors"
+                                      onClick={() => videoPanelRef.current?.seekTo(ref.timestamp)}
+                                      className="flex items-center gap-1.5 group w-full"
                                     >
-                                      <PlayCircle className="w-2.5 h-2.5" /> Go to Clip
+                                      <span className="text-[10px] font-mono text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded group-hover:bg-emerald-200 transition-colors">
+                                        {ts}
+                                      </span>
+                                      <span className="text-[10px] text-surface-500 italic truncate">
+                                        &ldquo;{ref.snippet.slice(0, 60)}{ref.snippet.length > 60 ? '…' : ''}&rdquo;
+                                      </span>
                                     </button>
                                   )}
                                 </div>
-                                <p className="text-xs text-surface-700 leading-relaxed italic">
-                                  &quot;{quote}{quote.length >= 150 ? '...' : ''}&quot;
-                                </p>
-                                {evidenceSegment && (
-                                  <p className="text-[9px] text-surface-500 mt-1.5">
-                                    Aligns with {c.criterion} expectations from rubric and course framework
-                                  </p>
-                                )}
-                              </div>
-                            </div>
+                              );
+                            })}
                           </div>
-                        );
-                      })}
 
-                      {/* Verification & Key Claims */}
-                      {submission.verificationFindings && submission.verificationFindings.length > 0 && (
-                        <div className="pt-2 mt-2 border-t border-surface-100">
-                          <h4 className="text-xs font-semibold text-surface-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                            <Shield className="w-3.5 h-3.5 text-blue-600" /> Claim Verification
-                          </h4>
-                          <div className="grid grid-cols-2 gap-2">
-                            {submission.verificationFindings.slice(0, 6).map((f, i) => (
-                              <div 
-                                key={i} 
-                                className={`p-2 rounded-lg border text-left ${
-                                  f.status === 'VERIFIED' ? 'bg-emerald-50 border-emerald-200' :
-                                  f.status === 'NEEDS_EVIDENCE' ? 'bg-amber-50 border-amber-200' :
-                                  'bg-red-50 border-red-200'
-                                }`}
-                              >
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  {f.status === 'VERIFIED' ? (
-                                    <CheckCircle className="w-3 h-3 text-emerald-600" />
-                                  ) : f.status === 'NEEDS_EVIDENCE' ? (
-                                    <AlertCircle className="w-3 h-3 text-amber-600" />
-                                  ) : (
-                                    <XCircle className="w-3 h-3 text-red-600" />
+                          {/* Areas for improvement */}
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" /> Areas for Improvement
+                            </p>
+                            {negatives.map((s, i) => {
+                              const item = typeof s === 'string' ? { text: s } : s as { text: string; transcriptRefs?: Array<{ timestamp: number; snippet: string }> };
+                              const ref = item.transcriptRefs?.[0];
+                              const ts = ref ? formatTimestamp(ref.timestamp) : null;
+                              return (
+                                <div key={i} className="p-3 bg-amber-50 border border-amber-100 rounded-xl space-y-1.5">
+                                  <p className="text-xs text-surface-800 leading-relaxed">{item.text}</p>
+                                  {ref && (
+                                    <button
+                                      onClick={() => videoPanelRef.current?.seekTo(ref.timestamp)}
+                                      className="flex items-center gap-1.5 group w-full"
+                                    >
+                                      <span className="text-[10px] font-mono text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded group-hover:bg-amber-200 transition-colors">
+                                        {ts}
+                                      </span>
+                                      <span className="text-[10px] text-surface-500 italic truncate">
+                                        &ldquo;{ref.snippet.slice(0, 60)}{ref.snippet.length > 60 ? '…' : ''}&rdquo;
+                                      </span>
+                                    </button>
                                   )}
-                                  <span className={`text-[9px] font-bold uppercase ${
-                                    f.status === 'VERIFIED' ? 'text-emerald-700' :
-                                    f.status === 'NEEDS_EVIDENCE' ? 'text-amber-700' :
-                                    'text-red-700'
-                                  }`}>
-                                    {f.status === 'VERIFIED' ? 'Match Found' : f.status === 'NEEDS_EVIDENCE' ? 'Needs Evidence' : 'Unverified'}
-                                  </span>
                                 </div>
-                                <p className="text-[10px] text-surface-700 leading-snug">{f.statement}</p>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
-                      )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Speech Delivery */}
+                  <div className="bg-white rounded-2xl border border-surface-200 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Mic className="w-4 h-4 text-primary-500" />
+                      <h3 className="text-sm font-semibold text-surface-900">Speech Delivery</h3>
                     </div>
-                  </CollapsibleSection>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="bg-surface-50 rounded-lg p-3">
+                        <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full mb-1 ${
+                          speechMetrics.fillerWordCount <= 10
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : speechMetrics.fillerWordCount <= 20
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-red-100 text-red-700'
+                        }`}>
+                          {speechMetrics.fillerWordCount <= 10 ? 'Good' : speechMetrics.fillerWordCount <= 20 ? 'Moderate' : 'High'}
+                        </span>
+                        <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.fillerWordCount}</div>
+                        <p className="text-[10px] text-surface-500 mb-0.5">Filler Words</p>
+                        <p className="text-[9px] text-surface-600 leading-tight">
+                          {classSpeechStats?.fillerWordAvg != null ? (
+                            <>Class Avg: <span className="font-medium">{classSpeechStats.fillerWordAvg}</span> — Lower filler use improves clarity.</>
+                          ) : (
+                            <>Lower filler use improves clarity.</>
+                          )}
+                        </p>
+                      </div>
+                      <div className="bg-surface-50 rounded-lg p-3">
+                        <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full mb-1 ${
+                          speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : speechMetrics.speakingRateWpm < 100 || speechMetrics.speakingRateWpm > 200
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180 ? 'Optimal' : speechMetrics.speakingRateWpm < 120 ? 'Slow' : 'Fast'}
+                        </span>
+                        <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.speakingRateWpm}</div>
+                        <p className="text-[10px] text-surface-500 mb-0.5">Words/min</p>
+                        <p className="text-[9px] text-surface-600 leading-tight">
+                          {classSpeechStats?.wpmAvg != null ? (
+                            <>Class Avg: <span className="font-medium">{classSpeechStats.wpmAvg}</span> — Ideal range 120–180 for comprehension.</>
+                          ) : (
+                            <>Ideal range 120–180 for comprehension.</>
+                          )}
+                        </p>
+                      </div>
+                      <div className="bg-surface-50 rounded-lg p-3">
+                        <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full mb-1 ${
+                          speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : speechMetrics.pauseFrequency > 8
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8 ? 'Good' : speechMetrics.pauseFrequency > 8 ? 'High' : 'Low'}
+                        </span>
+                        <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.pauseFrequency.toFixed(1)}</div>
+                        <p className="text-[10px] text-surface-500 mb-0.5">Pauses/min</p>
+                        <p className="text-[9px] text-surface-600 leading-tight">
+                          {classSpeechStats?.pausesPerMinAvg != null ? (
+                            <>Class Avg: <span className="font-medium">{classSpeechStats.pausesPerMinAvg}</span> — Strategic pauses aid emphasis.</>
+                          ) : (
+                            <>Strategic pauses aid emphasis.</>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Remove old Key Insights and Verification sections - now integrated above */}
                   <div className="hidden grid-cols-2 gap-4">
