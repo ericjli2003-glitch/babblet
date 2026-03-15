@@ -198,6 +198,14 @@ export default function SubmissionDetailPage() {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [selectedCriterionIndex, setSelectedCriterionIndex] = useState(0);
   const [selectedSpotlightIndex, setSelectedSpotlightIndex] = useState<number | null>(null);
+  const [transcriptAnnotations, setTranscriptAnnotations] = useState<Array<{
+    segmentIndex: number;
+    type: 'positive' | 'negative';
+    number: number;
+    feedback: string;
+  }>>([]);
+  const [annotationsLoading, setAnnotationsLoading] = useState(false);
+  const [expandedAnnotation, setExpandedAnnotation] = useState<string | null>(null);
   const [branchingQuestionId, setBranchingQuestionId] = useState<string | null>(null);
   const [showMaterialModal, setShowMaterialModal] = useState<{
     name: string;
@@ -424,6 +432,30 @@ export default function SubmissionDetailPage() {
     }
     return timestamp;
   }, [timestampUnit]);
+
+  // Fetch transcript annotations from LLM when submission is loaded
+  useEffect(() => {
+    const rubric = submission?.rubricEvaluation;
+    const segs = submission?.transcriptSegments;
+    if (!segs?.length || !rubric) return;
+    if (transcriptAnnotations.length > 0) return; // already loaded
+
+    setAnnotationsLoading(true);
+    fetch('/api/bulk/transcript-annotations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        segments: segs.map(s => ({ timestamp: s.timestamp, text: s.text })),
+        strengths: rubric.strengths || [],
+        improvements: rubric.improvements || [],
+      }),
+    })
+      .then(r => r.json())
+      .then(data => { if (data.annotations) setTranscriptAnnotations(data.annotations); })
+      .catch(() => {})
+      .finally(() => setAnnotationsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submission?.id]);
 
   // Use segments in their original order (Deepgram transcription order)
   // Don't sort by timestamp since Deepgram sometimes returns incorrect timestamps
@@ -1041,8 +1073,8 @@ RULES:
 
                   {/* Feedback Remarks — positives and areas for improvement with transcript citations */}
                   {(() => {
-                    const positives = (rubric?.strengths?.length ? rubric.strengths : []).slice(0, 2);
-                    const negatives = (rubric?.improvements?.length ? rubric.improvements : []).slice(0, 2);
+                    const positives = (rubric?.strengths?.length ? rubric.strengths : []).slice(0, 6);
+                    const negatives = (rubric?.improvements?.length ? rubric.improvements : []).slice(0, 6);
                     const hasRemarks = positives.length > 0 || negatives.length > 0;
 
                     if (!hasRemarks) return null;
@@ -1186,6 +1218,93 @@ RULES:
                           )}
                         </p>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Annotated Transcript */}
+                  <div className="bg-white rounded-2xl border border-surface-200 overflow-hidden">
+                    <div className="px-5 py-4 border-b border-surface-100 flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-semibold text-surface-900">Transcript</h3>
+                        <p className="text-xs text-surface-500 mt-0.5">
+                          Numbered circles mark key moments — click to see specific feedback.
+                        </p>
+                      </div>
+                      {annotationsLoading && (
+                        <div className="flex items-center gap-1.5 text-xs text-surface-400">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Analyzing...
+                        </div>
+                      )}
+                      <div className="flex items-center gap-3 ml-4">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center">1</span>
+                          <span className="text-[10px] text-surface-500">Strength</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">1</span>
+                          <span className="text-[10px] text-surface-500">Improvement</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="divide-y divide-surface-50 max-h-[520px] overflow-y-auto">
+                      {sortedSegments.map((seg, idx) => {
+                        const annotation = transcriptAnnotations.find(a => a.segmentIndex === idx);
+                        const annotKey = `${idx}-${annotation?.type}`;
+                        const isExpanded = expandedAnnotation === annotKey;
+                        return (
+                          <div
+                            key={idx}
+                            className={`px-5 py-3 transition-colors ${
+                              annotation ? (annotation.type === 'positive' ? 'bg-emerald-50/40' : 'bg-amber-50/40') : 'hover:bg-surface-50/60'
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              {/* Timestamp */}
+                              <button
+                                onClick={() => videoPanelRef.current?.seekTo(
+                                  typeof seg.timestamp === 'number' ? seg.timestamp : normalizeTimestamp(seg.timestamp)
+                                )}
+                                className="flex-shrink-0 font-mono text-[10px] text-primary-500 hover:text-primary-700 bg-primary-50 hover:bg-primary-100 px-1.5 py-0.5 rounded mt-0.5 transition-colors"
+                              >
+                                {typeof seg.timestamp === 'string' ? seg.timestamp : seg.timestamp}
+                              </button>
+
+                              {/* Text */}
+                              <p className="flex-1 text-xs text-surface-700 leading-relaxed">{seg.text}</p>
+
+                              {/* Annotation circle */}
+                              {annotation && (
+                                <button
+                                  onClick={() => setExpandedAnnotation(isExpanded ? null : annotKey)}
+                                  className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white transition-all hover:scale-110 ${
+                                    annotation.type === 'positive'
+                                      ? 'bg-emerald-500 hover:bg-emerald-600'
+                                      : 'bg-amber-500 hover:bg-amber-600'
+                                  }`}
+                                  title={isExpanded ? 'Collapse' : 'See feedback'}
+                                >
+                                  {annotation.number}
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Expanded feedback */}
+                            {annotation && isExpanded && (
+                              <div className={`mt-2 ml-12 p-2.5 rounded-lg text-xs leading-relaxed border ${
+                                annotation.type === 'positive'
+                                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                                  : 'bg-amber-50 border-amber-200 text-amber-800'
+                              }`}>
+                                {annotation.feedback}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {sortedSegments.length === 0 && (
+                        <div className="py-12 text-center text-sm text-surface-400">No transcript available.</div>
+                      )}
                     </div>
                   </div>
 
@@ -1691,6 +1810,7 @@ RULES:
           <div style={{ width: videoPanelWidth }} className="flex-shrink-0">
             <VideoPanel
               ref={videoPanelRef}
+              hideTranscript
               videoUrl={videoUrl}
               filename={submission.originalFilename}
               uploadDate={formatDate(submission.createdAt)}

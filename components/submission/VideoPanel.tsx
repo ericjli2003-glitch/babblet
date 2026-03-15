@@ -31,6 +31,7 @@ interface VideoPanelProps {
   currentTimeMs?: number;
   presentationTitle?: string;
   submissionId?: string;
+  hideTranscript?: boolean;
 }
 
 export interface VideoPanelRef {
@@ -51,6 +52,7 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
   currentTimeMs = 0,
   presentationTitle = 'Presentation',
   submissionId,
+  hideTranscript = false,
 }, ref) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
@@ -208,7 +210,7 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
       </div>
 
       {/* Full Transcript - Scrollable */}
-      <div className="flex-1 border-t border-surface-700 flex flex-col min-h-0">
+      {!hideTranscript && (<div className="flex-1 border-t border-surface-700 flex flex-col min-h-0">
         <button
           onClick={() => setIsModalOpen(true)}
           className="px-4 py-3 border-b border-surface-700 flex items-center justify-between bg-surface-800 hover:bg-surface-700/50 transition-colors flex-shrink-0"
@@ -267,7 +269,7 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
             </div>
           )}
         </div>
-      </div>
+      </div>)}
 
       {/* Transcript Modal */}
       <TranscriptModal
