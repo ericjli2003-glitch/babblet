@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
       try {
         const docs = await getCourseDocuments(courseId);
         const excerpts = docs.slice(0, 3).map(d =>
-          `[${d.name}]: ${(d.content || '').slice(0, 600)}`
+          `[${d.name}]: ${(d.rawText || '').slice(0, 600)}`
         ).join('\n\n');
         if (excerpts) courseMaterialContext = `COURSE MATERIALS:\n${excerpts}`;
       } catch { /* non-fatal */ }
