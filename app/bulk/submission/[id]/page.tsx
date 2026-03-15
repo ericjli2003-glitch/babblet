@@ -208,7 +208,12 @@ export default function SubmissionDetailPage() {
   const [topStrengths, setTopStrengths] = useState<string[]>([]);
   const [topWeaknesses, setTopWeaknesses] = useState<string[]>([]);
   const [expandedAnnotation, setExpandedAnnotation] = useState<string | null>(null);
-  const [overviewChatMessages, setOverviewChatMessages] = useState<Array<{ role: 'user' | 'assistant'; text: string }>>([]);
+  const [overviewChatMessages, setOverviewChatMessages] = useState<Array<{
+    role: 'user' | 'assistant';
+    text: string;
+    materialReferences?: Array<{ index: number; name: string; type: string }>;
+  }>>([]);
+  const [overviewThinkingStep, setOverviewThinkingStep] = useState<string>('');
   const [overviewChatInput, setOverviewChatInput] = useState('');
   const [overviewChatLoading, setOverviewChatLoading] = useState(false);
   const [branchingQuestionId, setBranchingQuestionId] = useState<string | null>(null);
@@ -1356,14 +1361,29 @@ RULES:
 
                   {/* Overview Chat */}
                   {(() => {
+                    const THINKING_STEPS = [
+                      'Reading course materials…',
+                      'Checking rubric criteria…',
+                      'Analyzing transcript…',
+                      'Formulating response…',
+                    ];
+
                     const handleOverviewChat = async (e: React.FormEvent) => {
                       e.preventDefault();
                       const msg = overviewChatInput.trim();
                       if (!msg || overviewChatLoading) return;
                       setOverviewChatInput('');
-                      const userMsg = { role: 'user' as const, text: msg };
-                      setOverviewChatMessages(prev => [...prev, userMsg]);
+                      setOverviewChatMessages(prev => [...prev, { role: 'user' as const, text: msg }]);
                       setOverviewChatLoading(true);
+
+                      // Cycle through thinking steps
+                      let stepIdx = 0;
+                      setOverviewThinkingStep(THINKING_STEPS[0]);
+                      const stepTimer = setInterval(() => {
+                        stepIdx = (stepIdx + 1) % THINKING_STEPS.length;
+                        setOverviewThinkingStep(THINKING_STEPS[stepIdx]);
+                      }, 1200);
+
                       try {
                         const res = await fetch('/api/contextual-chat', {
                           method: 'POST',
@@ -1375,62 +1395,144 @@ RULES:
                             assignmentId: batchInfo?.assignmentId,
                             context: {
                               sourceType: 'summary',
+                              courseId: batchInfo?.courseId,
+                              assignmentId: batchInfo?.assignmentId,
+                              submissionId,
                               fullContext: [
                                 batchInfo?.assignmentName ? `Assignment: ${batchInfo.assignmentName}` : '',
                                 batchInfo?.rubricCriteria ? `Rubric:\n${batchInfo.rubricCriteria}` : '',
-                                submission?.transcript ? `Transcript:\n${submission.transcript.slice(0, 4000)}` : '',
+                                submission?.rubricEvaluation?.criteriaBreakdown?.length
+                                  ? `Scores:\n${submission.rubricEvaluation.criteriaBreakdown.map((c: { criterion: string; score: number; maxScore?: number; feedback: string }) => `${c.criterion}: ${c.score}/${c.maxScore || 10} — ${c.feedback}`).join('\n')}`
+                                  : '',
+                                submission?.transcript ? `Transcript:\n${submission.transcript.slice(0, 5000)}` : '',
                               ].filter(Boolean).join('\n\n'),
                             },
                             conversationHistory: overviewChatMessages.map(m => ({ role: m.role, content: m.text })),
                           }),
                         });
                         const data = await res.json();
-                        const reply = data.response || data.message || 'No response.';
-                        setOverviewChatMessages(prev => [...prev, { role: 'assistant', text: reply }]);
+                        setOverviewChatMessages(prev => [...prev, {
+                          role: 'assistant' as const,
+                          text: data.response || data.message || 'No response.',
+                          materialReferences: data.materialReferences || [],
+                        }]);
                       } catch {
-                        setOverviewChatMessages(prev => [...prev, { role: 'assistant', text: 'Something went wrong. Please try again.' }]);
+                        setOverviewChatMessages(prev => [...prev, { role: 'assistant' as const, text: 'Something went wrong. Please try again.' }]);
                       } finally {
+                        clearInterval(stepTimer);
+                        setOverviewThinkingStep('');
                         setOverviewChatLoading(false);
                       }
                     };
+
+                    // Render assistant text with **bold**, bullets, and [N] citation badges
+                    const renderAssistantText = (text: string, refs?: Array<{ index: number; name: string; type: string }>) => {
+                      const lines = text.split('\n');
+                      return (
+                        <div className="space-y-1.5">
+                          {lines.map((line, li) => {
+                            if (!line.trim()) return null;
+                            // Replace [N] with styled citation badge
+                            const parts = line.split(/\[(\d+)\]/g);
+                            const renderParts = (rawLine: string) => {
+                              const chunks = rawLine.split(/\[(\d+)\]/g);
+                              return chunks.map((chunk, ci) => {
+                                if (ci % 2 === 1) {
+                                  const refIdx = parseInt(chunk);
+                                  const ref = refs?.find(r => r.index === refIdx);
+                                  return (
+                                    <span
+                                      key={ci}
+                                      className="inline-flex items-center mx-0.5 px-1.5 py-0.5 bg-primary-100 text-primary-700 text-[10px] font-bold rounded cursor-help hover:bg-primary-200 transition-colors"
+                                      title={ref ? `${ref.name} (${ref.type})` : `Source ${refIdx}`}
+                                    >
+                                      [{refIdx}]
+                                    </span>
+                                  );
+                                }
+                                // Bold and italic within chunk
+                                const html = chunk
+                                  .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                                  .replace(/\*(.+?)\*/g, '<em>$1</em>');
+                                return <span key={ci} dangerouslySetInnerHTML={{ __html: html }} />;
+                              });
+                            };
+
+                            const isBullet = line.startsWith('- ') || line.startsWith('• ') || /^\d+\.\s/.test(line);
+                            const cleanLine = isBullet ? line.replace(/^[-•]\s+|^\d+\.\s+/, '') : line;
+                            void parts; // suppress unused warning
+
+                            if (isBullet) {
+                              return (
+                                <div key={li} className="flex gap-2 items-start">
+                                  <span className="flex-shrink-0 w-1 h-1 rounded-full bg-surface-500 mt-2" />
+                                  <span className="flex-1 flex-wrap">{renderParts(cleanLine)}</span>
+                                </div>
+                              );
+                            }
+                            return <p key={li} className="flex-wrap">{renderParts(line)}</p>;
+                          })}
+
+                          {/* Citation footnotes */}
+                          {refs && refs.length > 0 && (
+                            <div className="mt-3 pt-2 border-t border-surface-200 space-y-1">
+                              {refs.map(r => (
+                                <div key={r.index} className="flex gap-1.5 items-baseline">
+                                  <span className="text-[10px] font-bold text-primary-600 flex-shrink-0">[{r.index}]</span>
+                                  <span className="text-[10px] text-surface-500">{r.name} <span className="capitalize text-surface-400">({r.type})</span></span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    };
+
                     return (
                       <div className="bg-white rounded-2xl border border-surface-200 overflow-hidden">
                         <div className="px-5 py-4 border-b border-surface-100">
                           <h3 className="text-sm font-semibold text-surface-900">Ask About This Submission</h3>
-                          <p className="text-xs text-surface-500 mt-0.5">Ask follow-up questions grounded in the rubric, course materials, and transcript.</p>
+                          <p className="text-xs text-surface-500 mt-0.5">Answers are grounded in the rubric, course materials, and transcript. Use [N] citations to trace sources.</p>
                         </div>
 
                         {/* Message history */}
-                        {overviewChatMessages.length > 0 && (
-                          <div className="px-5 py-3 space-y-3 max-h-72 overflow-y-auto border-b border-surface-100">
+                        {(overviewChatMessages.length > 0 || overviewChatLoading) && (
+                          <div className="px-5 py-4 space-y-4 max-h-[520px] overflow-y-auto border-b border-surface-100">
                             {overviewChatMessages.map((m, i) => (
                               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed ${
+                                {m.role === 'assistant' && (
+                                  <div className="w-6 h-6 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0 mr-2 mt-0.5">
+                                    <Sparkles className="w-3 h-3 text-primary-600" />
+                                  </div>
+                                )}
+                                <div className={`max-w-[82%] rounded-2xl px-4 py-3 text-xs leading-relaxed ${
                                   m.role === 'user'
-                                    ? 'bg-primary-500 text-white'
-                                    : 'bg-surface-100 text-surface-800'
+                                    ? 'bg-primary-500 text-white rounded-br-sm'
+                                    : 'bg-surface-50 border border-surface-200 text-surface-800 rounded-bl-sm'
                                 }`}>
-                                  {m.role === 'assistant' ? (
-                                    <div className="space-y-1.5">
-                                      {m.text.split('\n').map((line, li) => {
-                                        // Render **bold** inline
-                                        const rendered = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-                                        if (line.startsWith('- ') || line.startsWith('• ')) {
-                                          return <div key={li} className="flex gap-1.5"><span className="mt-0.5 flex-shrink-0">•</span><span dangerouslySetInnerHTML={{ __html: rendered.replace(/^[-•]\s+/, '') }} /></div>;
-                                        }
-                                        if (!line.trim()) return null;
-                                        return <p key={li} dangerouslySetInnerHTML={{ __html: rendered }} />;
-                                      })}
-                                    </div>
-                                  ) : m.text}
+                                  {m.role === 'assistant'
+                                    ? renderAssistantText(m.text, m.materialReferences)
+                                    : m.text}
                                 </div>
                               </div>
                             ))}
+
+                            {/* Thinking indicator */}
                             {overviewChatLoading && (
-                              <div className="flex justify-start">
-                                <div className="bg-surface-100 rounded-xl px-3 py-2 flex items-center gap-1.5">
-                                  <Loader2 className="w-3 h-3 animate-spin text-surface-400" />
-                                  <span className="text-xs text-surface-400">Thinking...</span>
+                              <div className="flex justify-start items-start gap-2">
+                                <div className="w-6 h-6 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                                  <Sparkles className="w-3 h-3 text-primary-600" />
+                                </div>
+                                <div className="bg-surface-50 border border-surface-200 rounded-2xl rounded-bl-sm px-4 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <Loader2 className="w-3 h-3 animate-spin text-primary-400 flex-shrink-0" />
+                                    <span className="text-xs text-surface-500 italic">{overviewThinkingStep}</span>
+                                  </div>
+                                  <div className="flex gap-1 mt-2">
+                                    {[0,1,2].map(d => (
+                                      <span key={d} className="w-1.5 h-1.5 rounded-full bg-primary-300 animate-bounce" style={{ animationDelay: `${d * 150}ms` }} />
+                                    ))}
+                                  </div>
                                 </div>
                               </div>
                             )}
@@ -1438,7 +1540,7 @@ RULES:
                         )}
 
                         {/* Input */}
-                        <form onSubmit={handleOverviewChat} className="px-4 py-3 flex gap-2">
+                        <form onSubmit={handleOverviewChat} className="px-4 py-3 flex gap-2 items-center">
                           <input
                             type="text"
                             value={overviewChatInput}
@@ -1450,7 +1552,7 @@ RULES:
                           <button
                             type="submit"
                             disabled={!overviewChatInput.trim() || overviewChatLoading}
-                            className="px-4 py-2 bg-primary-500 text-white text-xs font-medium rounded-lg hover:bg-primary-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            className="px-4 py-2 bg-primary-500 text-white text-xs font-medium rounded-lg hover:bg-primary-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
                           >
                             {overviewChatLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Send'}
                           </button>
