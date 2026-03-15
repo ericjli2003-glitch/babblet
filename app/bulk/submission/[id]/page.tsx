@@ -205,6 +205,8 @@ export default function SubmissionDetailPage() {
     feedback: string;
   }>>([]);
   const [annotationsLoading, setAnnotationsLoading] = useState(false);
+  const [topStrengths, setTopStrengths] = useState<string[]>([]);
+  const [topWeaknesses, setTopWeaknesses] = useState<string[]>([]);
   const [expandedAnnotation, setExpandedAnnotation] = useState<string | null>(null);
   const [overviewChatMessages, setOverviewChatMessages] = useState<Array<{ role: 'user' | 'assistant'; text: string }>>([]);
   const [overviewChatInput, setOverviewChatInput] = useState('');
@@ -456,7 +458,11 @@ export default function SubmissionDetailPage() {
       }),
     })
       .then(r => r.json())
-      .then(data => { if (data.annotations) setTranscriptAnnotations(data.annotations); })
+      .then(data => {
+        if (data.annotations) setTranscriptAnnotations(data.annotations);
+        if (data.topStrengths) setTopStrengths(data.topStrengths);
+        if (data.topWeaknesses) setTopWeaknesses(data.topWeaknesses);
+      })
       .catch(() => {})
       .finally(() => setAnnotationsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1147,6 +1153,44 @@ RULES:
                   </div>
 
 
+                  {/* Key Observations — LLM's top picks */}
+                  {(topStrengths.length > 0 || topWeaknesses.length > 0) && (
+                    <div className="bg-white rounded-2xl border border-surface-200 p-5">
+                      <div className="mb-4">
+                        <h3 className="text-sm font-semibold text-surface-900">Key Observations</h3>
+                        <p className="text-xs text-surface-500 mt-0.5">The most noteworthy moments from this presentation, grounded in the rubric and course materials.</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        {topStrengths.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1">
+                              <ThumbsUp className="w-3 h-3" /> Strengths
+                            </p>
+                            {topStrengths.map((s, i) => (
+                              <div key={i} className="flex gap-2.5 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+                                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                                <p className="text-xs text-surface-800 leading-relaxed">{s}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {topWeaknesses.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" /> Areas for Improvement
+                            </p>
+                            {topWeaknesses.map((s, i) => (
+                              <div key={i} className="flex gap-2.5 p-3 bg-amber-50 border border-amber-100 rounded-xl">
+                                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                                <p className="text-xs text-surface-800 leading-relaxed">{s}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Feedback Remarks — positives and areas for improvement with transcript citations */}
                   {(() => {
                     const positives = (rubric?.strengths?.length ? rubric.strengths : []).slice(0, 6);
@@ -1366,7 +1410,19 @@ RULES:
                                     ? 'bg-primary-500 text-white'
                                     : 'bg-surface-100 text-surface-800'
                                 }`}>
-                                  {m.text}
+                                  {m.role === 'assistant' ? (
+                                    <div className="space-y-1.5">
+                                      {m.text.split('\n').map((line, li) => {
+                                        // Render **bold** inline
+                                        const rendered = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+                                        if (line.startsWith('- ') || line.startsWith('• ')) {
+                                          return <div key={li} className="flex gap-1.5"><span className="mt-0.5 flex-shrink-0">•</span><span dangerouslySetInnerHTML={{ __html: rendered.replace(/^[-•]\s+/, '') }} /></div>;
+                                        }
+                                        if (!line.trim()) return null;
+                                        return <p key={li} dangerouslySetInnerHTML={{ __html: rendered }} />;
+                                      })}
+                                    </div>
+                                  ) : m.text}
                                 </div>
                               </div>
                             ))}
