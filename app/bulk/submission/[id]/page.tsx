@@ -206,6 +206,9 @@ export default function SubmissionDetailPage() {
   }>>([]);
   const [annotationsLoading, setAnnotationsLoading] = useState(false);
   const [expandedAnnotation, setExpandedAnnotation] = useState<string | null>(null);
+  const [overviewChatMessages, setOverviewChatMessages] = useState<Array<{ role: 'user' | 'assistant'; text: string }>>([]);
+  const [overviewChatInput, setOverviewChatInput] = useState('');
+  const [overviewChatLoading, setOverviewChatLoading] = useState(false);
   const [branchingQuestionId, setBranchingQuestionId] = useState<string | null>(null);
   const [showMaterialModal, setShowMaterialModal] = useState<{
     name: string;
@@ -448,6 +451,8 @@ export default function SubmissionDetailPage() {
         segments: segs.map(s => ({ timestamp: s.timestamp, text: s.text })),
         strengths: rubric.strengths || [],
         improvements: rubric.improvements || [],
+        courseId: batchInfo?.courseId,
+        rubricCriteria: batchInfo?.rubricCriteria || rubric.criteria?.map((c: { criterion: string }) => c.criterion).join(', '),
       }),
     })
       .then(r => r.json())
@@ -1071,6 +1076,77 @@ RULES:
                     </p>
                 </div>
 
+                  {/* Speech Delivery */}
+                  <div className="bg-white rounded-2xl border border-surface-200 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Mic className="w-4 h-4 text-primary-500" />
+                      <h3 className="text-sm font-semibold text-surface-900">Speech Delivery</h3>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="bg-surface-50 rounded-lg p-3">
+                        <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full mb-1 ${
+                          speechMetrics.fillerWordCount <= 10
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : speechMetrics.fillerWordCount <= 20
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-red-100 text-red-700'
+                        }`}>
+                          {speechMetrics.fillerWordCount <= 10 ? 'Good' : speechMetrics.fillerWordCount <= 20 ? 'Moderate' : 'High'}
+                        </span>
+                        <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.fillerWordCount}</div>
+                        <p className="text-[10px] text-surface-500 mb-0.5">Filler Words</p>
+                        <p className="text-[9px] text-surface-600 leading-tight">
+                          {classSpeechStats?.fillerWordAvg != null ? (
+                            <>Class Avg: <span className="font-medium">{classSpeechStats.fillerWordAvg}</span> — Lower filler use improves clarity.</>
+                          ) : (
+                            <>Lower filler use improves clarity.</>
+                          )}
+                        </p>
+                      </div>
+                      <div className="bg-surface-50 rounded-lg p-3">
+                        <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full mb-1 ${
+                          speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : speechMetrics.speakingRateWpm < 100 || speechMetrics.speakingRateWpm > 200
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180 ? 'Optimal' : speechMetrics.speakingRateWpm < 120 ? 'Slow' : 'Fast'}
+                        </span>
+                        <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.speakingRateWpm}</div>
+                        <p className="text-[10px] text-surface-500 mb-0.5">Words/min</p>
+                        <p className="text-[9px] text-surface-600 leading-tight">
+                          {classSpeechStats?.wpmAvg != null ? (
+                            <>Class Avg: <span className="font-medium">{classSpeechStats.wpmAvg}</span> — Ideal range 120–180 for comprehension.</>
+                          ) : (
+                            <>Ideal range 120–180 for comprehension.</>
+                          )}
+                        </p>
+                      </div>
+                      <div className="bg-surface-50 rounded-lg p-3">
+                        <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full mb-1 ${
+                          speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : speechMetrics.pauseFrequency > 8
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8 ? 'Good' : speechMetrics.pauseFrequency > 8 ? 'High' : 'Low'}
+                        </span>
+                        <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.pauseFrequency.toFixed(1)}</div>
+                        <p className="text-[10px] text-surface-500 mb-0.5">Pauses/min</p>
+                        <p className="text-[9px] text-surface-600 leading-tight">
+                          {classSpeechStats?.pausesPerMinAvg != null ? (
+                            <>Class Avg: <span className="font-medium">{classSpeechStats.pausesPerMinAvg}</span> — Strategic pauses aid emphasis.</>
+                          ) : (
+                            <>Strategic pauses aid emphasis.</>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+
                   {/* Feedback Remarks — positives and areas for improvement with transcript citations */}
                   {(() => {
                     const positives = (rubric?.strengths?.length ? rubric.strengths : []).slice(0, 6);
@@ -1151,76 +1227,6 @@ RULES:
                     );
                   })()}
 
-                  {/* Speech Delivery */}
-                  <div className="bg-white rounded-2xl border border-surface-200 p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Mic className="w-4 h-4 text-primary-500" />
-                      <h3 className="text-sm font-semibold text-surface-900">Speech Delivery</h3>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-center">
-                      <div className="bg-surface-50 rounded-lg p-3">
-                        <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full mb-1 ${
-                          speechMetrics.fillerWordCount <= 10
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : speechMetrics.fillerWordCount <= 20
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-red-100 text-red-700'
-                        }`}>
-                          {speechMetrics.fillerWordCount <= 10 ? 'Good' : speechMetrics.fillerWordCount <= 20 ? 'Moderate' : 'High'}
-                        </span>
-                        <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.fillerWordCount}</div>
-                        <p className="text-[10px] text-surface-500 mb-0.5">Filler Words</p>
-                        <p className="text-[9px] text-surface-600 leading-tight">
-                          {classSpeechStats?.fillerWordAvg != null ? (
-                            <>Class Avg: <span className="font-medium">{classSpeechStats.fillerWordAvg}</span> — Lower filler use improves clarity.</>
-                          ) : (
-                            <>Lower filler use improves clarity.</>
-                          )}
-                        </p>
-                      </div>
-                      <div className="bg-surface-50 rounded-lg p-3">
-                        <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full mb-1 ${
-                          speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : speechMetrics.speakingRateWpm < 100 || speechMetrics.speakingRateWpm > 200
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-amber-100 text-amber-700'
-                        }`}>
-                          {speechMetrics.speakingRateWpm >= 120 && speechMetrics.speakingRateWpm <= 180 ? 'Optimal' : speechMetrics.speakingRateWpm < 120 ? 'Slow' : 'Fast'}
-                        </span>
-                        <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.speakingRateWpm}</div>
-                        <p className="text-[10px] text-surface-500 mb-0.5">Words/min</p>
-                        <p className="text-[9px] text-surface-600 leading-tight">
-                          {classSpeechStats?.wpmAvg != null ? (
-                            <>Class Avg: <span className="font-medium">{classSpeechStats.wpmAvg}</span> — Ideal range 120–180 for comprehension.</>
-                          ) : (
-                            <>Ideal range 120–180 for comprehension.</>
-                          )}
-                        </p>
-                      </div>
-                      <div className="bg-surface-50 rounded-lg p-3">
-                        <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full mb-1 ${
-                          speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : speechMetrics.pauseFrequency > 8
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-amber-100 text-amber-700'
-                        }`}>
-                          {speechMetrics.pauseFrequency >= 3 && speechMetrics.pauseFrequency <= 8 ? 'Good' : speechMetrics.pauseFrequency > 8 ? 'High' : 'Low'}
-                        </span>
-                        <div className="text-2xl font-bold text-surface-900 mb-0.5">{speechMetrics.pauseFrequency.toFixed(1)}</div>
-                        <p className="text-[10px] text-surface-500 mb-0.5">Pauses/min</p>
-                        <p className="text-[9px] text-surface-600 leading-tight">
-                          {classSpeechStats?.pausesPerMinAvg != null ? (
-                            <>Class Avg: <span className="font-medium">{classSpeechStats.pausesPerMinAvg}</span> — Strategic pauses aid emphasis.</>
-                          ) : (
-                            <>Strategic pauses aid emphasis.</>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Annotated Transcript */}
                   <div className="bg-white rounded-2xl border border-surface-200 overflow-hidden">
                     <div className="px-5 py-4 border-b border-surface-100 flex items-center justify-between">
@@ -1259,18 +1265,13 @@ RULES:
                               annotation ? (annotation.type === 'positive' ? 'bg-emerald-50/40' : 'bg-amber-50/40') : 'hover:bg-surface-50/60'
                             }`}
                           >
-                            <div className="flex items-start gap-3">
-                              {/* Timestamp */}
-                              <button
-                                onClick={() => videoPanelRef.current?.seekTo(
-                                  typeof seg.timestamp === 'number' ? seg.timestamp : normalizeTimestamp(seg.timestamp)
-                                )}
-                                className="flex-shrink-0 font-mono text-[10px] text-primary-500 hover:text-primary-700 bg-primary-50 hover:bg-primary-100 px-1.5 py-0.5 rounded mt-0.5 transition-colors"
-                              >
-                                {typeof seg.timestamp === 'string' ? seg.timestamp : seg.timestamp}
-                              </button>
-
-                              {/* Text */}
+                            <div
+                              className="flex items-start gap-3 cursor-pointer"
+                              onClick={() => videoPanelRef.current?.seekTo(
+                                typeof seg.timestamp === 'number' ? seg.timestamp : normalizeTimestamp(seg.timestamp)
+                              )}
+                            >
+                              {/* Text — full row click seeks video */}
                               <p className="flex-1 text-xs text-surface-700 leading-relaxed">{seg.text}</p>
 
                               {/* Annotation circle */}
@@ -1291,7 +1292,7 @@ RULES:
 
                             {/* Expanded feedback */}
                             {annotation && isExpanded && (
-                              <div className={`mt-2 ml-12 p-2.5 rounded-lg text-xs leading-relaxed border ${
+                              <div className={`mt-2 p-2.5 rounded-lg text-xs leading-relaxed border ${
                                 annotation.type === 'positive'
                                   ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
                                   : 'bg-amber-50 border-amber-200 text-amber-800'
@@ -1307,6 +1308,100 @@ RULES:
                       )}
                     </div>
                   </div>
+
+
+                  {/* Overview Chat */}
+                  {(() => {
+                    const handleOverviewChat = async (e: React.FormEvent) => {
+                      e.preventDefault();
+                      const msg = overviewChatInput.trim();
+                      if (!msg || overviewChatLoading) return;
+                      setOverviewChatInput('');
+                      const userMsg = { role: 'user' as const, text: msg };
+                      setOverviewChatMessages(prev => [...prev, userMsg]);
+                      setOverviewChatLoading(true);
+                      try {
+                        const res = await fetch('/api/contextual-chat', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            message: msg,
+                            submissionId,
+                            courseId: batchInfo?.courseId,
+                            assignmentId: batchInfo?.assignmentId,
+                            context: {
+                              sourceType: 'summary',
+                              fullContext: [
+                                batchInfo?.assignmentName ? `Assignment: ${batchInfo.assignmentName}` : '',
+                                batchInfo?.rubricCriteria ? `Rubric:\n${batchInfo.rubricCriteria}` : '',
+                                submission?.transcript ? `Transcript:\n${submission.transcript.slice(0, 4000)}` : '',
+                              ].filter(Boolean).join('\n\n'),
+                            },
+                            conversationHistory: overviewChatMessages.map(m => ({ role: m.role, content: m.text })),
+                          }),
+                        });
+                        const data = await res.json();
+                        const reply = data.response || data.message || 'No response.';
+                        setOverviewChatMessages(prev => [...prev, { role: 'assistant', text: reply }]);
+                      } catch {
+                        setOverviewChatMessages(prev => [...prev, { role: 'assistant', text: 'Something went wrong. Please try again.' }]);
+                      } finally {
+                        setOverviewChatLoading(false);
+                      }
+                    };
+                    return (
+                      <div className="bg-white rounded-2xl border border-surface-200 overflow-hidden">
+                        <div className="px-5 py-4 border-b border-surface-100">
+                          <h3 className="text-sm font-semibold text-surface-900">Ask About This Submission</h3>
+                          <p className="text-xs text-surface-500 mt-0.5">Ask follow-up questions grounded in the rubric, course materials, and transcript.</p>
+                        </div>
+
+                        {/* Message history */}
+                        {overviewChatMessages.length > 0 && (
+                          <div className="px-5 py-3 space-y-3 max-h-72 overflow-y-auto border-b border-surface-100">
+                            {overviewChatMessages.map((m, i) => (
+                              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed ${
+                                  m.role === 'user'
+                                    ? 'bg-primary-500 text-white'
+                                    : 'bg-surface-100 text-surface-800'
+                                }`}>
+                                  {m.text}
+                                </div>
+                              </div>
+                            ))}
+                            {overviewChatLoading && (
+                              <div className="flex justify-start">
+                                <div className="bg-surface-100 rounded-xl px-3 py-2 flex items-center gap-1.5">
+                                  <Loader2 className="w-3 h-3 animate-spin text-surface-400" />
+                                  <span className="text-xs text-surface-400">Thinking...</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Input */}
+                        <form onSubmit={handleOverviewChat} className="px-4 py-3 flex gap-2">
+                          <input
+                            type="text"
+                            value={overviewChatInput}
+                            onChange={e => setOverviewChatInput(e.target.value)}
+                            placeholder="e.g. How well did they address the rubric criteria?"
+                            className="flex-1 px-3 py-2 text-xs border border-surface-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                            disabled={overviewChatLoading}
+                          />
+                          <button
+                            type="submit"
+                            disabled={!overviewChatInput.trim() || overviewChatLoading}
+                            className="px-4 py-2 bg-primary-500 text-white text-xs font-medium rounded-lg hover:bg-primary-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {overviewChatLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Send'}
+                          </button>
+                        </form>
+                      </div>
+                    );
+                  })()}
 
                   {/* Remove old Key Insights and Verification sections - now integrated above */}
                   <div className="hidden grid-cols-2 gap-4">
