@@ -452,7 +452,7 @@ export default function SubmissionDetailPage() {
         strengths: rubric.strengths || [],
         improvements: rubric.improvements || [],
         courseId: batchInfo?.courseId,
-        rubricCriteria: batchInfo?.rubricCriteria || rubric.criteria?.map((c: { criterion: string }) => c.criterion).join(', '),
+        rubricCriteria: batchInfo?.rubricCriteria || rubric.criteriaBreakdown?.map((c: { criterion: string }) => c.criterion).join(', '),
       }),
     })
       .then(r => r.json())
