@@ -89,7 +89,9 @@ function ExpandableVideo({ src, poster, alt }: { src: string; poster: string; al
         style={{ position: 'relative', overflow: 'hidden' }}
         title="Click expand to open fullscreen"
       >
-        <FeatureVideo src={src} poster={poster} alt={alt} />
+        {!expanded ? <FeatureVideo src={src} poster={poster} alt={alt} /> : (
+          <div style={{ width: '100%', aspectRatio: '16/9', background: '#111', backgroundImage: poster ? `url(${poster})` : undefined, backgroundSize: 'cover' }} aria-hidden />
+        )}
         {/* Expand control */}
         <button
           type="button"
@@ -112,45 +114,42 @@ function ExpandableVideo({ src, poster, alt }: { src: string; poster: string; al
         </button>
       </div>
 
-      {/* Lightbox — true full-screen with gray overlay */}
+      {/* Lightbox — video fills entire screen */}
       {expanded && (
         <div
-          style={{
-            position: 'fixed', inset: 0, zIndex: 9999,
-            background: 'rgba(30,30,30,0.92)',
-            display: 'flex', flexDirection: 'column',
-          }}
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#000' }}
           onClick={() => setExpanded(false)}
         >
-          {/* Close button top-right */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '16px 20px', flexShrink: 0 }}>
-            <button
-              onClick={() => setExpanded(false)}
-              style={{
-                background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)',
-                borderRadius: '50%', width: 40, height: 40,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', transition: 'background 0.15s', flexShrink: 0,
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.22)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.12)')}
-            >
-              <X size={18} color="#ffffff" />
-            </button>
-          </div>
-          {/* Video fills remaining space */}
-          <div
-            style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 32px 32px' }}
+          <video
+            src={src}
+            poster={poster}
+            aria-label={alt}
+            autoPlay
+            muted
+            loop
+            playsInline
+            style={{
+              position: 'absolute', inset: 0, width: '100vw', height: '100vh',
+              objectFit: 'contain', pointerEvents: 'none',
+            }}
             onClick={e => e.stopPropagation()}
+          />
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={() => setExpanded(false)}
+            style={{
+              position: 'fixed', top: 16, right: 16, zIndex: 10,
+              background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)',
+              borderRadius: '50%', width: 40, height: 40,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', transition: 'background 0.15s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.22)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.12)')}
           >
-            <video
-              src={src}
-              poster={poster}
-              aria-label={alt}
-              autoPlay muted loop playsInline
-              style={{ width: '100%', maxHeight: 'calc(100vh - 100px)', objectFit: 'contain', borderRadius: 8, background: '#000' }}
-            />
-          </div>
+            <X size={18} color="#ffffff" />
+          </button>
         </div>
       )}
     </>
