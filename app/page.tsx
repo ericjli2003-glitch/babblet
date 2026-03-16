@@ -1,330 +1,300 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
+  BarChart3,
+  Brain,
+  CheckCircle,
+  ClipboardCheck,
+  FileText,
+  MessageSquareText,
+  RefreshCw,
+  ShieldCheck,
   Sparkles,
   Upload,
-  Brain,
-  FileText,
-  Play,
-  CheckCircle,
-  ArrowRight,
+  X,
 } from 'lucide-react';
-import Link from 'next/link';
 import Image from 'next/image';
+import Link from 'next/link';
+
+const ICON_FEATURES = [
+  { icon: Upload, label: 'Bulk Upload', sub: 'Drag & drop an entire class at once.' },
+  { icon: ClipboardCheck, label: 'Rubric Scoring', sub: 'Scored against your criteria automatically.' },
+  { icon: FileText, label: 'Instant Reports', sub: 'Strengths, improvements, and summaries.' },
+  { icon: BarChart3, label: 'Speech Metrics', sub: 'Pace, filler words, and pause analysis.' },
+  { icon: ShieldCheck, label: 'Verification', sub: 'Integrity and accuracy signals built in.' },
+  { icon: RefreshCw, label: 'Re-grading', sub: 'Re-grade with full version history.' },
+  { icon: MessageSquareText, label: 'AI Assistant', sub: 'Ask questions about any highlighted text.' },
+  { icon: Brain, label: 'Content Alignment', sub: 'Match depth and terminology to your goals.' },
+];
+
+const SHOWCASE_FEATURES = [
+  {
+    title: 'AI-Generated Follow-Up Questions',
+    description:
+      'Babblet automatically generates targeted follow-up questions based on each student\'s transcript. Questions are categorized by cognitive level — from evidence requests to counterarguments — and linked directly to specific moments in the presentation so instructors can probe deeper where it matters most.',
+    image: '/features/feature-questions.png',
+    alt: 'Follow-up questions interface showing categorized questions with branch functionality',
+  },
+  {
+    title: 'Performance Overview & Insights',
+    description:
+      'Get a high-level snapshot of every submission at a glance. The overview surfaces an overall performance score, sentiment analysis, speech delivery metrics like word count and pace, and AI-identified spotlight moments — the key turning points that defined the student\'s presentation.',
+    image: '/features/feature-overview.png',
+    alt: 'Submission overview showing performance score, speech metrics, and evidence mapping',
+  },
+  {
+    title: 'Criterion-Level Rubric Grading',
+    description:
+      'Each submission is evaluated against your exact rubric criteria with per-criterion scores, detailed feedback, and Babblet Insights that explain what worked, what didn\'t, and why. Instructors can review, adjust, and finalize grades with full transparency into how each score was determined.',
+    image: '/features/feature-rubric.png',
+    alt: 'Grading rubric interface with per-criterion scoring and AI-generated insights',
+  },
+];
 
 export default function HomePage() {
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
+
   return (
-    <div className="min-h-screen bg-white">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-sky-50 via-white to-white">
+      {/* Decorative blobs */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-32 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-sky-200/50 blur-3xl" />
+        <div className="absolute top-40 -left-40 h-[400px] w-[400px] rounded-full bg-cyan-200/40 blur-3xl" />
+        <div className="absolute top-64 -right-40 h-[400px] w-[400px] rounded-full bg-blue-200/30 blur-3xl" />
+      </div>
+
       {/* Header */}
-      <header className="border-b border-surface-100">
+      <header className="sticky top-0 z-40 border-b border-surface-100/70 bg-white/70 backdrop-blur">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex items-center justify-between h-16">
-            {/* Logo */}
-            <div className="flex items-center gap-2">
+            <Link href="/" className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
               <span className="text-xl font-semibold text-surface-900">Babblet</span>
-            </div>
-
-            {/* Nav Links */}
+            </Link>
             <div className="hidden md:flex items-center gap-8">
-              <a href="#features" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">
-                Features
-              </a>
-              <a href="#pricing" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">
-                Pricing
-              </a>
-              <a href="#about" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">
-                About
-              </a>
+              <a href="#features" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">Features</a>
+              <Link href="/about" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">About</Link>
+              <Link href="/contact" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">Contact</Link>
             </div>
-
-            {/* Auth Buttons */}
             <div className="flex items-center gap-4">
-              <Link
-                href="/courses"
-                className="px-4 py-2 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
-              >
-                Sign Up
-              </Link>
-              <Link
-                href="/courses"
-                className="text-sm text-surface-600 hover:text-surface-900 transition-colors"
-              >
-                Login
-              </Link>
+              <Link href="/login" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">Login</Link>
             </div>
           </nav>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="py-16 lg:py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            {/* Left Content */}
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6 }}
-            >
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-surface-900 leading-tight mb-6">
-                Grade Student Presentations at Scale with Babblet
-              </h1>
-              <p className="text-lg text-surface-600 mb-8 leading-relaxed">
-                Ensure grading consistency and save hours of manual work. Upload videos in bulk and receive instant, actionable reports for every student based on your custom rubrics.
-              </p>
-              <div className="flex flex-wrap gap-4">
-                <Link
-                  href="/courses"
-                  className="inline-flex items-center px-6 py-3 text-base font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors shadow-soft hover:shadow-glow"
-                >
-                  Get Started for Free
-                </Link>
-                <button
-                  className="inline-flex items-center gap-2 px-6 py-3 text-base font-medium text-surface-700 bg-white border border-surface-300 hover:border-surface-400 rounded-lg transition-colors"
-                >
-                  <Play className="w-4 h-4" />
-                  Watch Demo
-                </button>
-              </div>
-            </motion.div>
-
-            {/* Right Content - App Preview */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="relative"
-            >
-              <div className="bg-surface-50 rounded-2xl border border-surface-200 shadow-soft-lg p-4 lg:p-6">
-                {/* Mock App Interface */}
-                <div className="bg-white rounded-xl border border-surface-200 overflow-hidden">
-                  {/* Mock Header */}
-                  <div className="flex items-center gap-2 px-4 py-3 border-b border-surface-100">
-                    <div className="w-3 h-3 rounded-full bg-red-400"></div>
-                    <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
-                    <div className="w-3 h-3 rounded-full bg-green-400"></div>
-                    <div className="ml-4 flex-1 h-6 bg-surface-100 rounded-md"></div>
-                  </div>
-                  {/* Mock Content */}
-                  <div className="p-4 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center">
-                        <FileText className="w-5 h-5 text-primary-600" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="h-4 bg-surface-200 rounded w-3/4 mb-2"></div>
-                        <div className="h-3 bg-surface-100 rounded w-1/2"></div>
-                      </div>
-                      <div className="flex items-center gap-1 px-2 py-1 bg-emerald-100 rounded-full">
-                        <CheckCircle className="w-3 h-3 text-emerald-600" />
-                        <span className="text-xs text-emerald-700 font-medium">Complete</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center">
-                        <FileText className="w-5 h-5 text-primary-600" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="h-4 bg-surface-200 rounded w-2/3 mb-2"></div>
-                        <div className="h-3 bg-surface-100 rounded w-2/5"></div>
-                      </div>
-                      <div className="flex items-center gap-1 px-2 py-1 bg-emerald-100 rounded-full">
-                        <CheckCircle className="w-3 h-3 text-emerald-600" />
-                        <span className="text-xs text-emerald-700 font-medium">Complete</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center">
-                        <FileText className="w-5 h-5 text-primary-600" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="h-4 bg-surface-200 rounded w-4/5 mb-2"></div>
-                        <div className="h-3 bg-surface-100 rounded w-1/3"></div>
-                      </div>
-                      <div className="flex items-center gap-1 px-2 py-1 bg-blue-100 rounded-full">
-                        <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                        <span className="text-xs text-blue-700 font-medium">Processing</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* Social Proof */}
-      <section className="py-12 border-y border-surface-100 bg-surface-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-xs font-medium text-surface-500 tracking-widest uppercase mb-8">
-            Trusted by Educators Worldwide
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-8 md:gap-16">
-            <div className="text-center">
-              <span className="text-3xl font-bold text-primary-600">500+</span>
-              <p className="text-sm text-surface-500">Instructors</p>
-            </div>
-            <div className="text-center">
-              <span className="text-3xl font-bold text-primary-600">50K+</span>
-              <p className="text-sm text-surface-500">Videos Graded</p>
-            </div>
-            <div className="text-center">
-              <span className="text-3xl font-bold text-primary-600">98%</span>
-              <p className="text-sm text-surface-500">Time Saved</p>
-            </div>
-            <div className="text-center">
-              <span className="text-3xl font-bold text-primary-600">4.9/5</span>
-              <p className="text-sm text-surface-500">User Rating</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section id="features" className="py-20 lg:py-28">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-3xl sm:text-4xl font-bold text-surface-900 mb-4">
-              How Babblet Transforms Your Grading
-            </h2>
-            <p className="text-lg text-surface-600 max-w-2xl mx-auto">
-              Three simple steps to move from manual video review to automated, insightful feedback.
-            </p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
-            {/* Step 1 */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-              className="text-center"
-            >
-              <div className="w-16 h-16 rounded-2xl bg-primary-100 flex items-center justify-center mx-auto mb-6">
-                <Upload className="w-8 h-8 text-primary-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-surface-900 mb-3">1. Bulk Upload</h3>
-              <p className="text-surface-600 leading-relaxed">
-                Securely drag and drop entire class presentation recordings. We support all major formats and LMS integrations.
-              </p>
-            </motion.div>
-
-            {/* Step 2 */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="text-center"
-            >
-              <div className="w-16 h-16 rounded-2xl bg-primary-100 flex items-center justify-center mx-auto mb-6">
-                <Brain className="w-8 h-8 text-primary-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-surface-900 mb-3">2. Babblet Analysis</h3>
-              <p className="text-surface-600 leading-relaxed">
-                Babblet evaluates speech patterns, tone, slide content, and key arguments against your specific grading rubric.
-              </p>
-            </motion.div>
-
-            {/* Step 3 */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: 0.3 }}
-              className="text-center"
-            >
-              <div className="w-16 h-16 rounded-2xl bg-primary-100 flex items-center justify-center mx-auto mb-6">
-                <FileText className="w-8 h-8 text-primary-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-surface-900 mb-3">3. Instant Reports</h3>
-              <p className="text-surface-600 leading-relaxed">
-                Generate detailed feedback cards and summary reports. Send directly to your gradebook with a single click.
-              </p>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-20 bg-gradient-primary">
+      {/* Hero */}
+      <section className="py-20 lg:py-32">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-              Ready to reclaim your grading hours?
-            </h2>
-            <p className="text-lg text-white/80 mb-8 max-w-2xl mx-auto">
-              Join over 500+ instructors who are using Babblet to provide more objective and faster feedback to their students.
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold text-surface-900 leading-[1.1] tracking-tight">
+              Grade presentations<br />at scale
+            </h1>
+            <p className="mt-6 text-xl text-surface-500 max-w-2xl mx-auto">
+              Upload. Evaluate. Feedback. Done.
             </p>
-            <div className="flex flex-wrap justify-center gap-4">
+            <div className="mt-10 flex justify-center gap-4">
               <Link
-                href="/courses"
-                className="inline-flex items-center px-6 py-3 text-base font-medium text-primary-600 bg-white hover:bg-surface-50 rounded-lg transition-colors shadow-soft"
-              >
-                Create Free Account
-              </Link>
-              <a
-                href="mailto:eric@babblet.io"
-                className="inline-flex items-center px-6 py-3 text-base font-medium text-white border border-white/30 hover:bg-white/10 rounded-lg transition-colors"
+                href="/contact"
+                className="px-8 py-3.5 text-base font-medium text-surface-700 bg-white/80 border border-surface-200 hover:border-surface-300 rounded-xl transition-colors shadow-soft"
               >
                 Talk to Sales
-              </a>
+              </Link>
             </div>
           </motion.div>
+        </div>
+      </section>
+
+      {/* Feature Icons Row */}
+      <section className="py-16">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {ICON_FEATURES.map((f, i) => (
+              <motion.div
+                key={f.label}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.3, delay: i * 0.05 }}
+                className="flex flex-col items-center gap-3 rounded-2xl border border-surface-200 bg-white/70 backdrop-blur p-6 shadow-soft hover:shadow-soft-lg transition-shadow"
+              >
+                <div className="w-12 h-12 rounded-xl bg-primary-50 border border-primary-100 flex items-center justify-center">
+                  <f.icon className="w-6 h-6 text-primary-700" />
+                </div>
+                <span className="text-sm font-semibold text-surface-900 text-center">{f.label}</span>
+                <span className="text-xs text-surface-500 text-center leading-snug">{f.sub}</span>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ====== Feature Showcase ====== */}
+      <section id="features" className="py-24 relative">
+        {/* Section background accent */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full bg-sky-100/40 blur-3xl" />
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="text-center mb-20"
+          >
+            <h2 className="text-4xl sm:text-5xl font-bold text-surface-900 tracking-tight">
+              See it in action
+            </h2>
+            <p className="mt-4 text-lg text-surface-500 max-w-2xl mx-auto">
+              From AI-powered questions to rubric-aligned grading, every feature is designed to save you time and give students better feedback.
+            </p>
+          </motion.div>
+
+          <div className="space-y-20 max-w-3xl mx-auto">
+            {SHOWCASE_FEATURES.map((feature, idx) => (
+              <motion.div
+                key={feature.title}
+                initial={{ opacity: 0, y: 40 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '-100px' }}
+                transition={{ duration: 0.6, delay: 0.1 }}
+                className="flex flex-col gap-8 items-center text-center"
+              >
+                {/* Text */}
+                <div>
+                  <div className="flex items-center justify-center gap-3 mb-4">
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-sky-500 text-white text-sm font-bold shadow-sm">
+                      {idx + 1}
+                    </span>
+                    <div className="h-px flex-1 max-w-12 bg-gradient-to-r from-sky-200 to-transparent" />
+                    <div className="h-px flex-1 max-w-12 bg-gradient-to-l from-sky-200 to-transparent" />
+                  </div>
+                  <h3 className="text-2xl sm:text-3xl font-bold text-surface-900 leading-snug">
+                    {feature.title}
+                  </h3>
+                  <p className="mt-4 text-base text-surface-500 leading-relaxed">
+                    {feature.description}
+                  </p>
+                </div>
+
+                {/* Image - clickable to expand */}
+                <button
+                  type="button"
+                  onClick={() => setExpandedImage(feature.image)}
+                  className="w-full max-w-2xl flex-shrink-0 cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 rounded-2xl overflow-hidden"
+                >
+                  <div className="relative rounded-2xl overflow-hidden border border-surface-200 shadow-xl bg-white hover:shadow-2xl transition-shadow">
+                    <div className="absolute inset-0 bg-gradient-to-tr from-sky-50/50 via-transparent to-blue-50/30 pointer-events-none z-10 rounded-2xl" />
+                    <Image
+                      src={feature.image}
+                      alt={feature.alt}
+                      width={1200}
+                      height={750}
+                      className="w-full h-auto"
+                      quality={95}
+                      priority={idx === 0}
+                    />
+                  </div>
+                </button>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Expandable image modal */}
+          <AnimatePresence>
+            {expandedImage && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+                onClick={() => setExpandedImage(null)}
+              >
+                <motion.button
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setExpandedImage(null)}
+                  className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-6 h-6" />
+                </motion.button>
+                <motion.div
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.95, opacity: 0 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="relative max-w-5xl w-full"
+                >
+                  <Image
+                    src={expandedImage}
+                    alt="Expanded view"
+                    width={1200}
+                    height={750}
+                    className="w-full h-auto rounded-lg shadow-2xl"
+                    quality={100}
+                  />
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </section>
+
+      {/* How It Works - 3 steps */}
+      <section className="py-16">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-3xl font-bold text-surface-900 text-center mb-10">How it works</h2>
+          <div className="grid sm:grid-cols-3 gap-6">
+            {[
+              { n: '1', icon: Upload, title: 'Upload', sub: 'Drag & drop a batch of videos.' },
+              { n: '2', icon: Brain, title: 'Analyze', sub: 'Rubric scoring + speech metrics.' },
+              { n: '3', icon: RefreshCw, title: 'Review', sub: 'Feedback, re-grade, repeat.' },
+            ].map((s) => (
+              <div key={s.n} className="relative rounded-2xl border border-surface-200 bg-white/70 backdrop-blur p-6 shadow-soft text-center">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-7 h-7 rounded-full bg-sky-500 text-white text-xs font-bold flex items-center justify-center shadow-soft">
+                  {s.n}
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-sky-50 border border-sky-100 flex items-center justify-center mx-auto mt-2 mb-3">
+                  <s.icon className="w-6 h-6 text-sky-700" />
+                </div>
+                <div className="text-base font-semibold text-surface-900">{s.title}</div>
+                <div className="mt-1 text-sm text-surface-500">{s.sub}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="py-20 bg-gradient-to-r from-sky-500 to-cyan-500">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">Reclaim your grading hours</h2>
+          <div className="mt-8 flex justify-center gap-4">
+            <Link href="/contact" className="px-8 py-3.5 text-base font-medium text-white border border-white/30 hover:bg-white/10 rounded-xl transition-colors">
+              Talk to Sales
+            </Link>
+          </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="py-12 border-t border-surface-200 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div>
-            {/* Logo & Description */}
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-white" />
-              </div>
-              <span className="text-xl font-semibold text-surface-900">Babblet</span>
+      <footer className="py-10 border-t border-surface-200 bg-white/70 backdrop-blur">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-gradient-primary flex items-center justify-center">
+              <Sparkles className="w-3.5 h-3.5 text-white" />
             </div>
-            <p className="text-sm text-surface-600 leading-relaxed max-w-md">
-              Modern grading solutions for modern educators. Enabling faster, more consistent feedback.
-            </p>
+            <span className="text-lg font-semibold text-surface-900">Babblet</span>
           </div>
-
-          {/* Bottom Bar */}
-          <div className="mt-12 pt-8 border-t border-surface-200 flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-sm text-surface-500">
-              © 2024 Babblet Inc. All rights reserved.
-            </p>
-            <div className="flex items-center gap-4">
-              {/* Social Icons */}
-              <a href="#" className="w-8 h-8 rounded-full bg-surface-100 flex items-center justify-center text-surface-500 hover:text-primary-600 hover:bg-primary-50 transition-colors">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M24 4.557c-.883.392-1.832.656-2.828.775 1.017-.609 1.798-1.574 2.165-2.724-.951.564-2.005.974-3.127 1.195-.897-.957-2.178-1.555-3.594-1.555-3.179 0-5.515 2.966-4.797 6.045-4.091-.205-7.719-2.165-10.148-5.144-1.29 2.213-.669 5.108 1.523 6.574-.806-.026-1.566-.247-2.229-.616-.054 2.281 1.581 4.415 3.949 4.89-.693.188-1.452.232-2.224.084.626 1.956 2.444 3.379 4.6 3.419-2.07 1.623-4.678 2.348-7.29 2.04 2.179 1.397 4.768 2.212 7.548 2.212 9.142 0 14.307-7.721 13.995-14.646.962-.695 1.797-1.562 2.457-2.549z"/></svg>
-              </a>
-              <a href="#" className="w-8 h-8 rounded-full bg-surface-100 flex items-center justify-center text-surface-500 hover:text-primary-600 hover:bg-primary-50 transition-colors">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
-              </a>
-              <a href="#" className="w-8 h-8 rounded-full bg-surface-100 flex items-center justify-center text-surface-500 hover:text-primary-600 hover:bg-primary-50 transition-colors">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-              </a>
-            </div>
-          </div>
+          <p className="text-xs text-surface-500">© 2026 Babblet Inc. All rights reserved.</p>
         </div>
       </footer>
     </div>
