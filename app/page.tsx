@@ -1,21 +1,17 @@
 'use client';
 
-import { Fragment, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles } from 'lucide-react';
-import Image from 'next/image';
+import {
+  ArrowRight, Star,
+  BookOpen, MessageSquare, BarChart3, Award,
+  Upload, Zap, CheckSquare, Send,
+} from 'lucide-react';
 import Link from 'next/link';
 
-/**
- * Video that reliably autoplays in Chrome.
- *
- * React has a long-standing bug where it sets the HTML `muted` *attribute*
- * (via `defaultMuted`) but never the DOM `.muted` *property*. Chrome's
- * autoplay policy checks the **property**, sees it as `false`, and blocks
- * playback.  We bypass React entirely by creating the <video> element
- * with the native DOM API so `.muted = true` is set before the browser
- * ever evaluates autoplay.
- */
+/* ─────────────────────────────────────────────────────────────────────────────
+   FeatureVideo — unchanged from original (Chrome muted-property fix)
+───────────────────────────────────────────────────────────────────────────── */
 function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -23,41 +19,32 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
     const container = containerRef.current;
     if (!container) return;
 
-    // Build the <video> element outside of React
     const video = document.createElement('video');
     video.src = src;
-    video.muted = true;           // DOM property — the one Chrome actually checks
-    video.defaultMuted = true;    // HTML attribute mirror
+    video.muted = true;
+    video.defaultMuted = true;
     video.loop = true;
     video.playsInline = true;
     video.autoplay = true;
     video.preload = 'auto';
     video.className = 'w-full h-auto block';
-    video.setAttribute('playsinline', '');   // iOS Safari needs the attribute too
+    video.setAttribute('playsinline', '');
     video.setAttribute('webkit-playsinline', '');
     if (poster) video.poster = poster;
     if (alt) video.setAttribute('aria-label', alt);
-
     container.appendChild(video);
 
-    // Retry helper
-    const tryPlay = () => {
-      if (video.paused) video.play().catch(() => {});
-    };
-
-    // Play as soon as enough data is buffered
+    const tryPlay = () => { if (video.paused) video.play().catch(() => {}); };
     video.addEventListener('canplay', tryPlay);
 
-    // Play when any part of the video enters (or is about to enter) the viewport
     const observer = new IntersectionObserver(
       (entries) => { if (entries[0]?.isIntersecting) tryPlay(); },
       { threshold: 0, rootMargin: '200px' },
     );
     observer.observe(video);
 
-    // Fallback: play on first user gesture
     const onGesture = () => {
-      document.querySelectorAll('video').forEach((v) => {
+      document.querySelectorAll('video').forEach(v => {
         if (v.paused && v.muted) v.play().catch(() => {});
       });
     };
@@ -65,7 +52,6 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
     window.addEventListener('click', onGesture, { once: true });
     window.addEventListener('touchstart', onGesture, { once: true, passive: true });
 
-    // Extra delayed attempt
     const t = setTimeout(tryPlay, 800);
 
     return () => {
@@ -74,7 +60,7 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
       video.removeEventListener('canplay', tryPlay);
       video.pause();
       video.removeAttribute('src');
-      video.load();                // release network resources
+      video.load();
       container.removeChild(video);
     };
   }, [src, poster, alt]);
@@ -82,258 +68,355 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
   return <div ref={containerRef} className="w-full" />;
 }
 
-/** Curvy dashed "bee-flight" connector between feature blocks */
-const BEE_PATHS = {
-  rightToLeft: [
-    'M 600,5 C 615,30 580,55 540,58',
-    'C 500,61 475,38 435,52',
-    'C 395,66 365,88 320,92',
-    'C 275,96 250,78 210,95',
-  ].join(' '),
-  leftToRight: [
-    'M 200,5 C 185,30 220,55 260,58',
-    'C 300,61 325,38 365,52',
-    'C 405,66 435,88 480,92',
-    'C 525,96 550,78 590,95',
-  ].join(' '),
-};
-
-function BeePathConnector({ direction }: { direction: 'rightToLeft' | 'leftToRight' }) {
-  return (
-    <div className="hidden md:block py-4" aria-hidden>
-      <motion.svg
-        viewBox="0 0 800 100"
-        className="w-full h-24"
-        fill="none"
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <motion.path
-          d={BEE_PATHS[direction]}
-          stroke="#1e293b"
-          strokeWidth="1.5"
-          strokeDasharray="20 10"
-          strokeLinecap="round"
-          fill="none"
-          initial={{ pathLength: 0 }}
-          whileInView={{ pathLength: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 1.2, ease: 'easeInOut' }}
-        />
-      </motion.svg>
-    </div>
-  );
-}
-
+/* ─────────────────────────────────────────────────────────────────────────────
+   Feature data — original videos + order preserved, icons/nums added
+───────────────────────────────────────────────────────────────────────────── */
 const SHOWCASE_FEATURES = [
   {
+    num: '01', icon: BookOpen,
     title: 'Course & Assignment Setup',
-    description:
-      'Create courses, attach rubrics, and upload student videos in just a few clicks. Babblet handles transcription, analysis, and scoring automatically so you can focus on the feedback that matters.',
+    description: 'Create courses, attach rubrics, and upload student videos in just a few clicks. Babblet handles transcription, analysis, and scoring automatically so you can focus on the feedback that matters.',
     image: '/features/feature-courses.png',
     video: '/features/feature-courses.mp4',
     alt: 'Creating a course and setting up an assignment with rubric and video uploads',
   },
   {
+    num: '02', icon: MessageSquare,
     title: 'Targeted Follow-Up Questions',
-    description:
-      'Babblet automatically generates targeted follow-up questions based on each student\'s transcript. Questions are categorized by cognitive level, from evidence requests to counterarguments, and linked directly to specific moments in the presentation so instructors can probe deeper where it matters most.',
+    description: "Babblet automatically generates targeted follow-up questions based on each student's transcript. Questions are categorized by cognitive level and linked directly to specific moments in the presentation.",
     image: '/features/feature-questions.png',
     video: '/features/feature-questions.mp4',
     alt: 'Follow-up questions interface showing categorized questions with branch functionality',
   },
   {
+    num: '03', icon: BarChart3,
     title: 'Performance Overview & Insights',
-    description:
-      'Get a high-level snapshot of every submission at a glance. The overview surfaces an overall performance score, sentiment analysis, speech delivery metrics like word count and pace, and Babblet-identified spotlight moments that capture the key turning points in each student\'s presentation.',
+    description: "Get a high-level snapshot of every submission at a glance. The overview surfaces performance scores, sentiment analysis, speech delivery metrics, and Babblet-identified spotlight moments.",
     image: '/features/feature-overview.png',
     video: '/features/feature-overview.mp4',
     alt: 'Submission overview showing performance score, speech metrics, and evidence mapping',
   },
   {
+    num: '04', icon: Award,
     title: 'Criterion-Level Rubric Grading',
-    description:
-      'Each submission is evaluated against your exact rubric criteria with per-criterion scores, detailed feedback, and Babblet Insights that explain what worked, what didn\'t, and why. Instructors can review, adjust, and finalize grades with full transparency into how each score was determined.',
+    description: "Each submission is evaluated against your exact rubric criteria with per-criterion scores, detailed feedback, and Babblet Insights that explain what worked, what didn't, and why.",
     image: '/features/feature-rubric.png',
     video: '/features/feature-rubric.mp4',
     alt: 'Grading rubric interface with per-criterion scoring and Babblet-generated insights',
   },
 ];
 
+const HOW_IT_WORKS = [
+  { num: '01', icon: Upload,       title: 'Upload rubric & student videos',    desc: 'Add your grading rubric and upload student presentation videos in any format.' },
+  { num: '02', icon: Zap,          title: 'Babblet transcribes & analyzes',    desc: 'Our agentic AI transcribes presentations and evaluates every criterion automatically.' },
+  { num: '03', icon: CheckSquare,  title: 'Review grades & feedback',          desc: 'Inspect per-criterion scores, transcript citations, and AI-generated insights.' },
+  { num: '04', icon: Send,         title: 'Deliver to students',               desc: 'Export polished feedback reports and finalize grades with a single click.' },
+];
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Shared motion preset
+───────────────────────────────────────────────────────────────────────────── */
+const fadeUp = (delay = 0) => ({
+  initial: { opacity: 0, y: 28 },
+  whileInView: { opacity: 1, y: 0 },
+  viewport: { once: true, margin: '-60px' },
+  transition: { duration: 0.55, ease: 'easeOut', delay },
+});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Inline styles using CSS variables
+───────────────────────────────────────────────────────────────────────────── */
+const S = {
+  serif:   { fontFamily: 'var(--font-instrument-serif), Georgia, serif' },
+  sans:    { fontFamily: 'var(--font-dm-sans), system-ui, sans-serif' },
+  forest:  { color: 'var(--bab-forest)' },
+  gold:    { color: 'var(--bab-gold)' },
+  parch:   { color: 'var(--bab-parchment)' },
+  border:  { border: '1px solid var(--bab-border)' },
+} as const;
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Page
+───────────────────────────────────────────────────────────────────────────── */
 export default function HomePage() {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-sky-50 via-white to-white">
-      {/* Decorative blobs */}
-      <div aria-hidden className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-32 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-sky-200/50 blur-3xl" />
-        <div className="absolute top-40 -left-40 h-[400px] w-[400px] rounded-full bg-cyan-200/40 blur-3xl" />
-        <div className="absolute top-64 -right-40 h-[400px] w-[400px] rounded-full bg-blue-200/30 blur-3xl" />
-      </div>
+    <div style={{ background: 'var(--bab-parchment)', ...S.sans }}>
 
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-surface-100/70 bg-white/70 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex items-center justify-between h-16">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-white" />
-              </div>
-              <span className="font-display text-xl font-semibold text-surface-900">Babblet</span>
-            </Link>
-            <div className="hidden md:flex items-center gap-8">
-              <a href="#features" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">Features</a>
-              <Link href="/about" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">About</Link>
-              <Link href="/contact" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">Contact</Link>
-            </div>
-            <div className="flex items-center gap-4">
-              <Link href="/login" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">Login</Link>
-            </div>
+      {/* ═══════════════════════════════════════════════════════════════════
+          NAVBAR
+      ═════════════════════════════════════════════════════════════════════ */}
+      <header style={{ background: 'var(--bab-parchment)', borderBottom: '1px solid var(--bab-border)', position: 'sticky', top: 0, zIndex: 50 }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* Logo */}
+          <Link href="/" style={{ textDecoration: 'none' }}>
+            <span style={{ ...S.serif, ...S.forest, fontSize: '1.375rem', fontWeight: 400 }}>Babblet</span>
+          </Link>
+
+          {/* Nav links */}
+          <nav style={{ display: 'flex', gap: 32, alignItems: 'center' }} className="hidden md:flex">
+            {[['Features', '#features'], ['About', '/about'], ['Contact', '/contact']].map(([label, href]) => (
+              <Link key={label} href={href}
+                style={{ ...S.forest, ...S.sans, fontSize: '0.875rem', fontWeight: 400, opacity: 0.6, textDecoration: 'none', transition: 'opacity 0.15s' }}
+                onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}>
+                {label}
+              </Link>
+            ))}
           </nav>
+
+          {/* CTA */}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <Link href="/login"
+              style={{ ...S.forest, ...S.sans, fontSize: '0.875rem', fontWeight: 500, borderRadius: 4, padding: '7px 16px', textDecoration: 'none', border: '1px solid var(--bab-border)', transition: 'background 0.15s' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.7)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+              Login
+            </Link>
+            <Link href="/contact"
+              style={{ ...S.parch, ...S.sans, background: 'var(--bab-forest)', fontSize: '0.875rem', fontWeight: 600, borderRadius: 4, padding: '8px 18px', textDecoration: 'none', transition: 'opacity 0.15s' }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = '0.88')}
+              onMouseLeave={e => (e.currentTarget.style.opacity = '1')}>
+              Book a Demo
+            </Link>
+          </div>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="py-20 lg:py-32">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-            <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl font-bold text-surface-900 leading-[1.1] tracking-tight">
-              Grade presentations at scale.
+      {/* ═══════════════════════════════════════════════════════════════════
+          HERO
+      ═════════════════════════════════════════════════════════════════════ */}
+      <section style={{ maxWidth: 1200, margin: '0 auto', padding: '80px 24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 56, alignItems: 'center' }} className="grid-cols-1 md:grid-cols-2">
+
+          {/* LEFT */}
+          <motion.div {...fadeUp(0)} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {/* Gold badge */}
+            <div style={{ display: 'inline-flex', alignSelf: 'flex-start', alignItems: 'center', gap: 8, background: 'rgba(196,137,42,0.1)', border: '1px solid rgba(196,137,42,0.28)', borderRadius: 999, padding: '5px 14px' }}>
+              <span style={{ ...S.gold, ...S.sans, fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+                Agentic AI for Education
+              </span>
+            </div>
+
+            {/* H1 */}
+            <h1 style={{ ...S.serif, ...S.forest, fontSize: 'clamp(2.5rem, 5vw, 3.75rem)', lineHeight: 1.08, fontWeight: 400, margin: 0 }}>
+              Grade presentations<br />
+              <em style={{ fontStyle: 'italic' }}>at scale.</em>
             </h1>
-            <p className="font-display mt-6 text-xl text-surface-500 max-w-2xl mx-auto">
-              Deliver feedback for hundreds in the time it used to take one.
+
+            {/* Tagline */}
+            <p style={{ ...S.sans, ...S.forest, fontSize: '1.125rem', lineHeight: 1.6, margin: 0, opacity: 0.62 }}>
+              Power your programs with Agentic workflows.
             </p>
-            <div className="mt-10 flex justify-center gap-4">
-              <Link
-                href="/contact"
-                className="px-8 py-3.5 text-base font-medium text-surface-700 bg-white/80 border border-surface-200 hover:border-surface-300 rounded-xl transition-colors shadow-soft"
-              >
+
+            {/* Subline */}
+            <p style={{ ...S.sans, ...S.forest, fontSize: '1rem', fontWeight: 700, lineHeight: 1.5, margin: 0 }}>
+              The TA your faculty need to scale learning.
+            </p>
+
+            {/* CTA buttons */}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Link href="/contact"
+                style={{ ...S.parch, ...S.sans, background: 'var(--bab-forest)', fontWeight: 600, fontSize: '0.9375rem', borderRadius: 4, padding: '12px 26px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(26,58,42,0.22)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}>
                 Book a Demo
               </Link>
+              <a href="#features"
+                style={{ ...S.forest, ...S.sans, fontWeight: 500, fontSize: '0.9375rem', border: '1.5px solid var(--bab-border)', borderRadius: 4, padding: '11px 26px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, transition: 'all 0.2s' }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = 'rgba(255,255,255,0.7)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.background = ''; }}>
+                See it in action <ArrowRight size={14} />
+              </a>
+            </div>
+
+            {/* Trust row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 4 }}>
+              <div style={{ display: 'flex', gap: 2 }}>
+                {[...Array(5)].map((_, i) => <Star key={i} size={13} fill="var(--bab-gold)" color="var(--bab-gold)" />)}
+              </div>
+              <p style={{ ...S.sans, ...S.forest, fontSize: '0.8rem', margin: 0, opacity: 0.6 }}>
+                Trusted by leading universities &amp; business schools
+              </p>
+            </div>
+          </motion.div>
+
+          {/* RIGHT — feature-courses demo video */}
+          <motion.div {...fadeUp(0.15)}>
+            <div style={{ background: 'var(--bab-white)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(26,58,42,0.07), 0 24px 64px -12px rgba(26,58,42,0.18)', border: '1px solid var(--bab-border)' }}>
+              {/* Browser chrome */}
+              <div style={{ background: 'var(--bab-parchment)', borderBottom: '1px solid var(--bab-border)', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {['#F07070', '#F5C062', '#6BBD6B'].map(c => (
+                  <span key={c} style={{ width: 10, height: 10, borderRadius: '50%', background: c, display: 'block', flexShrink: 0 }} />
+                ))}
+                <span style={{ ...S.sans, ...S.forest, flex: 1, textAlign: 'center', fontSize: '0.725rem', opacity: 0.45, fontWeight: 500 }}>
+                  app.babblet.io
+                </span>
+              </div>
+              <FeatureVideo
+                src="/features/feature-courses.mp4"
+                poster="/features/feature-courses.png"
+                alt="Babblet product demo — course and assignment setup"
+              />
             </div>
           </motion.div>
         </div>
       </section>
 
-      {/* ====== Feature Showcase ====== */}
-      <section id="features" className="py-24 relative">
-        {/* Section background accent */}
-        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full bg-sky-100/40 blur-3xl" />
-        </div>
+      {/* ═══════════════════════════════════════════════════════════════════
+          FEATURES  (white bg, 2×2 grid)
+      ═════════════════════════════════════════════════════════════════════ */}
+      <section id="features" style={{ background: 'var(--bab-white)', padding: '96px 0' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
 
-        <div className="max-w-[1220px] mx-auto px-4 sm:px-6 lg:px-8 relative overflow-visible">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-            className="text-center mb-20"
-          >
-            <h2 className="font-display text-4xl sm:text-5xl font-bold text-surface-900 tracking-tight">
-              See it in action
+          {/* Section header */}
+          <motion.div {...fadeUp()} style={{ textAlign: 'center', marginBottom: 64 }}>
+            <span style={{ ...S.gold, ...S.sans, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 14 }}>
+              What Babblet Does
+            </span>
+            <h2 style={{ ...S.serif, ...S.forest, fontSize: 'clamp(1.875rem, 4vw, 2.75rem)', fontWeight: 400, lineHeight: 1.2, margin: 0 }}>
+              Every feature built to save time,<br />
+              <em style={{ fontStyle: 'italic' }}>not add steps.</em>
             </h2>
-            <p className="mt-4 text-lg text-surface-500 max-w-2xl mx-auto">
-              From targeted follow-up questions to rubric-aligned grading, every feature is designed to save you time and give students better feedback.
-            </p>
           </motion.div>
 
-          <div>
+          {/* 2×2 grid — all 4 feature videos preserved in original order */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: 24 }}>
             {SHOWCASE_FEATURES.map((feature, idx) => {
-              const isReversed = idx % 2 !== 0;
-              const isLast = idx === SHOWCASE_FEATURES.length - 1;
-              const connectorDir = isReversed ? 'leftToRight' : 'rightToLeft';
-
+              const Icon = feature.icon;
               return (
-                <Fragment key={feature.title}>
+                <motion.div key={feature.title} {...fadeUp(idx * 0.08)}>
                   <div
-                    className={`flex flex-col gap-8 items-center overflow-visible md:justify-center ${
-                      isReversed ? 'md:flex-row-reverse' : 'md:flex-row'
-                    }`}
-                  >
-                    {/* Text — animated with translate */}
-                    <motion.div
-                      className="md:w-4/12 flex-shrink-0"
-                      initial={{ opacity: 0, y: 40 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true, margin: '-100px' }}
-                      transition={{ duration: 0.6, delay: 0.1 }}
-                    >
-                      <div className="flex items-center gap-3 mb-4">
-                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-sky-500 text-white text-sm font-bold shadow-sm">
-                          {idx + 1}
+                    style={{ background: 'var(--bab-parchment)', borderRadius: 12, border: '1px solid var(--bab-border)', overflow: 'hidden', transition: 'transform 0.22s ease, box-shadow 0.22s ease', height: '100%', display: 'flex', flexDirection: 'column' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 12px 36px rgba(26,58,42,0.1)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ''; (e.currentTarget as HTMLElement).style.boxShadow = ''; }}>
+
+                    {/* Card header */}
+                    <div style={{ padding: '28px 28px 20px' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
+                        <span style={{ ...S.serif, ...S.forest, fontSize: '4rem', fontStyle: 'italic', opacity: 0.07, lineHeight: 1, fontWeight: 400, userSelect: 'none' }}>
+                          {feature.num}
                         </span>
-                        <div className="h-px flex-1 bg-gradient-to-r from-sky-200 to-transparent" />
+                        <div style={{ width: 38, height: 38, borderRadius: 8, background: 'var(--bab-forest-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Icon size={18} color="var(--bab-forest)" />
+                        </div>
                       </div>
-                      <h3 className="font-display text-2xl sm:text-3xl font-bold text-surface-900 leading-snug">
+                      <h3 style={{ ...S.serif, ...S.forest, fontSize: '1.375rem', fontWeight: 400, margin: '0 0 10px', lineHeight: 1.3 }}>
                         {feature.title}
                       </h3>
-                      <p className="mt-4 text-base text-surface-500 leading-relaxed">
+                      <p style={{ ...S.sans, ...S.forest, fontSize: '0.875rem', lineHeight: 1.7, margin: 0, opacity: 0.62 }}>
                         {feature.description}
                       </p>
-                    </motion.div>
+                    </div>
 
-                    {/* Media — opacity-only animation to keep video pixel-sharp */}
-                    <motion.div
-                      className="md:w-10/12 flex-shrink-0"
-                      initial={{ opacity: 0 }}
-                      whileInView={{ opacity: 1 }}
-                      viewport={{ once: true, margin: '-100px' }}
-                      transition={{ duration: 0.6, delay: 0.2 }}
-                    >
-                      <div className="rounded-2xl overflow-hidden border border-surface-200 shadow-xl bg-white">
-                        {feature.video ? (
-                          <FeatureVideo
-                            src={feature.video}
-                            poster={feature.image}
-                            alt={feature.alt}
-                          />
-                        ) : (
-                          <Image
-                            src={feature.image}
-                            alt={feature.alt}
-                            width={1200}
-                            height={750}
-                            className="w-full h-auto"
-                            quality={95}
-                            priority={idx === 0}
-                          />
-                        )}
-                      </div>
-                    </motion.div>
+                    {/* Feature video — preserved in original order */}
+                    <div style={{ borderTop: '1px solid var(--bab-border)', background: 'var(--bab-white)', flex: 1 }}>
+                      <FeatureVideo src={feature.video} poster={feature.image} alt={feature.alt} />
+                    </div>
                   </div>
-
-                  {/* Bee-flight connector to next feature */}
-                  {!isLast && <BeePathConnector direction={connectorDir} />}
-                </Fragment>
+                </motion.div>
               );
             })}
           </div>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-20 bg-gradient-to-r from-sky-500 to-cyan-500">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="font-display text-3xl sm:text-4xl font-bold text-white mb-4">Reclaim your grading hours</h2>
-          <div className="mt-8 flex justify-center gap-4">
-            <Link href="/contact" className="px-8 py-3.5 text-base font-medium text-white border border-white/30 hover:bg-white/10 rounded-xl transition-colors">
-              Book a Demo
-            </Link>
+      {/* ═══════════════════════════════════════════════════════════════════
+          HOW IT WORKS  (forest green bg)
+      ═════════════════════════════════════════════════════════════════════ */}
+      <section style={{ background: 'var(--bab-forest)', padding: '96px 0' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
+
+          <motion.div {...fadeUp()} style={{ textAlign: 'center', marginBottom: 64 }}>
+            <span style={{ ...S.gold, ...S.sans, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 14 }}>
+              How It Works
+            </span>
+            <h2 style={{ ...S.serif, ...S.parch, fontSize: 'clamp(1.875rem, 4vw, 2.75rem)', fontWeight: 400, lineHeight: 1.2, margin: 0 }}>
+              From upload to feedback<br />
+              <em style={{ fontStyle: 'italic' }}>in minutes, not hours.</em>
+            </h2>
+          </motion.div>
+
+          {/* Steps */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 32, position: 'relative' }}>
+            {/* Connector line (decorative) */}
+            <div style={{ position: 'absolute', top: 28, left: '10%', right: '10%', height: 1, background: 'rgba(247,245,240,0.12)', pointerEvents: 'none' }} className="hidden lg:block" />
+
+            {HOW_IT_WORKS.map((step, idx) => {
+              const Icon = step.icon;
+              return (
+                <motion.div key={step.num} {...fadeUp(idx * 0.1)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 16 }}>
+                  {/* Circle */}
+                  <div style={{ width: 56, height: 56, borderRadius: '50%', border: '1.5px solid rgba(196,137,42,0.35)', background: 'rgba(196,137,42,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1, flexShrink: 0 }}>
+                    <Icon size={20} color="var(--bab-gold)" />
+                  </div>
+                  <div>
+                    <span style={{ ...S.sans, ...S.gold, fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+                      Step {step.num}
+                    </span>
+                    <h3 style={{ ...S.sans, ...S.parch, fontWeight: 600, fontSize: '0.9375rem', margin: '0 0 8px', lineHeight: 1.4 }}>
+                      {step.title}
+                    </h3>
+                    <p style={{ ...S.sans, ...S.parch, fontSize: '0.8125rem', lineHeight: 1.7, margin: 0, opacity: 0.52 }}>
+                      {step.desc}
+                    </p>
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="py-10 border-t border-surface-200 bg-white/70 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-primary flex items-center justify-center">
-              <Sparkles className="w-3.5 h-3.5 text-white" />
-            </div>
-            <span className="font-display text-lg font-semibold text-surface-900">Babblet</span>
+      {/* ═══════════════════════════════════════════════════════════════════
+          CTA  (gold-tinted bg)
+      ═════════════════════════════════════════════════════════════════════ */}
+      <section style={{ background: 'var(--bab-gold-bg)', padding: '96px 0' }}>
+        <motion.div {...fadeUp()} style={{ maxWidth: 620, margin: '0 auto', padding: '0 24px', textAlign: 'center' }}>
+          <h2 style={{ ...S.serif, ...S.forest, fontSize: 'clamp(2rem, 4vw, 3.25rem)', fontWeight: 400, lineHeight: 1.15, margin: '0 0 20px' }}>
+            Reclaim your<br /><em style={{ fontStyle: 'italic' }}>grading hours.</em>
+          </h2>
+          <p style={{ ...S.sans, ...S.forest, fontSize: '1.0625rem', lineHeight: 1.65, margin: '0 0 36px', opacity: 0.62 }}>
+            Join programs that have already reclaimed hundreds of hours with Babblet&apos;s agentic grading platform.
+          </p>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Link href="/contact"
+              style={{ ...S.parch, ...S.sans, background: 'var(--bab-forest)', fontWeight: 600, fontSize: '0.9375rem', borderRadius: 4, padding: '13px 30px', textDecoration: 'none', transition: 'all 0.2s' }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(26,58,42,0.22)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}>
+              Book a Demo
+            </Link>
+            <Link href="/contact"
+              style={{ ...S.forest, ...S.sans, fontWeight: 500, fontSize: '0.9375rem', border: '1.5px solid rgba(26,58,42,0.25)', borderRadius: 4, padding: '12px 30px', textDecoration: 'none', transition: 'all 0.2s' }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = 'rgba(255,255,255,0.5)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.background = ''; }}>
+              Talk to the team
+            </Link>
           </div>
-          <p className="text-xs text-surface-500">© 2026 Babblet Inc. All rights reserved.</p>
+        </motion.div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          FOOTER  (dark bg)
+      ═════════════════════════════════════════════════════════════════════ */}
+      <footer style={{ background: 'var(--bab-dark)', padding: '48px 0' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 20 }}>
+          <span style={{ ...S.serif, ...S.parch, fontSize: '1.25rem', fontWeight: 400 }}>Babblet</span>
+          <p style={{ ...S.sans, ...S.parch, fontSize: '0.8rem', margin: 0, opacity: 0.35 }}>
+            © 2026 Babblet Inc. All rights reserved.
+          </p>
+          <nav style={{ display: 'flex', gap: 24 }}>
+            {[['Features', '#features'], ['About', '/about'], ['Contact', '/contact']].map(([label, href]) => (
+              <Link key={label} href={href}
+                style={{ ...S.sans, ...S.parch, fontSize: '0.8125rem', opacity: 0.45, textDecoration: 'none', transition: 'opacity 0.15s' }}
+                onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                onMouseLeave={e => (e.currentTarget.style.opacity = '0.45')}>
+                {label}
+              </Link>
+            ))}
+          </nav>
         </div>
       </footer>
+
     </div>
   );
 }

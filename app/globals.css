@@ -14,6 +14,17 @@
     --muted-foreground: #7A7D75;
     --border: #E8E3D8;
     --ring: #4A6741;
+
+    /* ─── Homepage design system ─────────────────────────────── */
+    --bab-parchment:   #F7F5F0;
+    --bab-forest:      #1A3A2A;
+    --bab-gold:        #C4892A;
+    --bab-gold-bg:     #F5E8CC;
+    --bab-white:       #FFFFFF;
+    --bab-dark:        #0E0F0C;
+    --bab-border:      rgba(26, 58, 42, 0.12);
+    --bab-forest-mute: rgba(26, 58, 42, 0.60);
+    --bab-forest-dim:  rgba(26, 58, 42, 0.08);
   }
 
   * {
