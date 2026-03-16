@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
-  ArrowRight, Star,
+  ArrowRight, X,
   BookOpen, MessageSquare, BarChart3, Award,
   Upload, Zap, CheckSquare, Send,
 } from 'lucide-react';
@@ -66,6 +66,71 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
   }, [src, poster, alt]);
 
   return <div ref={containerRef} className="w-full" />;
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   ExpandableVideo — wraps FeatureVideo with click-to-expand lightbox
+───────────────────────────────────────────────────────────────────────────── */
+function ExpandableVideo({ src, poster, alt }: { src: string; poster: string; alt: string }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <>
+      <div
+        style={{ cursor: 'pointer', position: 'relative' }}
+        onClick={() => setExpanded(true)}
+        title="Click to expand"
+      >
+        <FeatureVideo src={src} poster={poster} alt={alt} />
+        {/* Expand hint */}
+        <div style={{
+          position: 'absolute', bottom: 10, right: 10,
+          background: 'rgba(26,58,42,0.75)', borderRadius: 6, padding: '4px 8px',
+          display: 'flex', alignItems: 'center', gap: 4,
+          opacity: 0, transition: 'opacity 0.2s',
+          pointerEvents: 'none',
+        }} className="expand-hint">
+          <ArrowRight size={12} color="#F7F5F0" />
+          <span style={{ color: '#F7F5F0', fontSize: '0.7rem', fontWeight: 600 }}>Expand</span>
+        </div>
+      </div>
+
+      {/* Lightbox */}
+      {expanded && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 999,
+            background: 'rgba(14,15,12,0.88)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 24,
+            backdropFilter: 'blur(6px)',
+          }}
+          onClick={() => setExpanded(false)}
+        >
+          <div
+            style={{ position: 'relative', width: '100%', maxWidth: 1100, borderRadius: 12, overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,0.6)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setExpanded(false)}
+              style={{
+                position: 'absolute', top: 12, right: 12, zIndex: 10,
+                background: 'rgba(26,58,42,0.85)', border: 'none', borderRadius: '50%',
+                width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(26,58,42,1)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(26,58,42,0.85)')}
+            >
+              <X size={16} color="#F7F5F0" />
+            </button>
+            <FeatureVideo src={src} poster={poster} alt={alt} />
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -185,13 +250,11 @@ export default function HomePage() {
       {/* ═══════════════════════════════════════════════════════════════════
           HERO
       ═════════════════════════════════════════════════════════════════════ */}
-      <section style={{ maxWidth: 1200, margin: '0 auto', padding: '80px 24px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 56, alignItems: 'center' }} className="grid-cols-1 md:grid-cols-2">
-
-          {/* LEFT */}
-          <motion.div {...fadeUp(0)} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <section style={{ maxWidth: 760, margin: '0 auto', padding: '96px 24px 80px', textAlign: 'center' }}>
+        <div>
+          <motion.div {...fadeUp(0)} style={{ display: 'flex', flexDirection: 'column', gap: 24, alignItems: 'center' }}>
             {/* Gold badge */}
-            <div style={{ display: 'inline-flex', alignSelf: 'flex-start', alignItems: 'center', gap: 8, background: 'rgba(196,137,42,0.1)', border: '1px solid rgba(196,137,42,0.28)', borderRadius: 999, padding: '5px 14px' }}>
+            <div style={{ display: 'inline-flex', alignSelf: 'center', alignItems: 'center', gap: 8, background: 'rgba(196,137,42,0.1)', border: '1px solid rgba(196,137,42,0.28)', borderRadius: 999, padding: '5px 14px' }}>
               <span style={{ ...S.gold, ...S.sans, fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
                 Agentic AI for Education
               </span>
@@ -203,18 +266,13 @@ export default function HomePage() {
               <em style={{ fontStyle: 'italic' }}>at scale.</em>
             </h1>
 
-            {/* Tagline */}
-            <p style={{ ...S.sans, ...S.forest, fontSize: '1.125rem', lineHeight: 1.6, margin: 0, opacity: 0.62 }}>
-              Power your programs with Agentic workflows.
-            </p>
-
             {/* Subline */}
             <p style={{ ...S.sans, ...S.forest, fontSize: '1rem', fontWeight: 700, lineHeight: 1.5, margin: 0 }}>
               The TA your faculty need to scale learning.
             </p>
 
             {/* CTA buttons */}
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center' }}>
               <Link href="/contact"
                 style={{ ...S.parch, ...S.sans, background: 'var(--bab-forest)', fontWeight: 600, fontSize: '0.9375rem', borderRadius: 4, padding: '12px 26px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' }}
                 onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(26,58,42,0.22)'; }}
@@ -229,35 +287,6 @@ export default function HomePage() {
               </a>
             </div>
 
-            {/* Trust row */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 4 }}>
-              <div style={{ display: 'flex', gap: 2 }}>
-                {[...Array(5)].map((_, i) => <Star key={i} size={13} fill="var(--bab-gold)" color="var(--bab-gold)" />)}
-              </div>
-              <p style={{ ...S.sans, ...S.forest, fontSize: '0.8rem', margin: 0, opacity: 0.6 }}>
-                Trusted by leading universities &amp; business schools
-              </p>
-            </div>
-          </motion.div>
-
-          {/* RIGHT — feature-courses demo video */}
-          <motion.div {...fadeUp(0.15)}>
-            <div style={{ background: 'var(--bab-white)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(26,58,42,0.07), 0 24px 64px -12px rgba(26,58,42,0.18)', border: '1px solid var(--bab-border)' }}>
-              {/* Browser chrome */}
-              <div style={{ background: 'var(--bab-parchment)', borderBottom: '1px solid var(--bab-border)', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                {['#F07070', '#F5C062', '#6BBD6B'].map(c => (
-                  <span key={c} style={{ width: 10, height: 10, borderRadius: '50%', background: c, display: 'block', flexShrink: 0 }} />
-                ))}
-                <span style={{ ...S.sans, ...S.forest, flex: 1, textAlign: 'center', fontSize: '0.725rem', opacity: 0.45, fontWeight: 500 }}>
-                  app.babblet.io
-                </span>
-              </div>
-              <FeatureVideo
-                src="/features/feature-courses.mp4"
-                poster="/features/feature-courses.png"
-                alt="Babblet product demo — course and assignment setup"
-              />
-            </div>
           </motion.div>
         </div>
       </section>
@@ -310,7 +339,7 @@ export default function HomePage() {
 
                     {/* Feature video — preserved in original order */}
                     <div style={{ borderTop: '1px solid var(--bab-border)', background: 'var(--bab-white)', flex: 1 }}>
-                      <FeatureVideo src={feature.video} poster={feature.image} alt={feature.alt} />
+                      <ExpandableVideo src={feature.video} poster={feature.image} alt={feature.alt} />
                     </div>
                   </div>
                 </motion.div>

@@ -239,3 +239,8 @@ video.clip-video::-moz-range-track {
 video.clip-video::-moz-range-thumb {
   display: none !important;
 }
+
+/* Feature card expand hint */
+div:has(> .expand-hint):hover .expand-hint {
+  opacity: 1 !important;
+}
