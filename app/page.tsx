@@ -27,7 +27,7 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
     video.playsInline = true;
     video.autoplay = true;
     video.preload = 'auto';
-    video.className = 'w-full h-auto block';
+    video.className = 'w-full block'; video.style.maxHeight = 'calc(100vh - 100px)'; video.style.objectFit = 'contain';
     video.setAttribute('playsinline', '');
     video.setAttribute('webkit-playsinline', '');
     if (poster) video.poster = poster;
@@ -96,36 +96,40 @@ function ExpandableVideo({ src, poster, alt }: { src: string; poster: string; al
         </div>
       </div>
 
-      {/* Lightbox */}
+      {/* Lightbox — true full-screen with gray overlay */}
       {expanded && (
         <div
           style={{
-            position: 'fixed', inset: 0, zIndex: 999,
-            background: 'rgba(14,15,12,0.88)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 24,
-            backdropFilter: 'blur(6px)',
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(30,30,30,0.92)',
+            display: 'flex', flexDirection: 'column',
           }}
           onClick={() => setExpanded(false)}
         >
-          <div
-            style={{ position: 'relative', width: '100%', maxWidth: 1100, borderRadius: 12, overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,0.6)' }}
-            onClick={e => e.stopPropagation()}
-          >
+          {/* Close button top-right */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '16px 20px', flexShrink: 0 }}>
             <button
               onClick={() => setExpanded(false)}
               style={{
-                position: 'absolute', top: 12, right: 12, zIndex: 10,
-                background: 'rgba(26,58,42,0.85)', border: 'none', borderRadius: '50%',
-                width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', transition: 'background 0.15s',
+                background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: '50%', width: 40, height: 40,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', transition: 'background 0.15s', flexShrink: 0,
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(26,58,42,1)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(26,58,42,0.85)')}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.22)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.12)')}
             >
-              <X size={16} color="#F7F5F0" />
+              <X size={18} color="#ffffff" />
             </button>
-            <FeatureVideo src={src} poster={poster} alt={alt} />
+          </div>
+          {/* Video fills remaining space */}
+          <div
+            style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 32px 32px' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ width: '100%' }}>
+              <FeatureVideo src={src} poster={poster} alt={alt} />
+            </div>
           </div>
         </div>
       )}
