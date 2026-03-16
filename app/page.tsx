@@ -19,6 +19,8 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
     const container = containerRef.current;
     if (!container) return;
 
+    let playing = false;
+
     const video = document.createElement('video');
     video.src = src;
     video.muted = true;
@@ -27,15 +29,21 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
     video.playsInline = true;
     video.autoplay = true;
     video.preload = 'auto';
-    video.className = 'w-full block'; video.style.maxHeight = 'calc(100vh - 100px)'; video.style.objectFit = 'contain';
+    video.className = 'w-full h-auto block';
     video.setAttribute('playsinline', '');
     video.setAttribute('webkit-playsinline', '');
     if (poster) video.poster = poster;
     if (alt) video.setAttribute('aria-label', alt);
     container.appendChild(video);
 
-    const tryPlay = () => { if (video.paused) video.play().catch(() => {}); };
-    video.addEventListener('canplay', tryPlay);
+    const tryPlay = () => {
+      if (playing || !video.paused) return;
+      video.play()
+        .then(() => { playing = true; })
+        .catch(() => {});
+    };
+
+    video.addEventListener('canplay', tryPlay, { once: true });
 
     const observer = new IntersectionObserver(
       (entries) => { if (entries[0]?.isIntersecting) tryPlay(); },
@@ -57,10 +65,7 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
     return () => {
       observer.disconnect();
       clearTimeout(t);
-      video.removeEventListener('canplay', tryPlay);
       video.pause();
-      video.removeAttribute('src');
-      video.load();
       container.removeChild(video);
     };
   }, [src, poster, alt]);
@@ -127,9 +132,13 @@ function ExpandableVideo({ src, poster, alt }: { src: string; poster: string; al
             style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 32px 32px' }}
             onClick={e => e.stopPropagation()}
           >
-            <div style={{ width: '100%' }}>
-              <FeatureVideo src={src} poster={poster} alt={alt} />
-            </div>
+            <video
+              src={src}
+              poster={poster}
+              aria-label={alt}
+              autoPlay muted loop playsInline
+              style={{ width: '100%', maxHeight: 'calc(100vh - 100px)', objectFit: 'contain', borderRadius: 8, background: '#000' }}
+            />
           </div>
         </div>
       )}
