@@ -82,37 +82,34 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
 ───────────────────────────────────────────────────────────────────────────── */
 function ExpandableVideo({ src, poster, alt }: { src: string; poster: string; alt: string }) {
   const [expanded, setExpanded] = useState(false);
-  const pointerRef = useRef<{ x: number; y: number } | null>(null);
-
-  const handleOpen = (e: React.MouseEvent) => {
-    const pt = pointerRef.current;
-    pointerRef.current = null;
-    if (!pt) return;
-    const dx = e.clientX - pt.x, dy = e.clientY - pt.y;
-    if (dx * dx + dy * dy <= 100) setExpanded(true);
-  };
 
   return (
     <>
       <div
-        style={{ cursor: 'pointer', position: 'relative', overflow: 'hidden' }}
-        onPointerDown={e => { pointerRef.current = { x: e.clientX, y: e.clientY }; }}
-        onPointerLeave={() => { pointerRef.current = null; }}
-        onClick={handleOpen}
-        title="Click to expand"
+        style={{ position: 'relative', overflow: 'hidden' }}
+        title="Click expand to open fullscreen"
       >
         <FeatureVideo src={src} poster={poster} alt={alt} />
-        {/* Expand hint */}
-        <div style={{
-          position: 'absolute', bottom: 10, right: 10,
-          background: 'rgba(26,58,42,0.75)', borderRadius: 6, padding: '4px 8px',
-          display: 'flex', alignItems: 'center', gap: 4,
-          opacity: 0, transition: 'opacity 0.2s',
-          pointerEvents: 'none',
-        }} className="expand-hint">
+        {/* Expand control */}
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation();
+            setExpanded(true);
+          }}
+          style={{
+            position: 'absolute', bottom: 10, right: 10,
+            background: 'rgba(26,58,42,0.75)', borderRadius: 6, padding: '4px 8px',
+            display: 'flex', alignItems: 'center', gap: 4,
+            opacity: 0, transition: 'opacity 0.2s', zIndex: 2,
+            border: '1px solid rgba(247,245,240,0.16)', cursor: 'pointer',
+          }}
+          className="expand-hint"
+          aria-label={`Expand ${alt}`}
+        >
           <ArrowRight size={12} color="#F7F5F0" />
           <span style={{ color: '#F7F5F0', fontSize: '0.7rem', fontWeight: 600 }}>Expand</span>
-        </div>
+        </button>
       </div>
 
       {/* Lightbox — true full-screen with gray overlay */}
@@ -239,13 +236,8 @@ export default function HomePage() {
       ═════════════════════════════════════════════════════════════════════ */}
       <header style={{ background: 'var(--bab-parchment)', borderBottom: '1px solid var(--bab-border)', position: 'sticky', top: 0, zIndex: 50 }}>
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          {/* Logo */}
-          <Link href="/" style={{ textDecoration: 'none' }}>
-            <span style={{ ...S.serif, ...S.forest, fontSize: '1.375rem', fontWeight: 400 }}>Babblet</span>
-          </Link>
-
           {/* Nav links */}
-          <nav style={{ display: 'flex', gap: 32, alignItems: 'center' }} className="hidden md:flex">
+          <nav style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
             {[['Features', '#features'], ['About', '/about'], ['Contact', '/contact']].map(([label, href]) => (
               <Link key={label} href={href}
                 style={{ ...S.forest, ...S.sans, fontSize: '0.875rem', fontWeight: 400, opacity: 0.6, textDecoration: 'none', transition: 'opacity 0.15s' }}
@@ -454,24 +446,23 @@ export default function HomePage() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════════════════
-          FOOTER  (dark bg)
+          FOOTER
       ═════════════════════════════════════════════════════════════════════ */}
-      <footer style={{ background: 'var(--bab-dark)', padding: '48px 0' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 20 }}>
-          <span style={{ ...S.serif, ...S.parch, fontSize: '1.25rem', fontWeight: 400 }}>Babblet</span>
-          <p style={{ ...S.sans, ...S.parch, fontSize: '0.8rem', margin: 0, opacity: 0.35 }}>
-            © 2026 Babblet Inc. All rights reserved.
-          </p>
-          <nav style={{ display: 'flex', gap: 24 }}>
+      <footer style={{ background: 'var(--bab-parchment)', borderTop: '1px solid var(--bab-border)', padding: '20px 0' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', minHeight: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+          <nav style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
             {[['Features', '#features'], ['About', '/about'], ['Contact', '/contact']].map(([label, href]) => (
               <Link key={label} href={href}
-                style={{ ...S.sans, ...S.parch, fontSize: '0.8125rem', opacity: 0.45, textDecoration: 'none', transition: 'opacity 0.15s' }}
+                style={{ ...S.forest, ...S.sans, fontSize: '0.875rem', fontWeight: 400, opacity: 0.6, textDecoration: 'none', transition: 'opacity 0.15s' }}
                 onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                onMouseLeave={e => (e.currentTarget.style.opacity = '0.45')}>
+                onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}>
                 {label}
               </Link>
             ))}
           </nav>
+          <p style={{ ...S.sans, ...S.forest, fontSize: '0.8rem', margin: 0, opacity: 0.5 }}>
+            © 2026 Babblet Inc. All rights reserved.
+          </p>
         </div>
       </footer>
 
