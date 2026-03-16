@@ -26,7 +26,18 @@ const config: Config = {
         mono: ['SF Mono', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
       },
       colors: {
-        primary: '#4A6741',
+        primary: {
+          50:  '#F2F5F0',
+          100: '#E0E8DC',
+          200: '#C2D1BA',
+          300: '#A3BA98',
+          400: '#85A376',
+          500: '#4A6741',
+          600: '#3D5636',
+          700: '#30452A',
+          800: '#23341F',
+          900: '#162313',
+        },
         accent: {
           50: '#ecfeff',
           100: '#cffafe',
@@ -53,9 +64,9 @@ const config: Config = {
         },
       },
       backgroundImage: {
-        'gradient-primary': 'linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%)',
-        'gradient-primary-hover': 'linear-gradient(135deg, #2563eb 0%, #0891b2 100%)',
-        'gradient-subtle': 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(6, 182, 212, 0.08) 100%)',
+        'gradient-primary': 'linear-gradient(135deg, #4A6741 0%, #6B8C62 100%)',
+        'gradient-primary-hover': 'linear-gradient(135deg, #3D5636 0%, #4A6741 100%)',
+        'gradient-subtle': 'linear-gradient(135deg, rgba(74, 103, 65, 0.08) 0%, rgba(107, 140, 98, 0.08) 100%)',
         'gradient-card': 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)',
         'gradient-dark': 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)',
       },
@@ -64,8 +75,8 @@ const config: Config = {
         'soft-lg': '0 10px 40px -10px rgba(0, 0, 0, 0.1), 0 2px 10px -2px rgba(0, 0, 0, 0.04)',
         'neumorphic': '8px 8px 16px rgba(0, 0, 0, 0.06), -8px -8px 16px rgba(255, 255, 255, 0.8)',
         'neumorphic-inset': 'inset 4px 4px 8px rgba(0, 0, 0, 0.06), inset -4px -4px 8px rgba(255, 255, 255, 0.8)',
-        'glow': '0 0 20px rgba(59, 130, 246, 0.35)',
-        'glow-accent': '0 0 20px rgba(6, 182, 212, 0.35)',
+        'glow': '0 0 20px rgba(74, 103, 65, 0.35)',
+        'glow-accent': '0 0 20px rgba(107, 140, 98, 0.35)',
       },
       borderRadius: {
         '2xl': '1rem',
