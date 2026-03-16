@@ -46,8 +46,11 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
     video.addEventListener('canplay', tryPlay, { once: true });
 
     const observer = new IntersectionObserver(
-      (entries) => { if (entries[0]?.isIntersecting) tryPlay(); },
-      { threshold: 0, rootMargin: '200px' },
+      (entries) => {
+        const entry = entries[0];
+        if (entry?.isIntersecting && entry.intersectionRatio >= 0.5) tryPlay();
+      },
+      { threshold: [0, 0.5, 1], rootMargin: '0px' },
     );
     observer.observe(video);
 
@@ -70,7 +73,7 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
     };
   }, [src, poster, alt]);
 
-  return <div ref={containerRef} className="w-full" />;
+  return <div ref={containerRef} className="w-full overflow-hidden" style={{ minHeight: 0 }} />;
 }
 
 
@@ -79,12 +82,23 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
 ───────────────────────────────────────────────────────────────────────────── */
 function ExpandableVideo({ src, poster, alt }: { src: string; poster: string; alt: string }) {
   const [expanded, setExpanded] = useState(false);
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleOpen = (e: React.MouseEvent) => {
+    const pt = pointerRef.current;
+    pointerRef.current = null;
+    if (!pt) return;
+    const dx = e.clientX - pt.x, dy = e.clientY - pt.y;
+    if (dx * dx + dy * dy <= 100) setExpanded(true);
+  };
 
   return (
     <>
       <div
-        style={{ cursor: 'pointer', position: 'relative' }}
-        onClick={() => setExpanded(true)}
+        style={{ cursor: 'pointer', position: 'relative', overflow: 'hidden' }}
+        onPointerDown={e => { pointerRef.current = { x: e.clientX, y: e.clientY }; }}
+        onPointerLeave={() => { pointerRef.current = null; }}
+        onClick={handleOpen}
         title="Click to expand"
       >
         <FeatureVideo src={src} poster={poster} alt={alt} />
@@ -350,9 +364,11 @@ export default function HomePage() {
                       </p>
                     </div>
 
-                    {/* Feature video — preserved in original order */}
-                    <div style={{ borderTop: '1px solid var(--bab-border)', background: 'var(--bab-white)', flex: 1 }}>
-                      <ExpandableVideo src={feature.video} poster={feature.image} alt={feature.alt} />
+                    {/* Feature video — stable aspect box to prevent flash when partially in view */}
+                    <div style={{ borderTop: '1px solid var(--bab-border)', background: 'var(--bab-white)', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                      <div style={{ aspectRatio: '16/9', overflow: 'hidden' }}>
+                        <ExpandableVideo src={feature.video} poster={feature.image} alt={feature.alt} />
+                      </div>
                     </div>
                   </div>
                 </motion.div>
