@@ -10,95 +10,59 @@ import {
 import Link from 'next/link';
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   FeatureVideo — unchanged from original (Chrome muted-property fix)
+   FeatureVideo — simple ref-based muted autoplay (no observer, no retries)
 ───────────────────────────────────────────────────────────────────────────── */
 function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: string }) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    const v = ref.current;
+    if (!v) return;
+    v.muted = true;          // fix React muted-prop bug
+    v.play().catch(() => {}); // fire-and-forget; browser may block until user gesture
+    return () => { v.pause(); };
+  }, []);
 
-    let playing = false;
-
-    const video = document.createElement('video');
-    video.src = src;
-    video.muted = true;
-    video.defaultMuted = true;
-    video.loop = true;
-    video.playsInline = true;
-    video.autoplay = true;
-    video.preload = 'auto';
-    video.className = 'w-full h-auto block';
-    video.setAttribute('playsinline', '');
-    video.setAttribute('webkit-playsinline', '');
-    if (poster) video.poster = poster;
-    if (alt) video.setAttribute('aria-label', alt);
-    container.appendChild(video);
-
-    const tryPlay = () => {
-      if (playing || !video.paused) return;
-      video.play()
-        .then(() => { playing = true; })
-        .catch(() => {});
-    };
-
-    video.addEventListener('canplay', tryPlay, { once: true });
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        if (entry?.isIntersecting && entry.intersectionRatio >= 0.5) tryPlay();
-      },
-      { threshold: [0, 0.5, 1], rootMargin: '0px' },
-    );
-    observer.observe(video);
-
-    const onGesture = () => {
-      document.querySelectorAll('video').forEach(v => {
-        if (v.paused && v.muted) v.play().catch(() => {});
-      });
-    };
-    window.addEventListener('scroll', onGesture, { once: true, passive: true });
-    window.addEventListener('click', onGesture, { once: true });
-    window.addEventListener('touchstart', onGesture, { once: true, passive: true });
-
-    const t = setTimeout(tryPlay, 800);
-
-    return () => {
-      observer.disconnect();
-      clearTimeout(t);
-      video.pause();
-      container.removeChild(video);
-    };
-  }, [src, poster, alt]);
-
-  return <div ref={containerRef} className="w-full overflow-hidden" style={{ minHeight: 0 }} />;
+  return (
+    <video
+      ref={ref}
+      src={src}
+      poster={poster}
+      aria-label={alt}
+      autoPlay
+      muted
+      loop
+      playsInline
+      className="w-full h-auto block"
+    />
+  );
 }
 
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   ExpandableVideo — wraps FeatureVideo with click-to-expand lightbox
+   ExpandableVideo — card stays playing; overlay uses pointer-events:none so
+   the page remains scrollable while the video is open.
 ───────────────────────────────────────────────────────────────────────────── */
 function ExpandableVideo({ src, poster, alt }: { src: string; poster: string; alt: string }) {
   const [expanded, setExpanded] = useState(false);
+  const lightboxRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const v = lightboxRef.current;
+    if (!v) return;
+    v.muted = true;
+    v.play().catch(() => {});
+  }, [expanded]);
 
   return (
     <>
-      <div
-        style={{ position: 'relative', overflow: 'hidden' }}
-        title="Click expand to open fullscreen"
-      >
-        {!expanded ? <FeatureVideo src={src} poster={poster} alt={alt} /> : (
-          <div style={{ width: '100%', aspectRatio: '16/9', background: '#111', backgroundImage: poster ? `url(${poster})` : undefined, backgroundSize: 'cover' }} aria-hidden />
-        )}
-        {/* Expand control */}
+      {/* Card — always mounted and playing */}
+      <div style={{ position: 'relative', overflow: 'hidden' }}>
+        <FeatureVideo src={src} poster={poster} alt={alt} />
         <button
           type="button"
-          onClick={e => {
-            e.stopPropagation();
-            setExpanded(true);
-          }}
+          onClick={() => setExpanded(true)}
           style={{
             position: 'absolute', bottom: 10, right: 10,
             background: 'rgba(26,58,42,0.75)', borderRadius: 6, padding: '4px 8px',
@@ -114,13 +78,16 @@ function ExpandableVideo({ src, poster, alt }: { src: string; poster: string; al
         </button>
       </div>
 
-      {/* Lightbox — video fills entire screen */}
+      {/* Overlay — pointer-events:none so page stays scrollable;
+          only the close button captures pointer events */}
       {expanded && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#000' }}
-          onClick={() => setExpanded(false)}
-        >
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,0.88)',
+          pointerEvents: 'none',
+        }}>
           <video
+            ref={lightboxRef}
             src={src}
             poster={poster}
             aria-label={alt}
@@ -129,21 +96,23 @@ function ExpandableVideo({ src, poster, alt }: { src: string; poster: string; al
             loop
             playsInline
             style={{
-              position: 'absolute', inset: 0, width: '100vw', height: '100vh',
-              objectFit: 'contain', pointerEvents: 'none',
+              position: 'absolute', inset: 0,
+              width: '100vw', height: '100vh',
+              objectFit: 'contain',
+              pointerEvents: 'none',
             }}
-            onClick={e => e.stopPropagation()}
           />
           <button
             type="button"
             aria-label="Close"
             onClick={() => setExpanded(false)}
             style={{
-              position: 'fixed', top: 16, right: 16, zIndex: 10,
+              position: 'fixed', top: 16, right: 16,
+              pointerEvents: 'auto',
               background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)',
               borderRadius: '50%', width: 40, height: 40,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', transition: 'background 0.15s',
+              cursor: 'pointer', transition: 'background 0.15s', zIndex: 10,
             }}
             onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.22)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.12)')}
