@@ -10,54 +10,48 @@ import {
 import Link from 'next/link';
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   FeatureVideo — simple ref-based muted autoplay (no observer, no retries)
+   FeatureVideo — ref-based muted autoplay, no observer, no retries
 ───────────────────────────────────────────────────────────────────────────── */
 function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: string }) {
   const ref = useRef<HTMLVideoElement>(null);
-
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
-    v.muted = true;          // fix React muted-prop bug
-    v.play().catch(() => {}); // fire-and-forget; browser may block until user gesture
+    v.muted = true;
+    v.play().catch(() => {});
     return () => { v.pause(); };
   }, []);
-
   return (
-    <video
-      ref={ref}
-      src={src}
-      poster={poster}
-      aria-label={alt}
-      autoPlay
-      muted
-      loop
-      playsInline
-      className="w-full h-auto block"
-    />
+    <video ref={ref} src={src} poster={poster} aria-label={alt}
+      autoPlay muted loop playsInline className="w-full h-auto block" />
   );
 }
 
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   ExpandableVideo — card stays playing; overlay uses pointer-events:none so
-   the page remains scrollable while the video is open.
+   ExpandableVideo — lightbox is ALWAYS in the DOM (toggled via visibility).
+   No mount/unmount means no flash. Fully opaque black background.
 ───────────────────────────────────────────────────────────────────────────── */
 function ExpandableVideo({ src, poster, alt }: { src: string; poster: string; alt: string }) {
   const [expanded, setExpanded] = useState(false);
-  const lightboxRef = useRef<HTMLVideoElement>(null);
+  const lightRef = useRef<HTMLVideoElement>(null);
 
+  // Play/pause lightbox video when visibility toggles
   useEffect(() => {
-    if (!expanded) return;
-    const v = lightboxRef.current;
+    const v = lightRef.current;
     if (!v) return;
     v.muted = true;
-    v.play().catch(() => {});
+    if (expanded) {
+      v.currentTime = 0;
+      v.play().catch(() => {});
+    } else {
+      v.pause();
+    }
   }, [expanded]);
 
   return (
     <>
-      {/* Card — always mounted and playing */}
+      {/* Card */}
       <div style={{ position: 'relative', overflow: 'hidden' }}>
         <FeatureVideo src={src} poster={poster} alt={alt} />
         <button
@@ -78,49 +72,47 @@ function ExpandableVideo({ src, poster, alt }: { src: string; poster: string; al
         </button>
       </div>
 
-      {/* Overlay — pointer-events:none so page stays scrollable;
-          only the close button captures pointer events */}
-      {expanded && (
-        <div style={{
+      {/* Lightbox — always in DOM, shown/hidden via visibility (no remount = no flash).
+          Click the dark background or X to close. */}
+      <div
+        style={{
           position: 'fixed', inset: 0, zIndex: 9999,
-          background: 'rgba(0,0,0,0.88)',
-          pointerEvents: 'none',
-        }}>
-          <video
-            ref={lightboxRef}
-            src={src}
-            poster={poster}
-            aria-label={alt}
-            autoPlay
-            muted
-            loop
-            playsInline
-            style={{
-              position: 'absolute', inset: 0,
-              width: '100vw', height: '100vh',
-              objectFit: 'contain',
-              pointerEvents: 'none',
-            }}
-          />
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={() => setExpanded(false)}
-            style={{
-              position: 'fixed', top: 16, right: 16,
-              pointerEvents: 'auto',
-              background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)',
-              borderRadius: '50%', width: 40, height: 40,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', transition: 'background 0.15s', zIndex: 10,
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.22)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.12)')}
-          >
-            <X size={18} color="#ffffff" />
-          </button>
-        </div>
-      )}
+          background: '#000',
+          visibility: expanded ? 'visible' : 'hidden',
+          pointerEvents: expanded ? 'auto' : 'none',
+        }}
+        onClick={() => setExpanded(false)}
+      >
+        <video
+          ref={lightRef}
+          src={src}
+          poster={poster}
+          aria-label={alt}
+          muted loop playsInline
+          onClick={e => e.stopPropagation()}
+          style={{
+            position: 'absolute', inset: 0,
+            width: '100vw', height: '100vh',
+            objectFit: 'contain',
+          }}
+        />
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={e => { e.stopPropagation(); setExpanded(false); }}
+          style={{
+            position: 'fixed', top: 16, right: 16, zIndex: 10,
+            background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: '50%', width: 40, height: 40,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', transition: 'background 0.15s',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.22)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.12)')}
+        >
+          <X size={18} color="#ffffff" />
+        </button>
+      </div>
     </>
   );
 }
