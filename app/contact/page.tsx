@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Send, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
+import { Send, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
 export default function ContactPage() {
@@ -49,24 +49,36 @@ export default function ContactPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <header className="border-b border-surface-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex items-center justify-between h-16">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-white" />
-              </div>
-              <span className="text-xl font-semibold text-surface-900">Babblet</span>
-            </Link>
-            <div className="hidden md:flex items-center gap-8">
-              <Link href="/#features" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">Features</Link>
-              <Link href="/about" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">About</Link>
-              <Link href="/contact" className="text-sm text-surface-900 font-medium transition-colors">Contact</Link>
-            </div>
-            <div className="flex items-center gap-4">
-              <Link href="/login" className="text-sm text-surface-600 hover:text-surface-900 transition-colors">Login</Link>
-            </div>
+      {/* Header */}
+      <header style={{ background: 'var(--bab-parchment)', borderBottom: '1px solid var(--bab-border)', position: 'sticky', top: 0, zIndex: 50, fontFamily: 'var(--font-dm-sans), system-ui, sans-serif' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Link href="/" style={{ fontFamily: 'var(--font-instrument-serif), Georgia, serif', color: 'var(--bab-forest)', fontSize: '1.25rem', fontWeight: 400, textDecoration: 'none' }}>
+            Babblet
+          </Link>
+          <nav style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+            {[['Features', '/#features'], ['About', '/about'], ['Contact', '/contact']].map(([label, href]) => (
+              <Link key={label} href={href}
+                style={{ fontFamily: 'var(--font-dm-sans), system-ui, sans-serif', color: 'var(--bab-forest)', fontSize: '0.875rem', fontWeight: 400, opacity: 0.6, textDecoration: 'none', transition: 'opacity 0.15s' }}
+                onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}>
+                {label}
+              </Link>
+            ))}
           </nav>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <Link href="/login"
+              style={{ fontFamily: 'var(--font-dm-sans), system-ui, sans-serif', color: 'var(--bab-forest)', fontSize: '0.875rem', fontWeight: 500, borderRadius: 4, padding: '7px 16px', textDecoration: 'none', border: '1px solid var(--bab-border)', transition: 'background 0.15s' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.7)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+              Login
+            </Link>
+            <Link href="/contact"
+              style={{ fontFamily: 'var(--font-dm-sans), system-ui, sans-serif', color: 'var(--bab-parchment)', background: 'var(--bab-forest)', fontSize: '0.875rem', fontWeight: 600, borderRadius: 4, padding: '8px 18px', textDecoration: 'none', transition: 'opacity 0.15s' }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = '0.88')}
+              onMouseLeave={e => (e.currentTarget.style.opacity = '1')}>
+              Book a Demo
+            </Link>
+          </div>
         </div>
       </header>
 
