@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Target, Users, Zap } from 'lucide-react';
+import { Sparkles, Target, Users, Zap } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AboutPage() {
