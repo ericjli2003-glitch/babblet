@@ -273,13 +273,13 @@ export default function HomePage() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════════════════
-          FEATURES  — left text / right video rows
+          FEATURES  (white bg, 2×2 grid)
       ═════════════════════════════════════════════════════════════════════ */}
       <section id="features" style={{ background: 'var(--bab-white)', padding: '96px 0' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
 
           {/* Section header */}
-          <motion.div {...fadeUp()} style={{ textAlign: 'center', marginBottom: 80 }}>
+          <motion.div {...fadeUp()} style={{ textAlign: 'center', marginBottom: 64 }}>
             <span style={{ ...S.gold, ...S.sans, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 14 }}>
               What Babblet Does
             </span>
@@ -289,36 +289,38 @@ export default function HomePage() {
             </h2>
           </motion.div>
 
-          {/* Feature rows — text left, video right */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 96 }}>
+          {/* 2×2 grid — text above, video below in each card */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: 24 }}>
             {SHOWCASE_FEATURES.map((feature, idx) => {
               const Icon = feature.icon;
               return (
-                <motion.div key={feature.title} {...fadeUp(idx * 0.06)}
-                  style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: 56, alignItems: 'center' }}
-                  className="feature-row"
-                >
-                  {/* Left — text */}
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--bab-forest-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <Icon size={17} color="var(--bab-forest)" />
-                      </div>
-                      <span style={{ ...S.sans, ...S.gold, fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                        {feature.num}
-                      </span>
-                    </div>
-                    <h3 style={{ ...S.serif, ...S.forest, fontSize: 'clamp(1.25rem, 2.5vw, 1.75rem)', fontWeight: 400, margin: '0 0 16px', lineHeight: 1.3 }}>
-                      {feature.title}
-                    </h3>
-                    <p style={{ ...S.sans, ...S.forest, fontSize: '0.9375rem', lineHeight: 1.75, margin: 0, opacity: 0.62 }}>
-                      {feature.description}
-                    </p>
-                  </div>
+                <motion.div key={feature.title} {...fadeUp(idx * 0.08)}>
+                  <div style={{ background: 'var(--bab-parchment)', borderRadius: 12, border: '1px solid var(--bab-border)', overflow: 'hidden', height: '100%', display: 'flex', flexDirection: 'column' }}>
 
-                  {/* Right — video (no hover transform to prevent GPU flash) */}
-                  <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--bab-border)', background: 'var(--bab-parchment)', aspectRatio: '16/9' }}>
-                    <ExpandableVideo src={feature.video} poster={feature.image} alt={feature.alt} />
+                    {/* Card header */}
+                    <div style={{ padding: '28px 28px 20px' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
+                        <span style={{ ...S.serif, ...S.forest, fontSize: '4rem', fontStyle: 'italic', opacity: 0.07, lineHeight: 1, fontWeight: 400, userSelect: 'none' }}>
+                          {feature.num}
+                        </span>
+                        <div style={{ width: 38, height: 38, borderRadius: 8, background: 'var(--bab-forest-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Icon size={18} color="var(--bab-forest)" />
+                        </div>
+                      </div>
+                      <h3 style={{ ...S.serif, ...S.forest, fontSize: '1.375rem', fontWeight: 400, margin: '0 0 10px', lineHeight: 1.3 }}>
+                        {feature.title}
+                      </h3>
+                      <p style={{ ...S.sans, ...S.forest, fontSize: '0.875rem', lineHeight: 1.7, margin: 0, opacity: 0.62 }}>
+                        {feature.description}
+                      </p>
+                    </div>
+
+                    {/* Video */}
+                    <div style={{ borderTop: '1px solid var(--bab-border)', background: 'var(--bab-white)', flex: 1, overflow: 'hidden' }}>
+                      <div style={{ aspectRatio: '16/9', overflow: 'hidden' }}>
+                        <ExpandableVideo src={feature.video} poster={feature.image} alt={feature.alt} />
+                      </div>
+                    </div>
                   </div>
                 </motion.div>
               );
