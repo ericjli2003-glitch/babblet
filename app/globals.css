@@ -241,6 +241,10 @@ video.clip-video::-moz-range-thumb {
 }
 
 /* Feature card expand hint */
-div:has(> .expand-hint):hover .expand-hint {
-  opacity: 1 !important;
+.expand-hint { will-change: opacity; }
+div:has(> .expand-hint):hover .expand-hint { opacity: 1 !important; }
+
+/* Responsive feature rows */
+@media (max-width: 768px) {
+  .feature-row { grid-template-columns: 1fr !important; }
 }

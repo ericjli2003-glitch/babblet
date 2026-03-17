@@ -23,7 +23,8 @@ function FeatureVideo({ src, poster, alt }: { src: string; poster: string; alt: 
   }, []);
   return (
     <video ref={ref} src={src} poster={poster} aria-label={alt}
-      autoPlay muted loop playsInline className="w-full h-auto block" />
+      autoPlay muted loop playsInline className="w-full h-auto block"
+      style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }} />
   );
 }
 
@@ -72,16 +73,17 @@ function ExpandableVideo({ src, poster, alt }: { src: string; poster: string; al
         </button>
       </div>
 
-      {/* Lightbox — always in DOM, shown/hidden via visibility (no remount = no flash).
-          Click the dark background or X to close. */}
+      {/* Lightbox — always in DOM, shown/hidden via visibility.
+          pointer-events:none on backdrop so page stays scrollable.
+          Only the close button captures events. */}
       <div
         style={{
           position: 'fixed', inset: 0, zIndex: 9999,
-          background: '#000',
+          background: 'rgba(60,60,55,0.82)',
           visibility: expanded ? 'visible' : 'hidden',
-          pointerEvents: expanded ? 'auto' : 'none',
+          pointerEvents: 'none',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
-        onClick={() => setExpanded(false)}
       >
         <video
           ref={lightRef}
@@ -89,26 +91,26 @@ function ExpandableVideo({ src, poster, alt }: { src: string; poster: string; al
           poster={poster}
           aria-label={alt}
           muted loop playsInline
-          onClick={e => e.stopPropagation()}
           style={{
-            position: 'absolute', inset: 0,
             width: '100vw', height: '100vh',
             objectFit: 'contain',
+            transform: 'translateZ(0)',
           }}
         />
         <button
           type="button"
           aria-label="Close"
-          onClick={e => { e.stopPropagation(); setExpanded(false); }}
+          onClick={() => setExpanded(false)}
           style={{
             position: 'fixed', top: 16, right: 16, zIndex: 10,
-            background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)',
-            borderRadius: '50%', width: 40, height: 40,
+            pointerEvents: expanded ? 'auto' : 'none',
+            background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)',
+            borderRadius: '50%', width: 44, height: 44,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: 'pointer', transition: 'background 0.15s',
           }}
-          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.22)')}
-          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.12)')}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.28)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.15)')}
         >
           <X size={18} color="#ffffff" />
         </button>
@@ -271,13 +273,13 @@ export default function HomePage() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════════════════
-          FEATURES  (white bg, 2×2 grid)
+          FEATURES  — left text / right video rows
       ═════════════════════════════════════════════════════════════════════ */}
       <section id="features" style={{ background: 'var(--bab-white)', padding: '96px 0' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
 
           {/* Section header */}
-          <motion.div {...fadeUp()} style={{ textAlign: 'center', marginBottom: 64 }}>
+          <motion.div {...fadeUp()} style={{ textAlign: 'center', marginBottom: 80 }}>
             <span style={{ ...S.gold, ...S.sans, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 14 }}>
               What Babblet Does
             </span>
@@ -287,41 +289,36 @@ export default function HomePage() {
             </h2>
           </motion.div>
 
-          {/* 2×2 grid — all 4 feature videos preserved in original order */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: 24 }}>
+          {/* Feature rows — text left, video right */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 96 }}>
             {SHOWCASE_FEATURES.map((feature, idx) => {
               const Icon = feature.icon;
               return (
-                <motion.div key={feature.title} {...fadeUp(idx * 0.08)}>
-                  <div
-                    style={{ background: 'var(--bab-parchment)', borderRadius: 12, border: '1px solid var(--bab-border)', overflow: 'hidden', transition: 'transform 0.22s ease, box-shadow 0.22s ease', height: '100%', display: 'flex', flexDirection: 'column' }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 12px 36px rgba(26,58,42,0.1)'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ''; (e.currentTarget as HTMLElement).style.boxShadow = ''; }}>
-
-                    {/* Card header */}
-                    <div style={{ padding: '28px 28px 20px' }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
-                        <span style={{ ...S.serif, ...S.forest, fontSize: '4rem', fontStyle: 'italic', opacity: 0.07, lineHeight: 1, fontWeight: 400, userSelect: 'none' }}>
-                          {feature.num}
-                        </span>
-                        <div style={{ width: 38, height: 38, borderRadius: 8, background: 'var(--bab-forest-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <Icon size={18} color="var(--bab-forest)" />
-                        </div>
+                <motion.div key={feature.title} {...fadeUp(idx * 0.06)}
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: 56, alignItems: 'center' }}
+                  className="feature-row"
+                >
+                  {/* Left — text */}
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--bab-forest-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Icon size={17} color="var(--bab-forest)" />
                       </div>
-                      <h3 style={{ ...S.serif, ...S.forest, fontSize: '1.375rem', fontWeight: 400, margin: '0 0 10px', lineHeight: 1.3 }}>
-                        {feature.title}
-                      </h3>
-                      <p style={{ ...S.sans, ...S.forest, fontSize: '0.875rem', lineHeight: 1.7, margin: 0, opacity: 0.62 }}>
-                        {feature.description}
-                      </p>
+                      <span style={{ ...S.sans, ...S.gold, fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                        {feature.num}
+                      </span>
                     </div>
+                    <h3 style={{ ...S.serif, ...S.forest, fontSize: 'clamp(1.25rem, 2.5vw, 1.75rem)', fontWeight: 400, margin: '0 0 16px', lineHeight: 1.3 }}>
+                      {feature.title}
+                    </h3>
+                    <p style={{ ...S.sans, ...S.forest, fontSize: '0.9375rem', lineHeight: 1.75, margin: 0, opacity: 0.62 }}>
+                      {feature.description}
+                    </p>
+                  </div>
 
-                    {/* Feature video — stable aspect box to prevent flash when partially in view */}
-                    <div style={{ borderTop: '1px solid var(--bab-border)', background: 'var(--bab-white)', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                      <div style={{ aspectRatio: '16/9', overflow: 'hidden' }}>
-                        <ExpandableVideo src={feature.video} poster={feature.image} alt={feature.alt} />
-                      </div>
-                    </div>
+                  {/* Right — video (no hover transform to prevent GPU flash) */}
+                  <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--bab-border)', background: 'var(--bab-parchment)', aspectRatio: '16/9' }}>
+                    <ExpandableVideo src={feature.video} poster={feature.image} alt={feature.alt} />
                   </div>
                 </motion.div>
               );
