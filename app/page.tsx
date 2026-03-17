@@ -197,14 +197,14 @@ export default function HomePage() {
           NAVBAR
       ═════════════════════════════════════════════════════════════════════ */}
       <header style={{ background: 'var(--bab-parchment)', borderBottom: '1px solid var(--bab-border)', position: 'sticky', top: 0, zIndex: 50 }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          {/* Wordmark */}
-          <Link href="/" style={{ ...S.serif, ...S.forest, fontSize: '1.25rem', fontWeight: 400, textDecoration: 'none' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', height: 64, display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 24 }}>
+          {/* Wordmark — left */}
+          <Link href="/" style={{ ...S.serif, ...S.forest, fontSize: '1.25rem', fontWeight: 400, textDecoration: 'none', justifySelf: 'start' }}>
             Babblet
           </Link>
 
-          {/* Nav links */}
-          <nav style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+          {/* Nav links — center */}
+          <nav style={{ display: 'flex', gap: 24, alignItems: 'center', justifySelf: 'center' }}>
             {[['Features', '#features'], ['About', '/about'], ['Contact', '/contact']].map(([label, href]) => (
               <Link key={label} href={href}
                 style={{ ...S.forest, ...S.sans, fontSize: '0.875rem', fontWeight: 400, opacity: 0.6, textDecoration: 'none', transition: 'opacity 0.15s' }}
@@ -215,8 +215,8 @@ export default function HomePage() {
             ))}
           </nav>
 
-          {/* CTA */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {/* CTA — right */}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', justifySelf: 'end' }}>
             <Link href="/login"
               style={{ ...S.forest, ...S.sans, fontSize: '0.875rem', fontWeight: 500, borderRadius: 4, padding: '7px 16px', textDecoration: 'none', border: '1px solid var(--bab-border)', transition: 'background 0.15s' }}
               onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.7)')}
