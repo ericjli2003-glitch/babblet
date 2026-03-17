@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Send, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
+import { Sparkles, Send, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
 export default function ContactPage() {
