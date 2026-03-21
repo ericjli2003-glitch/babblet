@@ -305,7 +305,9 @@ export default function AssignmentDashboardPage() {
     return `~${minutes} minutes`;
   };
 
-  // Process a single submission and return when done
+  // Process a single submission and return when done.
+  // Uses fetchStatusRef so it can immediately refresh the UI when a video
+  // completes, without waiting for the next 2-second background poll tick.
   const processOneSubmission = async (workerNum: number): Promise<boolean> => {
     try {
       console.log(`[AssignmentDashboard] Worker ${workerNum} processing...`);
@@ -315,6 +317,9 @@ export default function AssignmentDashboardPage() {
       
       if (data.processed > 0) {
         setCompletedDuringSession(prev => prev + 1);
+        // Immediately refresh so the completed submission row shows its score
+        // instead of waiting up to 2 seconds for the background poll tick.
+        fetchStatusRef.current?.();
         return true;
       }
       return false;
@@ -459,6 +464,8 @@ export default function AssignmentDashboardPage() {
   // Polling stops only when the SERVER confirms all submissions are graded.
   // ============================================
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Stable ref so processOneSubmission (defined above fetchStatus) can call it
+  const fetchStatusRef = useRef<(() => Promise<void>) | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -487,13 +494,11 @@ export default function AssignmentDashboardPage() {
           statusLockedRef.current = 'completed';
         }
 
-        // Stop polling once everything is confirmed done
-        if (allSubmissionsGraded && finalStatus === 'completed') {
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current);
-            pollIntervalRef.current = null;
-          }
-        }
+        // Intentionally NOT stopping the interval here.
+        // Clearing it prematurely (before setSubmissions commits) caused the
+        // final submission row to never update without a manual refresh.
+        // The 2-second heartbeat is cheap; it stops naturally when the
+        // component unmounts or the user navigates away.
       }
 
       // ── Submissions ────────────────────────────────────────────────────
@@ -555,6 +560,9 @@ export default function AssignmentDashboardPage() {
       console.error('[AssignmentDashboard] Poll error:', err);
     }
   }, [batchId]); // batchId is the only stable dep needed
+
+  // Keep the ref in sync so processOneSubmission can call it without deps
+  fetchStatusRef.current = fetchStatus;
 
   // Start polling once initial load is done; never restart on submissions change
   useEffect(() => {
