@@ -452,181 +452,122 @@ export default function AssignmentDashboardPage() {
   const uploadsInProgress = !isCompleted && expectedUploads > 0 && submissions.length < expectedUploads;
   const uploadProgress = expectedUploads > 0 ? Math.round((submissions.length / expectedUploads) * 100) : 100;
 
-  // Poll for updates (also poll when waiting for uploads or grading)
-  useEffect(() => {
-    if (!batchId) return;
+  // ============================================
+  // POLLING: Stable interval that never restarts on submissions change.
+  // The fetch callback uses only batchId (stable). All state updates use
+  // functional form (prev => ...) so they never need submissions in scope.
+  // Polling stops only when the SERVER confirms all submissions are graded.
+  // ============================================
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    const hasActiveWork = submissions.some(s => 
-      ['queued', 'uploading', 'transcribing', 'analyzing'].includes(s.status)
-    );
-    
-    // Check if grades are still being finalized (status says ready but no score yet)
-    const hasPendingGrades = submissions.some(s => 
-      s.status === 'ready' && !s.hasGradeData
-    );
-    
-    // GRADING STATUS: Continue polling until grading is truly complete
-    // Includes 'finalizing' and 'processing' states where scores are being written
-    const gradingNotComplete = ['processing', 'finalizing', 'retrying'].includes(gradingStatus.status);
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/bulk/status?batchId=${batchId}`);
+      const data = await res.json();
+      if (!data.submissions) return;
 
-    // Keep polling if uploads are expected, grading started, active work, or grades pending
-    const shouldPoll = hasActiveWork || uploadsInProgress || gradingStarted || hasPendingGrades || gradingNotComplete || submissions.length === 0;
-    if (!shouldPoll && submissions.length > 0 && gradingStatus.status === 'completed') return;
+      // ── Grading status ─────────────────────────────────────────────────
+      if (data.gradingStatus) {
+        const newStatus = data.gradingStatus;
+        const currentLock = statusLockedRef.current;
+        const isNewUploadsAdded = newStatus.gradedCount < newStatus.totalCount && currentLock === 'completed';
+        let finalStatus = newStatus.status;
+        if (currentLock === 'completed' && !isNewUploadsAdded) finalStatus = 'completed';
+        const allSubmissionsGraded = data.submissions.length > 0 &&
+          data.submissions.every((s: any) => s.hasGradeData && s.overallScore != null);
+        if (allSubmissionsGraded) { finalStatus = 'completed'; statusLockedRef.current = 'completed'; }
 
-    // Poll faster when grading or uploads are in progress
-    // Reduced to 1s for real-time feedback during active processing
-    const pollInterval = (uploadsInProgress || gradingStarted || hasPendingGrades) ? 1000 : 2000;
-    
-    console.log(`[AssignmentDashboard] Polling enabled: hasActiveWork=${hasActiveWork}, hasPendingGrades=${hasPendingGrades}, gradingStatus=${gradingStatus.status}, interval=${pollInterval}ms`);
+        setGradingStatus(prev => ({
+          ...newStatus,
+          status: finalStatus,
+          gradedCount: Math.max(newStatus.gradedCount, prev.gradedCount),
+        }));
+        setGradedHighWaterMark(prev => Math.max(prev, newStatus.gradedCount));
+        if (newStatus.status === 'completed' || allSubmissionsGraded) {
+          statusLockedRef.current = 'completed';
+        }
 
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/bulk/status?batchId=${batchId}`);
-        const data = await res.json();
-
-        if (data.submissions) {
-          console.log(`[AssignmentDashboard] Poll received ${data.submissions.length} submissions:`, 
-            data.submissions.map((s: any) => ({ id: s.id.slice(-6), status: s.status, score: s.overallScore, hasGrade: s.hasGradeData }))
-          );
-          
-          // ============================================
-          // GRADING STATUS: Update with high water mark and status lock
-          // - Never let graded count go backwards
-          // - Once completed, don't regress to processing
-          // - Use ref to avoid stale closure issues
-          // ============================================
-          if (data.gradingStatus) {
-            const newStatus = data.gradingStatus;
-            const currentLock = statusLockedRef.current;
-            
-            // Check if new uploads were added (unlocks the completed status)
-            const isNewUploadsAdded = newStatus.gradedCount < newStatus.totalCount && currentLock === 'completed';
-            
-            // Determine final status - use ref for current lock value
-            let finalStatus = newStatus.status;
-            if (currentLock === 'completed' && !isNewUploadsAdded) {
-              // Keep completed status if locked and no new uploads
-              finalStatus = 'completed';
-            }
-            
-            // Also check locally: if ALL submissions have grades, force completed
-            const allSubmissionsGraded = data.submissions?.length > 0 && 
-              data.submissions.every((s: any) => s.hasGradeData && s.overallScore != null);
-            if (allSubmissionsGraded) {
-              finalStatus = 'completed';
-              statusLockedRef.current = 'completed';
-            }
-            
-            setGradingStatus(prev => ({
-              ...newStatus,
-              status: finalStatus,
-              // Apply high water mark - never let graded count go backwards
-              gradedCount: Math.max(newStatus.gradedCount, prev.gradedCount),
-            }));
-            
-            // Update high water mark
-            setGradedHighWaterMark(prev => Math.max(prev, newStatus.gradedCount));
-            
-            // Lock status if completed
-            if (newStatus.status === 'completed' || allSubmissionsGraded) {
-              statusLockedRef.current = 'completed';
-            }
-          }
-          
-          // Map fresh data from server
-          const updatedSubs: Submission[] = data.submissions.map((sub: any) => ({
-            id: sub.id,
-            studentName: sub.studentName || 'Unknown Student',
-            originalFilename: sub.originalFilename || 'Unknown',
-            status: sub.status,
-            createdAt: sub.createdAt || Date.now(),
-            completedAt: sub.completedAt,
-            overallScore: sub.overallScore,
-            hasGradeData: sub.hasGradeData ?? false,
-            videoLength: undefined,
-            aiSentiment: sub.analysis?.sentiment || (sub.hasGradeData ? 'Confident' : undefined),
-            flagged: sub.flagged,
-            flagReason: sub.flagReason,
-            gradingCount: sub.gradingCount,
-          }));
-          
-          // ============================================
-          // SUBMISSION UPDATE: Merge server data with local state
-          // - If submission was explicitly regraded (status='queued'), use new data
-          // - Otherwise preserve grade data to prevent flicker
-          // - Never show fewer submissions than we've seen
-          // ============================================
-          setSubmissions(prev => {
-            const prevMap = new Map(prev.map(s => [s.id, s]));
-            
-            // Merge submissions
-            const mergedSubs = updatedSubs.map(newSub => {
-              const existingSub = prevMap.get(newSub.id);
-              
-              // If submission is now queued/processing, it's being regraded - use server data
-              // This allows regrades to show proper status even if previously graded
-              if (['queued', 'transcribing', 'analyzing'].includes(newSub.status)) {
-                return newSub;
-              }
-              
-              // If existing submission has grade data and new doesn't, preserve existing
-              // (protects against transient API inconsistencies during normal grading)
-              if (existingSub?.hasGradeData && existingSub.overallScore != null) {
-                if (newSub.hasGradeData && newSub.overallScore != null) {
-                  return newSub; // New grade available, use it
-                }
-                // Keep existing graded data (prevents flicker)
-                return existingSub;
-              }
-              
-              return newSub;
-            });
-            
-            if (mergedSubs.length >= prev.length) {
-              setSubmissionHighWaterMark(mark => Math.max(mark, mergedSubs.length));
-              return mergedSubs;
-            } else {
-              // Fewer submissions from server - merge into existing to prevent count drop
-              const mergedMap = new Map(mergedSubs.map(s => [s.id, s]));
-              return prev.map(s => {
-                const updated = mergedMap.get(s.id);
-                if (!updated) return s;
-                // If regrading (queued status), use server data
-                if (['queued', 'transcribing', 'analyzing'].includes(updated.status)) {
-                  return updated;
-                }
-                // Preserve grade if existing has it and new doesn't
-                if (s.hasGradeData && s.overallScore != null && (!updated.hasGradeData || updated.overallScore == null)) {
-                  return s;
-                }
-                return updated;
-              });
-            }
-          });
-          
-          if (data.batch) {
-            setBatch(prev => prev ? {
-              ...prev,
-              processedCount: data.batch.processedCount || 0,
-              failedCount: data.batch.failedCount || 0,
-              averageScore: data.batch.averageScore,
-              totalSubmissions: data.batch.totalSubmissions || prev.totalSubmissions,
-              // Preserve higher expectedUploadCount to avoid overwrites during active uploads
-              // If local is higher than server, keep local (we're adding more files)
-              expectedUploadCount: Math.max(
-                prev.expectedUploadCount || 0, 
-                data.batch.expectedUploadCount || 0
-              ) || undefined,
-            } : null);
+        // Stop polling once everything is confirmed done
+        if (allSubmissionsGraded && finalStatus === 'completed') {
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
           }
         }
-      } catch (err) {
-        console.error('[AssignmentDashboard] Poll error:', err);
       }
-    }, pollInterval);
 
-    return () => clearInterval(interval);
-  }, [batchId, submissions, uploadsInProgress, expectedUploads, gradingStarted, gradingStatus.status]);
+      // ── Submissions ────────────────────────────────────────────────────
+      const updatedSubs: Submission[] = data.submissions.map((sub: any) => ({
+        id: sub.id,
+        studentName: sub.studentName || 'Unknown Student',
+        originalFilename: sub.originalFilename || 'Unknown',
+        status: sub.status,
+        createdAt: sub.createdAt || Date.now(),
+        completedAt: sub.completedAt,
+        overallScore: sub.overallScore,
+        hasGradeData: sub.hasGradeData ?? false,
+        videoLength: undefined,
+        aiSentiment: sub.analysis?.sentiment || (sub.hasGradeData ? 'Confident' : undefined),
+        flagged: sub.flagged,
+        flagReason: sub.flagReason,
+        gradingCount: sub.gradingCount,
+      }));
+
+      setSubmissions(prev => {
+        const prevMap = new Map(prev.map(s => [s.id, s]));
+        const mergedSubs = updatedSubs.map(newSub => {
+          const existingSub = prevMap.get(newSub.id);
+          if (['queued', 'transcribing', 'analyzing'].includes(newSub.status)) return newSub;
+          if (existingSub?.hasGradeData && existingSub.overallScore != null) {
+            if (newSub.hasGradeData && newSub.overallScore != null) return newSub;
+            return existingSub;
+          }
+          return newSub;
+        });
+        if (mergedSubs.length >= prev.length) {
+          setSubmissionHighWaterMark(mark => Math.max(mark, mergedSubs.length));
+          return mergedSubs;
+        }
+        const mergedMap = new Map(mergedSubs.map(s => [s.id, s]));
+        return prev.map(s => {
+          const updated = mergedMap.get(s.id);
+          if (!updated) return s;
+          if (['queued', 'transcribing', 'analyzing'].includes(updated.status)) return updated;
+          if (s.hasGradeData && s.overallScore != null && (!updated.hasGradeData || updated.overallScore == null)) return s;
+          return updated;
+        });
+      });
+
+      if (data.batch) {
+        setBatch(prev => prev ? {
+          ...prev,
+          processedCount: data.batch.processedCount || 0,
+          failedCount: data.batch.failedCount || 0,
+          averageScore: data.batch.averageScore,
+          totalSubmissions: data.batch.totalSubmissions || prev.totalSubmissions,
+          expectedUploadCount: Math.max(
+            prev.expectedUploadCount || 0,
+            data.batch.expectedUploadCount || 0
+          ) || undefined,
+        } : null);
+      }
+    } catch (err) {
+      console.error('[AssignmentDashboard] Poll error:', err);
+    }
+  }, [batchId]); // batchId is the only stable dep needed
+
+  // Start polling once initial load is done; never restart on submissions change
+  useEffect(() => {
+    if (!batchId || loading) return;
+    // Fetch immediately so the UI updates as soon as the page is ready
+    fetchStatus();
+    // Then poll on a fixed 2-second heartbeat
+    pollIntervalRef.current = setInterval(fetchStatus, 2000);
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    };
+  }, [batchId, loading, fetchStatus]);
 
   // Derived stats
   const stats = useMemo(() => {
