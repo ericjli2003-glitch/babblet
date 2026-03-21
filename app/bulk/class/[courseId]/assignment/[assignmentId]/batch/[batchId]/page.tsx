@@ -368,11 +368,16 @@ export default function AssignmentDashboardPage() {
         const prevMap = new Map(prev.map(s => [s.id, s]));
         const mergedSubs = updatedSubs.map(newSub => {
           const existingSub = prevMap.get(newSub.id);
-          if (['queued', 'transcribing', 'analyzing'].includes(newSub.status)) return newSub;
+          // ALWAYS check local grade data first — never overwrite a locally-completed
+          // submission with a stale 'transcribing'/'analyzing' status from Redis.
+          // Redis replica lag means we may receive the old status for several seconds
+          // after process-now has already marked it 'ready' and updated local state.
           if (existingSub?.hasGradeData && existingSub.overallScore != null) {
+            // Only accept Redis data if it also confirms the grade is there
             if (newSub.hasGradeData && newSub.overallScore != null) return newSub;
-            return existingSub;
+            return existingSub; // Keep local completed state; Redis is still catching up
           }
+          if (['queued', 'transcribing', 'analyzing'].includes(newSub.status)) return newSub;
           return newSub;
         });
         if (mergedSubs.length >= prev.length) {
@@ -383,8 +388,9 @@ export default function AssignmentDashboardPage() {
         return prev.map(s => {
           const updated = mergedMap.get(s.id);
           if (!updated) return s;
-          if (['queued', 'transcribing', 'analyzing'].includes(updated.status)) return updated;
+          // Same rule in the fallback path: local grade data wins over stale Redis state
           if (s.hasGradeData && s.overallScore != null && (!updated.hasGradeData || updated.overallScore == null)) return s;
+          if (['queued', 'transcribing', 'analyzing'].includes(updated.status)) return updated;
           return updated;
         });
       });
