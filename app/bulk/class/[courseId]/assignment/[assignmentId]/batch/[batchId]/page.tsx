@@ -197,7 +197,7 @@ export default function AssignmentDashboardPage() {
 
         // Fetch batch status and course info
         const [batchRes, courseRes] = await Promise.all([
-          fetch(`/api/bulk/status?batchId=${batchId}`),
+          fetch(`/api/bulk/status?batchId=${batchId}&_t=${Date.now()}`, { cache: 'no-store' }),
           fetch(`/api/context/courses?id=${courseId}`),
         ]);
         
@@ -469,7 +469,7 @@ export default function AssignmentDashboardPage() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`/api/bulk/status?batchId=${batchId}`);
+      const res = await fetch(`/api/bulk/status?batchId=${batchId}&_t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
       if (!data.submissions) return;
 
@@ -733,7 +733,7 @@ export default function AssignmentDashboardPage() {
       setGradingStartTime(Date.now());
       
       // Refetch data immediately
-      const res = await fetch(`/api/bulk/status?batchId=${batchId}`, { signal });
+      const res = await fetch(`/api/bulk/status?batchId=${batchId}&_t=${Date.now()}`, { signal, cache: 'no-store' as RequestCache });
       const data = await res.json();
       if (signal.aborted) return;
       if (data.submissions) {
@@ -1004,7 +1004,7 @@ export default function AssignmentDashboardPage() {
       console.log(`[AddMore] All uploads complete: ${successCount}/${validFiles.length} successful`);
 
       // Refresh data after uploads complete
-      const res = await fetch(`/api/bulk/status?batchId=${batchId}`);
+      const res = await fetch(`/api/bulk/status?batchId=${batchId}&_t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
       if (data.submissions) {
         const subs = data.submissions.map((sub: any) => ({

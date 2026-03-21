@@ -283,6 +283,8 @@ export async function GET(request: NextRequest) {
       })),
       stats,
       globalQueueLength: queueLength,
+    }, {
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
     });
   } catch (error) {
     console.error('[Status] Error:', error);
