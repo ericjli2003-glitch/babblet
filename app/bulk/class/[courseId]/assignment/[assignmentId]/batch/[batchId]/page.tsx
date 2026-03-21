@@ -305,173 +305,25 @@ export default function AssignmentDashboardPage() {
     return `~${minutes} minutes`;
   };
 
-  // Process a single submission and return when done.
-  // Uses fetchStatusRef so it can immediately refresh the UI when a video
-  // completes, without waiting for the next 2-second background poll tick.
-  const processOneSubmission = async (workerNum: number): Promise<boolean> => {
-    try {
-      console.log(`[AssignmentDashboard] Worker ${workerNum} processing...`);
-      const res = await fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST' });
-      const data = await res.json();
-      console.log(`[AssignmentDashboard] Worker ${workerNum} completed:`, data);
-      
-      if (data.processed > 0) {
-        setCompletedDuringSession(prev => prev + 1);
-        // Immediately refresh so the completed submission row shows its score
-        // instead of waiting up to 2 seconds for the background poll tick.
-        fetchStatusRef.current?.();
-        return true;
-      }
-      return false;
-    } catch (err) {
-      console.error(`[AssignmentDashboard] Worker ${workerNum} failed:`, err);
-      return false;
-    }
-  };
-
-  // Worker that keeps processing until no more queued submissions
-  const runWorker = async (workerId: number) => {
-    setActiveWorkers(prev => prev + 1);
-    let processed = true;
-    
-    while (processed) {
-      processed = await processOneSubmission(workerId);
-      // No delay - immediately grab next submission for maximum throughput
-    }
-    
-    setActiveWorkers(prev => prev - 1);
-  };
-
-  const handleStartGrading = async () => {
-    // Don't start grading while uploads are still in progress
-    const expected = batch?.expectedUploadCount || urlExpectedUploads;
-    if (expected > 0 && submissions.length < expected) {
-      console.log(`[AssignmentDashboard] Cannot start grading - uploads in progress (${submissions.length}/${expected})`);
-      return;
-    }
-    
-    const queuedCount = submissions.filter(s => s.status === 'queued').length;
-    if (queuedCount === 0) return;
-
-    setIsStartingGrading(true);
-    setGradingStarted(true);
-    setGradingStartTime(Date.now());
-    setCompletedDuringSession(0);
-    console.log(`[AssignmentDashboard] Starting grading for ${queuedCount} submissions`);
-
-    // ============================================
-    // PARALLEL WORKERS: Scale to match uploads, cap at 20
-    // Each worker continuously processes until queue is empty
-    // 20 workers for faster throughput - APIs can handle it
-    // ============================================
-    const MAX_WORKERS = 20;
-    const numWorkers = Math.min(queuedCount, MAX_WORKERS);
-    console.log(`[AssignmentDashboard] Launching ${numWorkers} parallel workers`);
-    
-    // Don't await - let workers run in background
-    for (let i = 0; i < numWorkers; i++) {
-      runWorker(i + 1);
-    }
-    
-    setIsStartingGrading(false);
-  };
-
-  // Check if grading is in progress (for UI state)
-  const hasQueuedSubmissions = submissions.some(s => s.status === 'queued');
-  const hasActiveProcessing = submissions.some(s => 
-    ['transcribing', 'analyzing'].includes(s.status)
-  );
-  const allProcessed = submissions.length > 0 && submissions.every(s => 
-    s.status === 'ready' || s.status === 'failed'
-  );
-
-  // Reset gradingStarted if all submissions are processed and no active workers
-  useEffect(() => {
-    if (allProcessed && gradingStarted && activeWorkers === 0) {
-      setGradingStarted(false);
-      setGradingStartTime(null);
-    }
-  }, [allProcessed, gradingStarted, activeWorkers]);
-
-  // Clear submissionIdsRegrading once all those submissions have grades again
-  useEffect(() => {
-    if (submissionIdsRegrading.size === 0) return;
-    const idList = Array.from(submissionIdsRegrading);
-    const allDone = idList.every(id => {
-      const s = submissions.find(x => x.id === id);
-      return s?.hasGradeData === true;
-    });
-    if (allDone) setSubmissionIdsRegrading(new Set());
-  }, [submissions, submissionIdsRegrading]);
-
   // ============================================
-  // AUTO-RESUME: Continue grading on page refresh
-  // If there are queued submissions (and uploads complete) or stuck processing,
-  // automatically start grading workers
-  // ============================================
-  useEffect(() => {
-    // Only attempt auto-resume once per page load
-    if (autoResumeAttempted || loading || gradingStarted || activeWorkers > 0) return;
-    
-    // Calculate expected uploads from batch (persistent) or URL (fallback)
-    const expected = batch?.expectedUploadCount || urlExpectedUploads;
-    const uploadsStillInProgress = expected > 0 && submissions.length < expected;
-    
-    // Don't auto-resume while uploads are still in progress
-    if (uploadsStillInProgress) return;
-    
-    // Check if we have work to resume
-    const queuedCount = submissions.filter(s => s.status === 'queued').length;
-    const stuckCount = submissions.filter(s => 
-      ['transcribing', 'analyzing'].includes(s.status)
-    ).length;
-    
-    // Auto-resume if there are queued or stuck submissions
-    if (queuedCount > 0 || stuckCount > 0) {
-      console.log(`[AssignmentDashboard] Auto-resuming grading: ${queuedCount} queued, ${stuckCount} stuck`);
-      setAutoResumeAttempted(true);
-      
-      // Start grading automatically
-      setGradingStarted(true);
-      setGradingStartTime(Date.now());
-      
-      // Start workers - scale to match queued items, cap at 20
-      const MAX_WORKERS = 20;
-      const numWorkers = Math.min(queuedCount + stuckCount, MAX_WORKERS);
-      console.log(`[AutoResume] Launching ${numWorkers} workers for ${queuedCount} queued + ${stuckCount} stuck`);
-      for (let i = 0; i < numWorkers; i++) {
-        runWorker(i + 1);
-      }
-    } else {
-      setAutoResumeAttempted(true);
-    }
-  }, [loading, submissions, batch, urlExpectedUploads, autoResumeAttempted, gradingStarted, activeWorkers]);
-
-  // ============================================
-  // UPLOAD TRACKING: Use stored expectedUploadCount from batch (persistent)
-  // Falls back to URL param for backward compatibility during initial navigation
-  // NEVER show upload progress for completed batches
-  // ============================================
-  const expectedUploads = batch?.expectedUploadCount || urlExpectedUploads;
-  const isCompleted = batch?.status === 'completed' || gradingStatus.status === 'completed';
-  const uploadsInProgress = !isCompleted && expectedUploads > 0 && submissions.length < expectedUploads;
-  const uploadProgress = expectedUploads > 0 ? Math.round((submissions.length / expectedUploads) * 100) : 100;
-
-  // ============================================
-  // POLLING: Stable interval that never restarts on submissions change.
-  // The fetch callback uses only batchId (stable). All state updates use
-  // functional form (prev => ...) so they never need submissions in scope.
-  // Polling stops only when the SERVER confirms all submissions are graded.
+  // POLLING & STATUS REFRESH
+  // fetchStatus is defined FIRST so workers can call it directly.
+  // No refs needed — direct function reference.
   // ============================================
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Stable ref so processOneSubmission (defined above fetchStatus) can call it
-  const fetchStatusRef = useRef<(() => Promise<void>) | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch(`/api/bulk/status?batchId=${batchId}&_t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
-      if (!data.submissions) return;
+      if (!data.submissions) {
+        console.log('[fetchStatus] No submissions in response');
+        return;
+      }
+
+      console.log('[fetchStatus] Received', data.submissions.length, 'submissions:',
+        data.submissions.map((s: any) => `${s.studentName}=${s.status}/${s.hasGradeData ? 'graded' : 'pending'}`).join(', ')
+      );
 
       // ── Grading status ─────────────────────────────────────────────────
       if (data.gradingStatus) {
@@ -493,12 +345,6 @@ export default function AssignmentDashboardPage() {
         if (newStatus.status === 'completed' || allSubmissionsGraded) {
           statusLockedRef.current = 'completed';
         }
-
-        // Intentionally NOT stopping the interval here.
-        // Clearing it prematurely (before setSubmissions commits) caused the
-        // final submission row to never update without a manual refresh.
-        // The 2-second heartbeat is cheap; it stops naturally when the
-        // component unmounts or the user navigates away.
       }
 
       // ── Submissions ────────────────────────────────────────────────────
@@ -559,23 +405,147 @@ export default function AssignmentDashboardPage() {
     } catch (err) {
       console.error('[AssignmentDashboard] Poll error:', err);
     }
-  }, [batchId]); // batchId is the only stable dep needed
-
-  // Keep the ref in sync so processOneSubmission can call it without deps
-  fetchStatusRef.current = fetchStatus;
+  }, [batchId]);
 
   // Start polling once initial load is done; never restart on submissions change
   useEffect(() => {
     if (!batchId || loading) return;
-    // Fetch immediately so the UI updates as soon as the page is ready
+    console.log('[AssignmentDashboard] Starting 2s poll interval');
     fetchStatus();
-    // Then poll on a fixed 2-second heartbeat
     pollIntervalRef.current = setInterval(fetchStatus, 2000);
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
     };
   }, [batchId, loading, fetchStatus]);
+
+  // ============================================
+  // WORKERS: Process submissions and refresh UI on completion
+  // ============================================
+  const processOneSubmission = useCallback(async (workerNum: number): Promise<boolean> => {
+    try {
+      console.log(`[Worker ${workerNum}] Processing...`);
+      const res = await fetch(`/api/bulk/process-now?batchId=${batchId}`, { method: 'POST' });
+      const data = await res.json();
+      console.log(`[Worker ${workerNum}] Done:`, data);
+      
+      if (data.processed > 0) {
+        setCompletedDuringSession(prev => prev + 1);
+        console.log(`[Worker ${workerNum}] Refreshing UI...`);
+        await fetchStatus();
+        console.log(`[Worker ${workerNum}] UI refreshed`);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error(`[Worker ${workerNum}] Failed:`, err);
+      return false;
+    }
+  }, [batchId, fetchStatus]);
+
+  const runWorker = useCallback(async (workerId: number) => {
+    setActiveWorkers(prev => prev + 1);
+    let processed = true;
+    while (processed) {
+      processed = await processOneSubmission(workerId);
+    }
+    setActiveWorkers(prev => prev - 1);
+  }, [processOneSubmission]);
+
+  const handleStartGrading = async () => {
+    const expected = batch?.expectedUploadCount || urlExpectedUploads;
+    if (expected > 0 && submissions.length < expected) {
+      console.log(`[AssignmentDashboard] Cannot start grading - uploads in progress (${submissions.length}/${expected})`);
+      return;
+    }
+    
+    const queuedCount = submissions.filter(s => s.status === 'queued').length;
+    if (queuedCount === 0) return;
+
+    setIsStartingGrading(true);
+    setGradingStarted(true);
+    setGradingStartTime(Date.now());
+    setCompletedDuringSession(0);
+    console.log(`[AssignmentDashboard] Starting grading for ${queuedCount} submissions`);
+
+    const MAX_WORKERS = 20;
+    const numWorkers = Math.min(queuedCount, MAX_WORKERS);
+    console.log(`[AssignmentDashboard] Launching ${numWorkers} parallel workers`);
+    
+    for (let i = 0; i < numWorkers; i++) {
+      runWorker(i + 1);
+    }
+    
+    setIsStartingGrading(false);
+  };
+
+  // Check if grading is in progress (for UI state)
+  const hasQueuedSubmissions = submissions.some(s => s.status === 'queued');
+  const hasActiveProcessing = submissions.some(s => 
+    ['transcribing', 'analyzing'].includes(s.status)
+  );
+  const allProcessed = submissions.length > 0 && submissions.every(s => 
+    s.status === 'ready' || s.status === 'failed'
+  );
+
+  // Reset gradingStarted if all submissions are processed and no active workers
+  useEffect(() => {
+    if (allProcessed && gradingStarted && activeWorkers === 0) {
+      setGradingStarted(false);
+      setGradingStartTime(null);
+    }
+  }, [allProcessed, gradingStarted, activeWorkers]);
+
+  // Clear submissionIdsRegrading once all those submissions have grades again
+  useEffect(() => {
+    if (submissionIdsRegrading.size === 0) return;
+    const idList = Array.from(submissionIdsRegrading);
+    const allDone = idList.every(id => {
+      const s = submissions.find(x => x.id === id);
+      return s?.hasGradeData === true;
+    });
+    if (allDone) setSubmissionIdsRegrading(new Set());
+  }, [submissions, submissionIdsRegrading]);
+
+  // ============================================
+  // AUTO-RESUME: Continue grading on page refresh
+  // ============================================
+  useEffect(() => {
+    if (autoResumeAttempted || loading || gradingStarted || activeWorkers > 0) return;
+    
+    const expected = batch?.expectedUploadCount || urlExpectedUploads;
+    const uploadsStillInProgress = expected > 0 && submissions.length < expected;
+    if (uploadsStillInProgress) return;
+    
+    const queuedCount = submissions.filter(s => s.status === 'queued').length;
+    const stuckCount = submissions.filter(s => 
+      ['transcribing', 'analyzing'].includes(s.status)
+    ).length;
+    
+    if (queuedCount > 0 || stuckCount > 0) {
+      console.log(`[AssignmentDashboard] Auto-resuming grading: ${queuedCount} queued, ${stuckCount} stuck`);
+      setAutoResumeAttempted(true);
+      setGradingStarted(true);
+      setGradingStartTime(Date.now());
+      
+      const MAX_WORKERS = 20;
+      const numWorkers = Math.min(queuedCount + stuckCount, MAX_WORKERS);
+      console.log(`[AutoResume] Launching ${numWorkers} workers for ${queuedCount} queued + ${stuckCount} stuck`);
+      for (let i = 0; i < numWorkers; i++) {
+        runWorker(i + 1);
+      }
+    } else {
+      setAutoResumeAttempted(true);
+    }
+  }, [loading, submissions, batch, urlExpectedUploads, autoResumeAttempted, gradingStarted, activeWorkers, runWorker]);
+
+  // ============================================
+  // UPLOAD TRACKING
+  // ============================================
+  const expectedUploads = batch?.expectedUploadCount || urlExpectedUploads;
+  const isCompleted = batch?.status === 'completed' || gradingStatus.status === 'completed';
+  const uploadsInProgress = !isCompleted && expectedUploads > 0 && submissions.length < expectedUploads;
+  const uploadProgress = expectedUploads > 0 ? Math.round((submissions.length / expectedUploads) * 100) : 100;
 
   // Derived stats
   const stats = useMemo(() => {
