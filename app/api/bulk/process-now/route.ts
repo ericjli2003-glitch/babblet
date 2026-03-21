@@ -497,21 +497,27 @@ export async function POST(request: NextRequest) {
     console.log(`[ProcessNow] Initial queue length: ${queueLength}, batchId: ${batchId || 'none'}`);
 
     // ============================================
-    // PROCESSING CONTINUITY: Always check for stuck submissions when batchId provided
-    // Submissions in 'transcribing' or 'analyzing' may be from a previous
-    // worker that died. Reset them to 'queued' so they can be reprocessed.
-    // This runs regardless of queue length to recover from worker crashes.
+    // PROCESSING CONTINUITY: Recover from worker crashes.
+    // Only reset submissions that have been in transcribing/analyzing for longer
+    // than the Vercel function timeout (10 min >> 5 min maxDuration).
+    // Without a time check, parallel workers racing to call process-now would
+    // reset each other's ACTIVE submissions back to 'queued', creating an
+    // infinite loop where nothing ever reaches 'ready'.
     // ============================================
     if (batchId) {
       const submissions = await getBatchSubmissions(batchId);
+      const STUCK_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+      const now = Date.now();
       
-      // Find stuck submissions (worker crashed during processing)
+      // Only treat as stuck if it has been processing for longer than the
+      // function timeout - actively running parallel workers are NOT stuck.
       const stuckSubmissions = submissions.filter(s => 
-        s.status === 'transcribing' || s.status === 'analyzing'
+        (s.status === 'transcribing' || s.status === 'analyzing') &&
+        s.startedAt && (now - s.startedAt) > STUCK_TIMEOUT_MS
       );
 
       if (stuckSubmissions.length > 0) {
-        console.log(`[ProcessNow] Found ${stuckSubmissions.length} stuck submissions, resetting to queued`);
+        console.log(`[ProcessNow] Found ${stuckSubmissions.length} genuinely stuck submissions (>10 min), resetting to queued`);
         for (const sub of stuckSubmissions) {
           await updateSubmission(sub.id, { status: 'queued' });
           await requeue(sub.id);
