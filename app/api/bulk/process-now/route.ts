@@ -107,7 +107,7 @@ async function transcribeFromUrl(url: string): Promise<{
   return { transcript, segments, durationSeconds };
 }
 
-async function processSubmission(submissionId: string): Promise<{ success: boolean; error?: string }> {
+async function processSubmission(submissionId: string): Promise<{ success: boolean; error?: string; completedSubmission?: { id: string; status: string; overallScore: number | null; hasGradeData: boolean; duration?: number; gradingCount?: number } }> {
   const startTime = Date.now();
   const submission = await getSubmission(submissionId);
 
@@ -137,6 +137,9 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
       duration: durationSeconds,
       status: 'analyzing' 
     });
+
+    // Will be set inside the if (isClaudeConfigured()) block so we can return it
+    let finalOverallScore: number | null = null;
 
     // Analyze with Babblet AI
     if (isClaudeConfigured()) {
@@ -385,6 +388,8 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
 
       // Preserve regrade version: set to 1 on first grading, keep existing on regrade
       const gradingCount = submission.gradingCount ?? 1;
+      // Capture score here while rubricEvaluation is in scope
+      finalOverallScore = rubricEvaluation?.overallScore ?? null;
 
       await updateSubmission(submissionId, {
         // Store the bundleVersionId used for grading
@@ -470,7 +475,18 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
 
     console.log(`[ProcessNow] COMPLETE submissionId=${submissionId} duration=${Date.now() - startTime}ms`);
     await updateBatchStats(submission.batchId);
-    return { success: true };
+    // Return the final state so the frontend can update directly (no Redis re-read needed).
+    return {
+      success: true,
+      completedSubmission: {
+        id: submissionId,
+        status: 'ready',
+        overallScore: finalOverallScore,
+        hasGradeData: finalOverallScore !== null,
+        duration: submission.duration,
+        gradingCount: submission.gradingCount ?? 1,
+      },
+    };
 
   } catch (error) {
     console.error(`[ProcessNow] FAILED submissionId=${submissionId} error=${error instanceof Error ? error.message : 'Unknown'}`);
@@ -633,6 +649,9 @@ export async function POST(request: NextRequest) {
       message: `Processed ${processed.length} submissions`,
       processed: processed.length,
       processedIds: processed,
+      // Include the completed submission so the frontend can update state
+      // without re-reading from Redis (avoids Upstash replica read lag)
+      completedSubmission: result.completedSubmission ?? null,
       errors,
       duration,
       remainingInQueue: await getQueueLength(),

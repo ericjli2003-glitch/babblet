@@ -431,9 +431,30 @@ export default function AssignmentDashboardPage() {
       
       if (data.processed > 0) {
         setCompletedDuringSession(prev => prev + 1);
-        console.log(`[Worker ${workerNum}] Refreshing UI...`);
-        await fetchStatus();
-        console.log(`[Worker ${workerNum}] UI refreshed`);
+
+        // ── Direct state update from process-now response ─────────────────
+        // Do NOT re-read from Redis here. Upstash replica lag means the status
+        // API often still returns the old 'transcribing' state for several
+        // seconds after process-now writes 'ready'. Instead, use the submission
+        // data that process-now returns directly to update React state.
+        if (data.completedSubmission) {
+          const cs = data.completedSubmission;
+          console.log(`[Worker ${workerNum}] Applying direct update for submission ${cs.id}: status=${cs.status}, score=${cs.overallScore}`);
+          setSubmissions(prev => prev.map(sub =>
+            sub.id === cs.id
+              ? {
+                  ...sub,
+                  status: cs.status,
+                  overallScore: cs.overallScore,
+                  hasGradeData: cs.hasGradeData,
+                  gradingCount: cs.gradingCount ?? sub.gradingCount,
+                  aiSentiment: cs.hasGradeData ? (sub.aiSentiment || 'Confident') : sub.aiSentiment,
+                }
+              : sub
+          ));
+          setGradedHighWaterMark(prev => prev + 1);
+        }
+
         return true;
       }
       return false;
@@ -441,7 +462,7 @@ export default function AssignmentDashboardPage() {
       console.error(`[Worker ${workerNum}] Failed:`, err);
       return false;
     }
-  }, [batchId, fetchStatus]);
+  }, [batchId]);
 
   const runWorker = useCallback(async (workerId: number) => {
     setActiveWorkers(prev => prev + 1);
