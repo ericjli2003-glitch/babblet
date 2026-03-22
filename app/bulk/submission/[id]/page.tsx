@@ -1277,15 +1277,14 @@ RULES:
                                           <button
                                             type="button"
                                             key={ri}
+                                            title="Play this moment in the video"
                                             onClick={() => videoPanelRef.current?.seekTo(ref.timestamp)}
                                             className="w-full text-left rounded-lg p-2 -mx-1 hover:bg-emerald-100/80 transition-colors"
                                           >
-                                            <span className="inline-block text-[10px] font-mono text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded mb-1">
-                                              {formatTimestamp(ref.timestamp)}
-                                            </span>
-                                            <p className="text-[10px] text-surface-700 italic leading-relaxed whitespace-pre-wrap break-words">
+                                            <p className="text-[11px] text-surface-800 italic leading-relaxed whitespace-pre-wrap break-words">
                                               &ldquo;{ref.snippet}&rdquo;
                                             </p>
+                                            <p className="text-[9px] text-emerald-600/80 mt-1">Click to play in video</p>
                                           </button>
                                         ))}
                                       </div>
@@ -1315,15 +1314,14 @@ RULES:
                                           <button
                                             type="button"
                                             key={ri}
+                                            title="Play this moment in the video"
                                             onClick={() => videoPanelRef.current?.seekTo(ref.timestamp)}
                                             className="w-full text-left rounded-lg p-2 -mx-1 hover:bg-amber-100/80 transition-colors"
                                           >
-                                            <span className="inline-block text-[10px] font-mono text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded mb-1">
-                                              {formatTimestamp(ref.timestamp)}
-                                            </span>
-                                            <p className="text-[10px] text-surface-700 italic leading-relaxed whitespace-pre-wrap break-words">
+                                            <p className="text-[11px] text-surface-800 italic leading-relaxed whitespace-pre-wrap break-words">
                                               &ldquo;{ref.snippet}&rdquo;
                                             </p>
+                                            <p className="text-[9px] text-amber-700/80 mt-1">Click to play in video</p>
                                           </button>
                                         ))}
                                       </div>

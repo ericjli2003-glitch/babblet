@@ -942,12 +942,12 @@ interface TranscriptSegmentInput {
 }
 
 /** Max stored/displayed length for a transcript citation snippet */
-const TRANSCRIPT_SNIPPET_MAX_CHARS = 750;
+const TRANSCRIPT_SNIPPET_MAX_CHARS = 1150;
 /** Pull this many chars before/after the matched quote within the segment */
-const TRANSCRIPT_SNIPPET_CONTEXT_BEFORE = 220;
-const TRANSCRIPT_SNIPPET_CONTEXT_AFTER = 380;
+const TRANSCRIPT_SNIPPET_CONTEXT_BEFORE = 340;
+const TRANSCRIPT_SNIPPET_CONTEXT_AFTER = 560;
 /** When pulling from adjacent segments, cap each side */
-const ADJACENT_SEGMENT_CHARS = 260;
+const ADJACENT_SEGMENT_CHARS = 400;
 
 /**
  * Build a longer citation: core quote plus surrounding transcript in the same segment,
@@ -982,7 +982,7 @@ function buildExpandedTranscriptSnippet(
   }
 
   // Add prior / next segment text when the window is still thin (multi-sentence ideas)
-  if (snippet.length < 320 && segments.length > 1) {
+  if (snippet.length < 480 && segments.length > 1) {
     if (segmentIndex > 0) {
       const prev = (segments[segmentIndex - 1].text || '').trim();
       if (prev) {
@@ -1270,7 +1270,7 @@ JSON format:
   "contentQuality": {
     "score": number,
     "feedback": "Specific feedback about content as a professor would give",
-    "strengths": [{ "text": "Strength", "quote": "Exact contiguous excerpt (~40–120 words when possible: key phrase plus surrounding sentences)" }],
+    "strengths": [{ "text": "Strength", "quote": "Exact contiguous excerpt (~55–160 words when possible: key phrase plus surrounding sentences)" }],
     "improvements": [{ "text": "Improvement needed", "quote": "Same: long enough excerpt to stand alone" }]
   },
   "delivery": {
@@ -1310,7 +1310,7 @@ CRITICAL REQUIREMENTS:
 2. Each criterion's "score" must use the rubric's scoring scale
 3. Each criterion's "maxScore" should be the maximum for that criterion
 4. "rationale" must cite class context, assignment context, or accuracy checks when applicable
-5. "quote" fields and each string in "relevantQuotes" must be EXACT, CONTIGUOUS words copied from the transcript (no paraphrase). Prefer LONG excerpts: aim for roughly **40–120 words** (about 2–5 sentences) whenever the transcript allows—include the decisive phrase **and** enough surrounding lines that the citation is self-explanatory. If the idea spans consecutive sentences, include them. Only use a shorter quote when the transcript truly has no more relevant contiguous text.
+5. "quote" fields and each string in "relevantQuotes" must be EXACT, CONTIGUOUS words copied from the transcript (no paraphrase). Prefer LONG excerpts: aim for roughly **55–160 words** (about 3–7 sentences) whenever the transcript allows—include the decisive phrase **and** enough surrounding lines that the citation is self-explanatory. If the idea spans consecutive sentences, include them. Only use a shorter quote when the transcript truly has no more relevant contiguous text.
 6. Write as a professor addressing your student
 
 Respond ONLY with valid JSON.`;
