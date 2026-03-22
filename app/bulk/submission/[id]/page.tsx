@@ -58,8 +58,8 @@ interface Submission {
       feedback: string;
       rationale?: string;
     }>;
-    strengths: Array<string | { text: string }>;
-    improvements: Array<string | { text: string }>;
+    strengths: Array<string | { text: string; transcriptRefs?: Array<{ segmentId?: string; timestamp: number; snippet: string }> }>;
+    improvements: Array<string | { text: string; transcriptRefs?: Array<{ segmentId?: string; timestamp: number; snippet: string }> }>;
   };
   questions?: Array<{
     id: string;
@@ -134,6 +134,79 @@ function formatTimestamp(ms: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+type RubricTranscriptRef = { segmentId?: string; timestamp: number; snippet: string };
+
+type ParsedRubricObservation = { text: string; transcriptRefs?: RubricTranscriptRef[] };
+
+function parseRubricObservation(
+  s: string | { text: string; transcriptRefs?: RubricTranscriptRef[] }
+): ParsedRubricObservation {
+  if (typeof s === 'string') return { text: s };
+  return { text: s.text, transcriptRefs: s.transcriptRefs };
+}
+
+function wordOverlapScore(a: string, b: string): number {
+  const tokenize = (t: string) =>
+    new Set(
+      t
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length > 2)
+    );
+  const A = tokenize(a);
+  const B = tokenize(b);
+  if (A.size === 0 || B.size === 0) return 0;
+  let inter = 0;
+  A.forEach((w) => {
+    if (B.has(w)) inter++;
+  });
+  const union = A.size + B.size - inter;
+  return union ? inter / union : 0;
+}
+
+/** Map each key observation line to transcript refs from rubric items (greedy text overlap). */
+function assignRefsToTopObservations(
+  topTexts: string[],
+  rubricItems: ParsedRubricObservation[]
+): RubricTranscriptRef[][] {
+  const used = new Set<number>();
+  const result: RubricTranscriptRef[][] = [];
+  for (const top of topTexts) {
+    let bestJ = -1;
+    let bestScore = -1;
+    for (let j = 0; j < rubricItems.length; j++) {
+      if (used.has(j)) continue;
+      const sc = wordOverlapScore(top, rubricItems[j].text);
+      if (sc > bestScore) {
+        bestScore = sc;
+        bestJ = j;
+      }
+    }
+    let refs: RubricTranscriptRef[] = [];
+    if (
+      bestJ >= 0 &&
+      (bestScore >= 0.06 || (rubricItems[bestJ].transcriptRefs?.length ?? 0) > 0)
+    ) {
+      used.add(bestJ);
+      refs = rubricItems[bestJ].transcriptRefs ?? [];
+    }
+    if (refs.length === 0) {
+      for (let j = 0; j < rubricItems.length; j++) {
+        if (used.has(j)) continue;
+        const r = rubricItems[j].transcriptRefs;
+        if (r?.length) {
+          used.add(j);
+          refs = r;
+          break;
+        }
+      }
+    }
+    result.push(refs);
+  }
+  return result;
 }
 
 function formatDate(timestamp: number): string {
@@ -355,6 +428,25 @@ export default function SubmissionDetailPage() {
     });
     return items;
   }, [rubric]);
+
+  const rubricStrengthsParsed = useMemo((): ParsedRubricObservation[] => {
+    if (!rubric?.strengths?.length) return [];
+    return rubric.strengths.map(parseRubricObservation);
+  }, [rubric?.strengths]);
+
+  const rubricImprovementsParsed = useMemo((): ParsedRubricObservation[] => {
+    if (!rubric?.improvements?.length) return [];
+    return rubric.improvements.map(parseRubricObservation);
+  }, [rubric?.improvements]);
+
+  const strengthRefsByTop = useMemo(
+    () => assignRefsToTopObservations(topStrengths, rubricStrengthsParsed),
+    [topStrengths, rubricStrengthsParsed]
+  );
+  const weaknessRefsByTop = useMemo(
+    () => assignRefsToTopObservations(topWeaknesses, rubricImprovementsParsed),
+    [topWeaknesses, rubricImprovementsParsed]
+  );
 
   // Compute speech metrics from transcript
   const speechMetrics = useMemo(() => {
@@ -1158,7 +1250,7 @@ RULES:
                   </div>
 
 
-                  {/* Key Observations — LLM's top picks */}
+                  {/* Key Observations — LLM's top picks + transcript citations from rubric */}
                   {(topStrengths.length > 0 || topWeaknesses.length > 0) && (
                     <div className="bg-white rounded-2xl border border-surface-200 p-5">
                       <div className="mb-4">
@@ -1171,12 +1263,37 @@ RULES:
                             <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1">
                               <ThumbsUp className="w-3 h-3" /> Strengths
                             </p>
-                            {topStrengths.map((s, i) => (
-                              <div key={i} className="flex gap-2.5 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
-                                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
-                                <p className="text-xs text-surface-800 leading-relaxed">{s}</p>
-                              </div>
-                            ))}
+                            {topStrengths.map((s, i) => {
+                              const refs = strengthRefsByTop[i] ?? [];
+                              return (
+                                <div key={i} className="flex gap-2.5 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+                                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs text-surface-800 leading-relaxed">{s}</p>
+                                    {refs.length > 0 && (
+                                      <div className="mt-2.5 pt-2.5 border-t border-emerald-200/80 space-y-2">
+                                        <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">Transcript citations</p>
+                                        {refs.map((ref, ri) => (
+                                          <button
+                                            type="button"
+                                            key={ri}
+                                            onClick={() => videoPanelRef.current?.seekTo(ref.timestamp)}
+                                            className="w-full text-left rounded-lg p-2 -mx-1 hover:bg-emerald-100/80 transition-colors"
+                                          >
+                                            <span className="inline-block text-[10px] font-mono text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded mb-1">
+                                              {formatTimestamp(ref.timestamp)}
+                                            </span>
+                                            <p className="text-[10px] text-surface-700 italic leading-relaxed whitespace-pre-wrap break-words">
+                                              &ldquo;{ref.snippet}&rdquo;
+                                            </p>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                         {topWeaknesses.length > 0 && (
@@ -1184,97 +1301,42 @@ RULES:
                             <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider flex items-center gap-1">
                               <AlertCircle className="w-3 h-3" /> Areas for Improvement
                             </p>
-                            {topWeaknesses.map((s, i) => (
-                              <div key={i} className="flex gap-2.5 p-3 bg-amber-50 border border-amber-100 rounded-xl">
-                                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
-                                <p className="text-xs text-surface-800 leading-relaxed">{s}</p>
-                              </div>
-                            ))}
+                            {topWeaknesses.map((s, i) => {
+                              const refs = weaknessRefsByTop[i] ?? [];
+                              return (
+                                <div key={i} className="flex gap-2.5 p-3 bg-amber-50 border border-amber-100 rounded-xl">
+                                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs text-surface-800 leading-relaxed">{s}</p>
+                                    {refs.length > 0 && (
+                                      <div className="mt-2.5 pt-2.5 border-t border-amber-200/80 space-y-2">
+                                        <p className="text-[10px] font-semibold text-amber-800 uppercase tracking-wide">Transcript citations</p>
+                                        {refs.map((ref, ri) => (
+                                          <button
+                                            type="button"
+                                            key={ri}
+                                            onClick={() => videoPanelRef.current?.seekTo(ref.timestamp)}
+                                            className="w-full text-left rounded-lg p-2 -mx-1 hover:bg-amber-100/80 transition-colors"
+                                          >
+                                            <span className="inline-block text-[10px] font-mono text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded mb-1">
+                                              {formatTimestamp(ref.timestamp)}
+                                            </span>
+                                            <p className="text-[10px] text-surface-700 italic leading-relaxed whitespace-pre-wrap break-words">
+                                              &ldquo;{ref.snippet}&rdquo;
+                                            </p>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
                     </div>
                   )}
-
-                  {/* Feedback Remarks — positives and areas for improvement with transcript citations */}
-                  {(() => {
-                    const positives = (rubric?.strengths?.length ? rubric.strengths : []).slice(0, 6);
-                    const negatives = (rubric?.improvements?.length ? rubric.improvements : []).slice(0, 6);
-                    const hasRemarks = positives.length > 0 || negatives.length > 0;
-
-                    if (!hasRemarks) return null;
-
-                    return (
-                      <div className="bg-white rounded-2xl border border-surface-200 p-5 space-y-4">
-                        <div>
-                          <h3 className="text-sm font-semibold text-surface-900">Feedback Remarks</h3>
-                          <p className="text-xs text-surface-500 mt-0.5">Key observations drawn from the presentation with transcript references.</p>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          {/* Positives */}
-                          <div className="space-y-2">
-                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1">
-                              <ThumbsUp className="w-3 h-3" /> Strengths
-                            </p>
-                            {positives.map((s, i) => {
-                              const item = typeof s === 'string' ? { text: s } : s as { text: string; transcriptRefs?: Array<{ timestamp: number; snippet: string }> };
-                              const ref = item.transcriptRefs?.[0];
-                              const ts = ref ? formatTimestamp(ref.timestamp) : null;
-                              return (
-                                <div key={i} className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl space-y-1.5">
-                                  <p className="text-xs text-surface-800 leading-relaxed">{item.text}</p>
-                                  {ref && (
-                                    <button
-                                      onClick={() => videoPanelRef.current?.seekTo(ref.timestamp)}
-                                      className="flex items-center gap-1.5 group w-full"
-                                    >
-                                      <span className="text-[10px] font-mono text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded group-hover:bg-emerald-200 transition-colors">
-                                        {ts}
-                                      </span>
-                                      <span className="text-[10px] text-surface-500 italic truncate">
-                                        &ldquo;{ref.snippet.slice(0, 60)}{ref.snippet.length > 60 ? '…' : ''}&rdquo;
-                                      </span>
-                                    </button>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-
-                          {/* Areas for improvement */}
-                          <div className="space-y-2">
-                            <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider flex items-center gap-1">
-                              <AlertCircle className="w-3 h-3" /> Areas for Improvement
-                            </p>
-                            {negatives.map((s, i) => {
-                              const item = typeof s === 'string' ? { text: s } : s as { text: string; transcriptRefs?: Array<{ timestamp: number; snippet: string }> };
-                              const ref = item.transcriptRefs?.[0];
-                              const ts = ref ? formatTimestamp(ref.timestamp) : null;
-                              return (
-                                <div key={i} className="p-3 bg-amber-50 border border-amber-100 rounded-xl space-y-1.5">
-                                  <p className="text-xs text-surface-800 leading-relaxed">{item.text}</p>
-                                  {ref && (
-                                    <button
-                                      onClick={() => videoPanelRef.current?.seekTo(ref.timestamp)}
-                                      className="flex items-center gap-1.5 group w-full"
-                                    >
-                                      <span className="text-[10px] font-mono text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded group-hover:bg-amber-200 transition-colors">
-                                        {ts}
-                                      </span>
-                                      <span className="text-[10px] text-surface-500 italic truncate">
-                                        &ldquo;{ref.snippet.slice(0, 60)}{ref.snippet.length > 60 ? '…' : ''}&rdquo;
-                                      </span>
-                                    </button>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
 
                   {/* Annotated Transcript */}
                   <div className="bg-white rounded-2xl border border-surface-200 overflow-hidden">
