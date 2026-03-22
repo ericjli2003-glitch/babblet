@@ -941,7 +941,71 @@ interface TranscriptSegmentInput {
   speaker?: string;
 }
 
-// Find the best matching segment for a quote
+/** Max stored/displayed length for a transcript citation snippet */
+const TRANSCRIPT_SNIPPET_MAX_CHARS = 750;
+/** Pull this many chars before/after the matched quote within the segment */
+const TRANSCRIPT_SNIPPET_CONTEXT_BEFORE = 220;
+const TRANSCRIPT_SNIPPET_CONTEXT_AFTER = 380;
+/** When pulling from adjacent segments, cap each side */
+const ADJACENT_SEGMENT_CHARS = 260;
+
+/**
+ * Build a longer citation: core quote plus surrounding transcript in the same segment,
+ * and optionally adjacent segments, capped at TRANSCRIPT_SNIPPET_MAX_CHARS.
+ */
+function buildExpandedTranscriptSnippet(
+  quote: string,
+  segments: TranscriptSegmentInput[],
+  segmentIndex: number
+): string {
+  const seg = segments[segmentIndex];
+  const text = seg.text || '';
+  const q = quote.trim();
+  const lower = text.toLowerCase();
+  const qLower = q.toLowerCase();
+  const idx = lower.indexOf(qLower);
+
+  let snippet: string;
+
+  if (idx >= 0) {
+    const matchEnd = idx + q.length;
+    let start = Math.max(0, idx - TRANSCRIPT_SNIPPET_CONTEXT_BEFORE);
+    let end = Math.min(text.length, matchEnd + TRANSCRIPT_SNIPPET_CONTEXT_AFTER);
+    // Nudge to word boundaries when not at edges
+    while (start > 0 && text[start] !== ' ' && text[start - 1] !== ' ') start--;
+    while (end < text.length && text[end] !== ' ' && end > 0 && text[end - 1] !== ' ') end++;
+    snippet = text.slice(start, end).trim();
+  } else {
+    // Fuzzy / paraphrase: use full segment (capped) as context
+    const t = text.trim();
+    snippet = t.length <= TRANSCRIPT_SNIPPET_MAX_CHARS ? t : `${t.slice(0, TRANSCRIPT_SNIPPET_MAX_CHARS - 1)}…`;
+  }
+
+  // Add prior / next segment text when the window is still thin (multi-sentence ideas)
+  if (snippet.length < 320 && segments.length > 1) {
+    if (segmentIndex > 0) {
+      const prev = (segments[segmentIndex - 1].text || '').trim();
+      if (prev) {
+        const tail = prev.length > ADJACENT_SEGMENT_CHARS ? `…${prev.slice(-ADJACENT_SEGMENT_CHARS)}` : prev;
+        snippet = `${tail} ${snippet}`.trim();
+      }
+    }
+    if (snippet.length < TRANSCRIPT_SNIPPET_MAX_CHARS * 0.85 && segmentIndex < segments.length - 1) {
+      const next = (segments[segmentIndex + 1].text || '').trim();
+      if (next) {
+        const head = next.length > ADJACENT_SEGMENT_CHARS ? `${next.slice(0, ADJACENT_SEGMENT_CHARS)}…` : next;
+        snippet = `${snippet} ${head}`.trim();
+      }
+    }
+  }
+
+  if (snippet.length > TRANSCRIPT_SNIPPET_MAX_CHARS) {
+    snippet = `${snippet.slice(0, TRANSCRIPT_SNIPPET_MAX_CHARS - 1)}…`;
+  }
+  return snippet;
+}
+
+// Find the best matching segment for a quote; snippet includes expanded surrounding context
 function findMatchingSegment(
   quote: string,
   segments: TranscriptSegmentInput[]
@@ -949,29 +1013,41 @@ function findMatchingSegment(
   if (!quote || !segments.length) return null;
 
   const normalizedQuote = quote.toLowerCase().trim();
-  if (normalizedQuote.length < 10) return null;
+  if (normalizedQuote.length < 8) return null;
 
   // Try exact substring match first
-  for (const seg of segments) {
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
     if (seg.text.toLowerCase().includes(normalizedQuote)) {
-      return { segmentId: seg.id, timestamp: seg.timestamp, snippet: quote };
+      return {
+        segmentId: seg.id,
+        timestamp: seg.timestamp,
+        snippet: buildExpandedTranscriptSnippet(quote, segments, i),
+      };
     }
   }
 
   // Try fuzzy matching using Dice coefficient
   let bestMatch: TranscriptSegmentInput | null = null;
+  let bestIndex = -1;
   let bestScore = 0;
 
-  for (const seg of segments) {
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
     const score = diceCoefficient(quote, seg.text);
     if (score > bestScore && score > 0.3) {
       bestScore = score;
       bestMatch = seg;
+      bestIndex = i;
     }
   }
 
-  if (bestMatch) {
-    return { segmentId: bestMatch.id, timestamp: bestMatch.timestamp, snippet: quote };
+  if (bestMatch && bestIndex >= 0) {
+    return {
+      segmentId: bestMatch.id,
+      timestamp: bestMatch.timestamp,
+      snippet: buildExpandedTranscriptSnippet(quote, segments, bestIndex),
+    };
   }
 
   return null;
@@ -1158,7 +1234,7 @@ ${guidanceContext}
 
 EVALUATION RULES:
 1. The rubric is the SOLE source of truth for criteria and scoring
-2. Ground EVERY piece of feedback in specific transcript quotes
+2. Ground EVERY piece of feedback in specific transcript excerpts — use SUBSTANTIAL quotes (see length rules below), not tiny fragments
 3. CRITICAL: Each student's score should VARY based on their actual performance - don't give similar scores to different presentations
 4. ACTUALLY READ the transcript carefully and score what you see, not a template response
 5. If a student does something well → HIGH score for that criterion
@@ -1194,8 +1270,8 @@ JSON format:
   "contentQuality": {
     "score": number,
     "feedback": "Specific feedback about content as a professor would give",
-    "strengths": [{ "text": "Strength", "quote": "Exact transcript quote (5-20 words)" }],
-    "improvements": [{ "text": "Improvement needed", "quote": "Exact transcript quote" }]
+    "strengths": [{ "text": "Strength", "quote": "Exact contiguous excerpt (~40–120 words when possible: key phrase plus surrounding sentences)" }],
+    "improvements": [{ "text": "Improvement needed", "quote": "Same: long enough excerpt to stand alone" }]
   },
   "delivery": {
     "score": number,
@@ -1221,9 +1297,9 @@ JSON format:
       "maxScore": number,
       "feedback": "Specific feedback tied to transcript",
       "rationale": "Explain why this score fits, referencing class context, assignment context, and accuracy checks",
-      "relevantQuotes": ["Exact quote 1", "Exact quote 2"],
-      "strengths": [{ "text": "Strength", "quote": "Supporting quote" }],
-      "improvements": [{ "text": "Improvement", "quote": "Relevant quote" }],
+      "relevantQuotes": ["Longer exact excerpt 1 from transcript", "Longer exact excerpt 2 — include surrounding context"],
+      "strengths": [{ "text": "Strength", "quote": "Substantial supporting excerpt from transcript" }],
+      "improvements": [{ "text": "Improvement", "quote": "Substantial relevant excerpt from transcript" }],
       "missingEvidence": ["Specific evidence missing based on rubric requirements"]
     }
   ]
@@ -1234,7 +1310,7 @@ CRITICAL REQUIREMENTS:
 2. Each criterion's "score" must use the rubric's scoring scale
 3. Each criterion's "maxScore" should be the maximum for that criterion
 4. "rationale" must cite class context, assignment context, or accuracy checks when applicable
-5. "quote" fields must contain EXACT words from the transcript (5-20 words)
+5. "quote" fields and each string in "relevantQuotes" must be EXACT, CONTIGUOUS words copied from the transcript (no paraphrase). Prefer LONG excerpts: aim for roughly **40–120 words** (about 2–5 sentences) whenever the transcript allows—include the decisive phrase **and** enough surrounding lines that the citation is self-explanatory. If the idea spans consecutive sentences, include them. Only use a shorter quote when the transcript truly has no more relevant contiguous text.
 6. Write as a professor addressing your student
 
 Respond ONLY with valid JSON.`;
