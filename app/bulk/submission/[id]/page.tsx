@@ -139,12 +139,12 @@ function formatTimestamp(ms: number): string {
 /** A single Key Observation with the transcript segments that evidence it. */
 type TopObservation = { text: string; segmentIndices: number[] };
 
-/** Max characters for a Key Observations block quotation. */
-const KEY_OBS_QUOTE_MAX_CHARS = 2800;
+/** Max characters for a Key Observations block quotation (~2–4 sentences). */
+const KEY_OBS_QUOTE_MAX_CHARS = 500;
 
 /**
- * Build a long quotation for a key observation by merging the evidencing segments
- * (from the annotations API) plus 1 neighbour on each side for context.
+ * Build a quotation by joining exactly the segments the model flagged as evidence.
+ * No neighbour expansion — keeps quotes concise and on-point.
  */
 function buildObservationQuote(
   segmentIndices: number[],
@@ -155,12 +155,8 @@ function buildObservationQuote(
   const validIndices = segmentIndices.filter(i => i >= 0 && i < segments.length);
   if (!validIndices.length) return '';
 
-  const lo = Math.max(0, Math.min(...validIndices) - 1);
-  const hi = Math.min(segments.length - 1, Math.max(...validIndices) + 1);
-
-  const text = segments
-    .slice(lo, hi + 1)
-    .map(s => (s.text || '').trim())
+  const text = validIndices
+    .map(i => (segments[i].text || '').trim())
     .filter(Boolean)
     .join(' ')
     .replace(/\s+/g, ' ')
@@ -169,6 +165,28 @@ function buildObservationQuote(
   return text.length > KEY_OBS_QUOTE_MAX_CHARS
     ? `${text.slice(0, KEY_OBS_QUOTE_MAX_CHARS - 1)}…`
     : text;
+}
+
+type AnnotationsCache = {
+  annotations: Array<{ segmentIndex: number; type: 'positive' | 'negative'; number: number; feedback: string }>;
+  topStrengths: TopObservation[];
+  topWeaknesses: TopObservation[];
+};
+
+function loadAnnotationsCache(submissionId: string): AnnotationsCache | null {
+  try {
+    const raw = localStorage.getItem(`annotations-${submissionId}`);
+    if (!raw) return null;
+    return JSON.parse(raw) as AnnotationsCache;
+  } catch {
+    return null;
+  }
+}
+
+function saveAnnotationsCache(submissionId: string, data: AnnotationsCache) {
+  try {
+    localStorage.setItem(`annotations-${submissionId}`, JSON.stringify(data));
+  } catch { /* storage full or SSR */ }
 }
 
 function formatDate(timestamp: number): string {
@@ -479,12 +497,22 @@ export default function SubmissionDetailPage() {
     return timestamp;
   }, [timestampUnit]);
 
-  // Fetch transcript annotations from LLM when submission is loaded
+  // Fetch transcript annotations from LLM when submission is loaded.
+  // Results are cached in localStorage so revisiting the page doesn't re-run the analysis.
   useEffect(() => {
     const rubric = submission?.rubricEvaluation;
     const segs = submission?.transcriptSegments;
-    if (!segs?.length || !rubric) return;
-    if (transcriptAnnotations.length > 0) return; // already loaded
+    if (!segs?.length || !rubric || !submission?.id) return;
+    if (transcriptAnnotations.length > 0) return; // already in state for this session
+
+    // Try cache first
+    const cached = loadAnnotationsCache(submission.id);
+    if (cached) {
+      setTranscriptAnnotations(cached.annotations);
+      setTopStrengths(cached.topStrengths);
+      setTopWeaknesses(cached.topWeaknesses);
+      return;
+    }
 
     setAnnotationsLoading(true);
     fetch('/api/bulk/transcript-annotations', {
@@ -500,22 +528,26 @@ export default function SubmissionDetailPage() {
     })
       .then(r => r.json())
       .then(data => {
-        if (data.annotations) setTranscriptAnnotations(data.annotations);
-        if (data.topStrengths) {
-          // Support both old string[] format and new {text, segmentIndices}[] format
-          setTopStrengths(
-            (data.topStrengths as Array<string | { text: string; segmentIndices: number[] }>).map(s =>
-              typeof s === 'string' ? { text: s, segmentIndices: [] } : s
-            )
+        const normaliseObs = (
+          items: Array<string | { text: string; segmentIndices: number[] }>
+        ): TopObservation[] =>
+          (items || []).map(s =>
+            typeof s === 'string' ? { text: s, segmentIndices: [] } : s
           );
-        }
-        if (data.topWeaknesses) {
-          setTopWeaknesses(
-            (data.topWeaknesses as Array<string | { text: string; segmentIndices: number[] }>).map(s =>
-              typeof s === 'string' ? { text: s, segmentIndices: [] } : s
-            )
-          );
-        }
+
+        const annotations: AnnotationsCache['annotations'] = (data.annotations || []).map((a: { segmentIndex: number; type: string; number: number; feedback: string }) => ({
+          ...a,
+          type: (a.type === 'positive' ? 'positive' : 'negative') as 'positive' | 'negative',
+        }));
+        const topStrengths = normaliseObs(data.topStrengths || []);
+        const topWeaknesses = normaliseObs(data.topWeaknesses || []);
+
+        setTranscriptAnnotations(annotations);
+        setTopStrengths(topStrengths);
+        setTopWeaknesses(topWeaknesses);
+
+        // Persist so re-visiting doesn't re-run the LLM call
+        saveAnnotationsCache(submission.id, { annotations, topStrengths, topWeaknesses });
       })
       .catch(() => {})
       .finally(() => setAnnotationsLoading(false));
