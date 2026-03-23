@@ -167,46 +167,107 @@ function wordOverlapScore(a: string, b: string): number {
   return union ? inter / union : 0;
 }
 
-/** Map each key observation line to transcript refs from rubric items (greedy text overlap). */
+/**
+ * Map each key observation to transcript refs from rubric items:
+ * 1) overlap match when it yields refs, 2) same-index rubric row, 3) any unused row with refs.
+ */
 function assignRefsToTopObservations(
   topTexts: string[],
   rubricItems: ParsedRubricObservation[]
 ): RubricTranscriptRef[][] {
+  const n = topTexts.length;
+  const result: RubricTranscriptRef[][] = topTexts.map(() => []);
   const used = new Set<number>();
-  const result: RubricTranscriptRef[][] = [];
-  for (const top of topTexts) {
+
+  for (let i = 0; i < n; i++) {
     let bestJ = -1;
     let bestScore = -1;
     for (let j = 0; j < rubricItems.length; j++) {
       if (used.has(j)) continue;
-      const sc = wordOverlapScore(top, rubricItems[j].text);
+      const r = rubricItems[j].transcriptRefs ?? [];
+      if (!r.length) continue;
+      const sc = wordOverlapScore(topTexts[i], rubricItems[j].text);
       if (sc > bestScore) {
         bestScore = sc;
         bestJ = j;
       }
     }
-    let refs: RubricTranscriptRef[] = [];
-    if (
-      bestJ >= 0 &&
-      (bestScore >= 0.06 || (rubricItems[bestJ].transcriptRefs?.length ?? 0) > 0)
-    ) {
+    if (bestJ >= 0 && bestScore >= 0.035) {
       used.add(bestJ);
-      refs = rubricItems[bestJ].transcriptRefs ?? [];
+      result[i] = rubricItems[bestJ].transcriptRefs ?? [];
     }
-    if (refs.length === 0) {
-      for (let j = 0; j < rubricItems.length; j++) {
-        if (used.has(j)) continue;
-        const r = rubricItems[j].transcriptRefs;
-        if (r?.length) {
-          used.add(j);
-          refs = r;
-          break;
-        }
+  }
+
+  for (let i = 0; i < n; i++) {
+    if (result[i].length > 0) continue;
+    if (i < rubricItems.length && !used.has(i)) {
+      const r = rubricItems[i].transcriptRefs ?? [];
+      if (r.length > 0) {
+        used.add(i);
+        result[i] = r;
       }
     }
-    result.push(refs);
   }
+
+  for (let i = 0; i < n; i++) {
+    if (result[i].length > 0) continue;
+    for (let j = 0; j < rubricItems.length; j++) {
+      if (used.has(j)) continue;
+      const r = rubricItems[j].transcriptRefs ?? [];
+      if (r.length > 0) {
+        used.add(j);
+        result[i] = r;
+        break;
+      }
+    }
+  }
+
   return result;
+}
+
+/** Max characters for a Key Observations block quotation (multi-segment window). */
+const KEY_OBS_QUOTE_MAX_CHARS = 2800;
+
+/** Widen stored snippet using neighboring transcript segments around the ref timestamp / segmentId. */
+function expandKeyObservationCitation(
+  ref: RubricTranscriptRef,
+  segments: Array<{ id: string; text: string; timestamp: number }>,
+  normalizeTs: (t: number) => number
+): string {
+  const base = (ref.snippet || '').trim();
+  if (!segments.length) return base || '';
+
+  let i = ref.segmentId ? segments.findIndex(s => s.id === ref.segmentId) : -1;
+  if (i < 0) {
+    const target = normalizeTs(ref.timestamp);
+    let bestI = 0;
+    let bestDiff = Infinity;
+    for (let j = 0; j < segments.length; j++) {
+      const d = Math.abs(normalizeTs(segments[j].timestamp) - target);
+      if (d < bestDiff) {
+        bestDiff = d;
+        bestI = j;
+      }
+    }
+    i = bestI;
+  }
+
+  const lo = Math.max(0, i - 2);
+  const hi = Math.min(segments.length - 1, i + 2);
+  const merged = segments
+    .slice(lo, hi + 1)
+    .map(s => (s.text || '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  let out = merged;
+  if (out.length > KEY_OBS_QUOTE_MAX_CHARS) {
+    out = `${out.slice(0, KEY_OBS_QUOTE_MAX_CHARS - 1)}…`;
+  }
+  if (out.length > base.length + 40) return out;
+  return base.length ? base : out;
 }
 
 function formatDate(timestamp: number): string {
@@ -571,6 +632,28 @@ export default function SubmissionDetailPage() {
     if (!submission?.transcriptSegments) return [];
     return submission.transcriptSegments;
   }, [submission?.transcriptSegments]);
+
+  /** Long quotations under Key Observations: merge ±2 segments around each ref. */
+  const expandedStrengthRefsByTop = useMemo(
+    () =>
+      strengthRefsByTop.map(refs =>
+        refs.map(ref => ({
+          ...ref,
+          snippet: expandKeyObservationCitation(ref, sortedSegments, normalizeTimestamp),
+        }))
+      ),
+    [strengthRefsByTop, sortedSegments, normalizeTimestamp]
+  );
+  const expandedWeaknessRefsByTop = useMemo(
+    () =>
+      weaknessRefsByTop.map(refs =>
+        refs.map(ref => ({
+          ...ref,
+          snippet: expandKeyObservationCitation(ref, sortedSegments, normalizeTimestamp),
+        }))
+      ),
+    [weaknessRefsByTop, sortedSegments, normalizeTimestamp]
+  );
 
   // Get estimated video duration from the last segment or video element
   const [videoDuration, setVideoDuration] = useState(0);
@@ -1264,15 +1347,15 @@ RULES:
                               <ThumbsUp className="w-3 h-3" /> Strengths
                             </p>
                             {topStrengths.map((s, i) => {
-                              const refs = strengthRefsByTop[i] ?? [];
+                              const refs = expandedStrengthRefsByTop[i] ?? [];
                               return (
                                 <div key={i} className="flex gap-2.5 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
                                   <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
                                   <div className="min-w-0 flex-1">
                                     <p className="text-xs text-surface-800 leading-relaxed">{s}</p>
                                     {refs.length > 0 && (
-                                      <div className="mt-2.5 pt-2.5 border-t border-emerald-200/80 space-y-2">
-                                        <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">Transcript citations</p>
+                                      <div className="mt-2.5 pt-2.5 border-t border-emerald-200/80 space-y-3">
+                                        <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">Transcript quotation</p>
                                         {refs.map((ref, ri) => (
                                           <button
                                             type="button"
@@ -1281,10 +1364,10 @@ RULES:
                                             onClick={() => videoPanelRef.current?.seekTo(ref.timestamp)}
                                             className="w-full text-left rounded-lg p-2 -mx-1 hover:bg-emerald-100/80 transition-colors"
                                           >
-                                            <p className="text-[11px] text-surface-800 italic leading-relaxed whitespace-pre-wrap break-words">
+                                            <div className="text-[11px] text-surface-800 italic leading-relaxed whitespace-pre-wrap break-words border-l-2 border-emerald-300/80 pl-2.5">
                                               &ldquo;{ref.snippet}&rdquo;
-                                            </p>
-                                            <p className="text-[9px] text-emerald-600/80 mt-1">Click to play in video</p>
+                                            </div>
+                                            <p className="text-[9px] text-emerald-600/80 mt-1">Click quotation to play in video</p>
                                           </button>
                                         ))}
                                       </div>
@@ -1301,15 +1384,15 @@ RULES:
                               <AlertCircle className="w-3 h-3" /> Areas for Improvement
                             </p>
                             {topWeaknesses.map((s, i) => {
-                              const refs = weaknessRefsByTop[i] ?? [];
+                              const refs = expandedWeaknessRefsByTop[i] ?? [];
                               return (
                                 <div key={i} className="flex gap-2.5 p-3 bg-amber-50 border border-amber-100 rounded-xl">
                                   <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
                                   <div className="min-w-0 flex-1">
                                     <p className="text-xs text-surface-800 leading-relaxed">{s}</p>
                                     {refs.length > 0 && (
-                                      <div className="mt-2.5 pt-2.5 border-t border-amber-200/80 space-y-2">
-                                        <p className="text-[10px] font-semibold text-amber-800 uppercase tracking-wide">Transcript citations</p>
+                                      <div className="mt-2.5 pt-2.5 border-t border-amber-200/80 space-y-3">
+                                        <p className="text-[10px] font-semibold text-amber-800 uppercase tracking-wide">Transcript quotation</p>
                                         {refs.map((ref, ri) => (
                                           <button
                                             type="button"
@@ -1318,10 +1401,10 @@ RULES:
                                             onClick={() => videoPanelRef.current?.seekTo(ref.timestamp)}
                                             className="w-full text-left rounded-lg p-2 -mx-1 hover:bg-amber-100/80 transition-colors"
                                           >
-                                            <p className="text-[11px] text-surface-800 italic leading-relaxed whitespace-pre-wrap break-words">
+                                            <div className="text-[11px] text-surface-800 italic leading-relaxed whitespace-pre-wrap break-words border-l-2 border-amber-300/80 pl-2.5">
                                               &ldquo;{ref.snippet}&rdquo;
-                                            </p>
-                                            <p className="text-[9px] text-amber-700/80 mt-1">Click to play in video</p>
+                                            </div>
+                                            <p className="text-[9px] text-amber-700/80 mt-1">Click quotation to play in video</p>
                                           </button>
                                         ))}
                                       </div>
