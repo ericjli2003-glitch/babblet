@@ -136,125 +136,29 @@ function formatTimestamp(ms: number): string {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
-type RubricTranscriptRef = { segmentId?: string; timestamp: number; snippet: string };
+/** A single Key Observation with the transcript segments that evidence it. */
+type TopObservation = { text: string; segmentIndices: number[] };
 
-type ParsedRubricObservation = { text: string; transcriptRefs?: RubricTranscriptRef[] };
-
-function parseRubricObservation(
-  s: string | { text: string; transcriptRefs?: RubricTranscriptRef[] }
-): ParsedRubricObservation {
-  if (typeof s === 'string') return { text: s };
-  return { text: s.text, transcriptRefs: s.transcriptRefs };
-}
-
-function wordOverlapScore(a: string, b: string): number {
-  const tokenize = (t: string) =>
-    new Set(
-      t
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .split(/\s+/)
-        .filter((w) => w.length > 2)
-    );
-  const A = tokenize(a);
-  const B = tokenize(b);
-  if (A.size === 0 || B.size === 0) return 0;
-  let inter = 0;
-  A.forEach((w) => {
-    if (B.has(w)) inter++;
-  });
-  const union = A.size + B.size - inter;
-  return union ? inter / union : 0;
-}
-
-/**
- * Map each key observation to transcript refs from rubric items:
- * 1) overlap match when it yields refs, 2) same-index rubric row, 3) any unused row with refs.
- */
-function assignRefsToTopObservations(
-  topTexts: string[],
-  rubricItems: ParsedRubricObservation[]
-): RubricTranscriptRef[][] {
-  const n = topTexts.length;
-  const result: RubricTranscriptRef[][] = topTexts.map(() => []);
-  const used = new Set<number>();
-
-  for (let i = 0; i < n; i++) {
-    let bestJ = -1;
-    let bestScore = -1;
-    for (let j = 0; j < rubricItems.length; j++) {
-      if (used.has(j)) continue;
-      const r = rubricItems[j].transcriptRefs ?? [];
-      if (!r.length) continue;
-      const sc = wordOverlapScore(topTexts[i], rubricItems[j].text);
-      if (sc > bestScore) {
-        bestScore = sc;
-        bestJ = j;
-      }
-    }
-    if (bestJ >= 0 && bestScore >= 0.035) {
-      used.add(bestJ);
-      result[i] = rubricItems[bestJ].transcriptRefs ?? [];
-    }
-  }
-
-  for (let i = 0; i < n; i++) {
-    if (result[i].length > 0) continue;
-    if (i < rubricItems.length && !used.has(i)) {
-      const r = rubricItems[i].transcriptRefs ?? [];
-      if (r.length > 0) {
-        used.add(i);
-        result[i] = r;
-      }
-    }
-  }
-
-  for (let i = 0; i < n; i++) {
-    if (result[i].length > 0) continue;
-    for (let j = 0; j < rubricItems.length; j++) {
-      if (used.has(j)) continue;
-      const r = rubricItems[j].transcriptRefs ?? [];
-      if (r.length > 0) {
-        used.add(j);
-        result[i] = r;
-        break;
-      }
-    }
-  }
-
-  return result;
-}
-
-/** Max characters for a Key Observations block quotation (multi-segment window). */
+/** Max characters for a Key Observations block quotation. */
 const KEY_OBS_QUOTE_MAX_CHARS = 2800;
 
-/** Widen stored snippet using neighboring transcript segments around the ref timestamp / segmentId. */
-function expandKeyObservationCitation(
-  ref: RubricTranscriptRef,
-  segments: Array<{ id: string; text: string; timestamp: number }>,
-  normalizeTs: (t: number) => number
+/**
+ * Build a long quotation for a key observation by merging the evidencing segments
+ * (from the annotations API) plus 1 neighbour on each side for context.
+ */
+function buildObservationQuote(
+  segmentIndices: number[],
+  segments: Array<{ text: string }>
 ): string {
-  const base = (ref.snippet || '').trim();
-  if (!segments.length) return base || '';
+  if (!segmentIndices.length || !segments.length) return '';
 
-  let i = ref.segmentId ? segments.findIndex(s => s.id === ref.segmentId) : -1;
-  if (i < 0) {
-    const target = normalizeTs(ref.timestamp);
-    let bestI = 0;
-    let bestDiff = Infinity;
-    for (let j = 0; j < segments.length; j++) {
-      const d = Math.abs(normalizeTs(segments[j].timestamp) - target);
-      if (d < bestDiff) {
-        bestDiff = d;
-        bestI = j;
-      }
-    }
-    i = bestI;
-  }
+  const validIndices = segmentIndices.filter(i => i >= 0 && i < segments.length);
+  if (!validIndices.length) return '';
 
-  const lo = Math.max(0, i - 2);
-  const hi = Math.min(segments.length - 1, i + 2);
-  const merged = segments
+  const lo = Math.max(0, Math.min(...validIndices) - 1);
+  const hi = Math.min(segments.length - 1, Math.max(...validIndices) + 1);
+
+  const text = segments
     .slice(lo, hi + 1)
     .map(s => (s.text || '').trim())
     .filter(Boolean)
@@ -262,12 +166,9 @@ function expandKeyObservationCitation(
     .replace(/\s+/g, ' ')
     .trim();
 
-  let out = merged;
-  if (out.length > KEY_OBS_QUOTE_MAX_CHARS) {
-    out = `${out.slice(0, KEY_OBS_QUOTE_MAX_CHARS - 1)}…`;
-  }
-  if (out.length > base.length + 40) return out;
-  return base.length ? base : out;
+  return text.length > KEY_OBS_QUOTE_MAX_CHARS
+    ? `${text.slice(0, KEY_OBS_QUOTE_MAX_CHARS - 1)}…`
+    : text;
 }
 
 function formatDate(timestamp: number): string {
@@ -339,8 +240,8 @@ export default function SubmissionDetailPage() {
     feedback: string;
   }>>([]);
   const [annotationsLoading, setAnnotationsLoading] = useState(false);
-  const [topStrengths, setTopStrengths] = useState<string[]>([]);
-  const [topWeaknesses, setTopWeaknesses] = useState<string[]>([]);
+  const [topStrengths, setTopStrengths] = useState<TopObservation[]>([]);
+  const [topWeaknesses, setTopWeaknesses] = useState<TopObservation[]>([]);
   const [expandedAnnotation, setExpandedAnnotation] = useState<string | null>(null);
   const [overviewChatMessages, setOverviewChatMessages] = useState<Array<{
     role: 'user' | 'assistant';
@@ -490,24 +391,6 @@ export default function SubmissionDetailPage() {
     return items;
   }, [rubric]);
 
-  const rubricStrengthsParsed = useMemo((): ParsedRubricObservation[] => {
-    if (!rubric?.strengths?.length) return [];
-    return rubric.strengths.map(parseRubricObservation);
-  }, [rubric?.strengths]);
-
-  const rubricImprovementsParsed = useMemo((): ParsedRubricObservation[] => {
-    if (!rubric?.improvements?.length) return [];
-    return rubric.improvements.map(parseRubricObservation);
-  }, [rubric?.improvements]);
-
-  const strengthRefsByTop = useMemo(
-    () => assignRefsToTopObservations(topStrengths, rubricStrengthsParsed),
-    [topStrengths, rubricStrengthsParsed]
-  );
-  const weaknessRefsByTop = useMemo(
-    () => assignRefsToTopObservations(topWeaknesses, rubricImprovementsParsed),
-    [topWeaknesses, rubricImprovementsParsed]
-  );
 
   // Compute speech metrics from transcript
   const speechMetrics = useMemo(() => {
@@ -618,8 +501,21 @@ export default function SubmissionDetailPage() {
       .then(r => r.json())
       .then(data => {
         if (data.annotations) setTranscriptAnnotations(data.annotations);
-        if (data.topStrengths) setTopStrengths(data.topStrengths);
-        if (data.topWeaknesses) setTopWeaknesses(data.topWeaknesses);
+        if (data.topStrengths) {
+          // Support both old string[] format and new {text, segmentIndices}[] format
+          setTopStrengths(
+            (data.topStrengths as Array<string | { text: string; segmentIndices: number[] }>).map(s =>
+              typeof s === 'string' ? { text: s, segmentIndices: [] } : s
+            )
+          );
+        }
+        if (data.topWeaknesses) {
+          setTopWeaknesses(
+            (data.topWeaknesses as Array<string | { text: string; segmentIndices: number[] }>).map(s =>
+              typeof s === 'string' ? { text: s, segmentIndices: [] } : s
+            )
+          );
+        }
       })
       .catch(() => {})
       .finally(() => setAnnotationsLoading(false));
@@ -632,28 +528,6 @@ export default function SubmissionDetailPage() {
     if (!submission?.transcriptSegments) return [];
     return submission.transcriptSegments;
   }, [submission?.transcriptSegments]);
-
-  /** Long quotations under Key Observations: merge ±2 segments around each ref. */
-  const expandedStrengthRefsByTop = useMemo(
-    () =>
-      strengthRefsByTop.map(refs =>
-        refs.map(ref => ({
-          ...ref,
-          snippet: expandKeyObservationCitation(ref, sortedSegments, normalizeTimestamp),
-        }))
-      ),
-    [strengthRefsByTop, sortedSegments, normalizeTimestamp]
-  );
-  const expandedWeaknessRefsByTop = useMemo(
-    () =>
-      weaknessRefsByTop.map(refs =>
-        refs.map(ref => ({
-          ...ref,
-          snippet: expandKeyObservationCitation(ref, sortedSegments, normalizeTimestamp),
-        }))
-      ),
-    [weaknessRefsByTop, sortedSegments, normalizeTimestamp]
-  );
 
   // Get estimated video duration from the last segment or video element
   const [videoDuration, setVideoDuration] = useState(0);
@@ -1333,7 +1207,7 @@ RULES:
                   </div>
 
 
-                  {/* Key Observations — LLM's top picks + transcript citations from rubric */}
+                  {/* Key Observations — LLM's top picks + transcript quotations */}
                   {(topStrengths.length > 0 || topWeaknesses.length > 0) && (
                     <div className="bg-white rounded-2xl border border-surface-200 p-5">
                       <div className="mb-4">
@@ -1346,30 +1220,32 @@ RULES:
                             <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1">
                               <ThumbsUp className="w-3 h-3" /> Strengths
                             </p>
-                            {topStrengths.map((s, i) => {
-                              const refs = expandedStrengthRefsByTop[i] ?? [];
+                            {topStrengths.map((obs, i) => {
+                              const quote = buildObservationQuote(obs.segmentIndices, sortedSegments);
+                              const seekTs = obs.segmentIndices.length > 0 && sortedSegments[obs.segmentIndices[0]]
+                                ? normalizeTimestamp(sortedSegments[obs.segmentIndices[0]].timestamp)
+                                : null;
                               return (
                                 <div key={i} className="flex gap-2.5 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
                                   <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
                                   <div className="min-w-0 flex-1">
-                                    <p className="text-xs text-surface-800 leading-relaxed">{s}</p>
-                                    {refs.length > 0 && (
-                                      <div className="mt-2.5 pt-2.5 border-t border-emerald-200/80 space-y-3">
-                                        <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">Transcript quotation</p>
-                                        {refs.map((ref, ri) => (
-                                          <button
-                                            type="button"
-                                            key={ri}
-                                            title="Play this moment in the video"
-                                            onClick={() => videoPanelRef.current?.seekTo(ref.timestamp)}
-                                            className="w-full text-left rounded-lg p-2 -mx-1 hover:bg-emerald-100/80 transition-colors"
-                                          >
-                                            <div className="text-[11px] text-surface-800 italic leading-relaxed whitespace-pre-wrap break-words border-l-2 border-emerald-300/80 pl-2.5">
-                                              &ldquo;{ref.snippet}&rdquo;
-                                            </div>
-                                            <p className="text-[9px] text-emerald-600/80 mt-1">Click quotation to play in video</p>
-                                          </button>
-                                        ))}
+                                    <p className="text-xs text-surface-800 leading-relaxed">{obs.text}</p>
+                                    {quote && (
+                                      <div className="mt-2.5 pt-2.5 border-t border-emerald-200/80">
+                                        <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide mb-1.5">Transcript quotation</p>
+                                        <button
+                                          type="button"
+                                          title={seekTs ? 'Play this moment in the video' : undefined}
+                                          onClick={() => seekTs != null && videoPanelRef.current?.seekTo(seekTs)}
+                                          className={`w-full text-left rounded-lg p-2 -mx-1 transition-colors ${seekTs != null ? 'hover:bg-emerald-100/80 cursor-pointer' : 'cursor-default'}`}
+                                        >
+                                          <div className="text-[11px] text-surface-800 italic leading-relaxed whitespace-pre-wrap break-words border-l-2 border-emerald-300/80 pl-2.5">
+                                            &ldquo;{quote}&rdquo;
+                                          </div>
+                                          {seekTs != null && (
+                                            <p className="text-[9px] text-emerald-600/80 mt-1">Click to play in video</p>
+                                          )}
+                                        </button>
                                       </div>
                                     )}
                                   </div>
@@ -1383,30 +1259,32 @@ RULES:
                             <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider flex items-center gap-1">
                               <AlertCircle className="w-3 h-3" /> Areas for Improvement
                             </p>
-                            {topWeaknesses.map((s, i) => {
-                              const refs = expandedWeaknessRefsByTop[i] ?? [];
+                            {topWeaknesses.map((obs, i) => {
+                              const quote = buildObservationQuote(obs.segmentIndices, sortedSegments);
+                              const seekTs = obs.segmentIndices.length > 0 && sortedSegments[obs.segmentIndices[0]]
+                                ? normalizeTimestamp(sortedSegments[obs.segmentIndices[0]].timestamp)
+                                : null;
                               return (
                                 <div key={i} className="flex gap-2.5 p-3 bg-amber-50 border border-amber-100 rounded-xl">
                                   <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
                                   <div className="min-w-0 flex-1">
-                                    <p className="text-xs text-surface-800 leading-relaxed">{s}</p>
-                                    {refs.length > 0 && (
-                                      <div className="mt-2.5 pt-2.5 border-t border-amber-200/80 space-y-3">
-                                        <p className="text-[10px] font-semibold text-amber-800 uppercase tracking-wide">Transcript quotation</p>
-                                        {refs.map((ref, ri) => (
-                                          <button
-                                            type="button"
-                                            key={ri}
-                                            title="Play this moment in the video"
-                                            onClick={() => videoPanelRef.current?.seekTo(ref.timestamp)}
-                                            className="w-full text-left rounded-lg p-2 -mx-1 hover:bg-amber-100/80 transition-colors"
-                                          >
-                                            <div className="text-[11px] text-surface-800 italic leading-relaxed whitespace-pre-wrap break-words border-l-2 border-amber-300/80 pl-2.5">
-                                              &ldquo;{ref.snippet}&rdquo;
-                                            </div>
-                                            <p className="text-[9px] text-amber-700/80 mt-1">Click quotation to play in video</p>
-                                          </button>
-                                        ))}
+                                    <p className="text-xs text-surface-800 leading-relaxed">{obs.text}</p>
+                                    {quote && (
+                                      <div className="mt-2.5 pt-2.5 border-t border-amber-200/80">
+                                        <p className="text-[10px] font-semibold text-amber-800 uppercase tracking-wide mb-1.5">Transcript quotation</p>
+                                        <button
+                                          type="button"
+                                          title={seekTs ? 'Play this moment in the video' : undefined}
+                                          onClick={() => seekTs != null && videoPanelRef.current?.seekTo(seekTs)}
+                                          className={`w-full text-left rounded-lg p-2 -mx-1 transition-colors ${seekTs != null ? 'hover:bg-amber-100/80 cursor-pointer' : 'cursor-default'}`}
+                                        >
+                                          <div className="text-[11px] text-surface-800 italic leading-relaxed whitespace-pre-wrap break-words border-l-2 border-amber-300/80 pl-2.5">
+                                            &ldquo;{quote}&rdquo;
+                                          </div>
+                                          {seekTs != null && (
+                                            <p className="text-[9px] text-amber-700/80 mt-1">Click to play in video</p>
+                                          )}
+                                        </button>
                                       </div>
                                     )}
                                   </div>

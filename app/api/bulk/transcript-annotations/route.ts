@@ -26,8 +26,12 @@ export async function POST(req: NextRequest) {
       .map((s, i) => `[${i}] ${s.text}`)
       .join('\n');
 
-    const strengthsList = (strengths || []).map((s: { text: string }) => `- ${s.text}`).join('\n');
-    const improvementsList = (improvements || []).map((s: { text: string }) => `- ${s.text}`).join('\n');
+    const strengthsList = (strengths || []).map((s: { text: string } | string) =>
+      `- ${typeof s === 'string' ? s : s.text}`
+    ).join('\n');
+    const improvementsList = (improvements || []).map((s: { text: string } | string) =>
+      `- ${typeof s === 'string' ? s : s.text}`
+    ).join('\n');
 
     const prompt = `You are an expert academic instructor reviewing a student presentation transcript.
 
@@ -48,12 +52,16 @@ YOUR TASK - return a JSON object with three keys:
    - type: "positive" or "negative"
    - feedback: 1-2 specific sentences referencing the rubric criterion or course concept by name. Quote or paraphrase the student's actual words.
 
-2. "topStrengths": Array of 2-4 strings. The most noteworthy things this student did well relative to the rubric and course expectations. Be specific and concrete.
+2. "topStrengths": Array of 2-4 objects for the most noteworthy things this student did well. Each object:
+   - "text": specific, concrete observation (string)
+   - "segmentIndices": array of 1-4 bracket numbers [n, n+1, ...] from the transcript that DIRECTLY EVIDENCE this strength. Choose a contiguous run of segments that together form a meaningful quote.
 
-3. "topWeaknesses": Array of 2-4 strings. The most important areas for improvement - things that most significantly held back this student. Be direct and actionable.
+3. "topWeaknesses": Array of 2-4 objects for the most important areas for improvement. Each object:
+   - "text": direct, actionable observation (string)
+   - "segmentIndices": array of 1-4 bracket numbers that DIRECTLY EVIDENCE this weakness.
 
 Respond ONLY with valid compact JSON, no markdown fences:
-{"annotations":[{"segmentIndex":2,"type":"positive","feedback":"..."}],"topStrengths":["..."],"topWeaknesses":["..."]}`;
+{"annotations":[{"segmentIndex":2,"type":"positive","feedback":"..."}],"topStrengths":[{"text":"...","segmentIndices":[3,4]}],"topWeaknesses":[{"text":"...","segmentIndices":[10]}]}`;
 
     const message = await anthropic.messages.create({
       model: config.models.claudeSecondary,
@@ -65,8 +73,8 @@ Respond ONLY with valid compact JSON, no markdown fences:
     const jsonStr = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const parsed = JSON.parse(jsonStr) as {
       annotations: Array<{ segmentIndex: number; type: string; feedback: string }>;
-      topStrengths: string[];
-      topWeaknesses: string[];
+      topStrengths: Array<{ text: string; segmentIndices: number[] } | string>;
+      topWeaknesses: Array<{ text: string; segmentIndices: number[] } | string>;
     };
 
     let posNum = 1, negNum = 1;
@@ -79,10 +87,20 @@ Respond ONLY with valid compact JSON, no markdown fences:
         feedback: a.feedback,
       }));
 
+    // Normalise: support both old string format and new object format
+    const normaliseObs = (
+      items: Array<{ text: string; segmentIndices: number[] } | string>
+    ): Array<{ text: string; segmentIndices: number[] }> =>
+      (items || []).map(item =>
+        typeof item === 'string'
+          ? { text: item, segmentIndices: [] }
+          : { text: item.text || '', segmentIndices: Array.isArray(item.segmentIndices) ? item.segmentIndices : [] }
+      );
+
     return NextResponse.json({
       annotations,
-      topStrengths: parsed.topStrengths || [],
-      topWeaknesses: parsed.topWeaknesses || [],
+      topStrengths: normaliseObs(parsed.topStrengths || []),
+      topWeaknesses: normaliseObs(parsed.topWeaknesses || []),
     });
   } catch (err) {
     console.error('[transcript-annotations]', err);
