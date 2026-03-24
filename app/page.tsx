@@ -392,59 +392,23 @@ export default function HomePage() {
             </p>
           </motion.div>
 
-          {/* Feature grid */}
-          <motion.div {...fadeUp(0.06)}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, marginBottom: 40 }}>
+          {/* What you get — simple list (no grid) */}
+          <motion.div {...fadeUp(0.06)} style={{ textAlign: 'center', marginBottom: 40 }}>
+            <h3 style={{ ...S.serif, ...S.forest, fontSize: '1.25rem', fontWeight: 400, margin: '0 0 18px', lineHeight: 1.35 }}>
+              What you get in the trial
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 11, maxWidth: 420, margin: '0 auto', alignItems: 'flex-start' }}>
               {[
-                {
-                  icon: (
-                    <svg width={20} height={20} viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="var(--bab-forest)" strokeWidth={1.4} opacity={0.3}/><path d="M10 6v4l2.5 2.5" stroke="var(--bab-forest)" strokeWidth={1.5} strokeLinecap="round"/></svg>
-                  ),
-                  title: 'AI performance score',
-                  body: 'Per-dimension breakdown across every rubric criterion, with a letter grade and overall percentile.',
-                },
-                {
-                  icon: (
-                    <svg width={20} height={20} viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="var(--bab-forest)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  ),
-                  title: 'Strengths & improvements',
-                  body: 'Pinpointed observations grounded in the transcript, with verbatim quotations for each finding.',
-                },
-                {
-                  icon: (
-                    <svg width={20} height={20} viewBox="0 0 20 20" fill="none"><circle cx="8" cy="8" r="5" stroke="var(--bab-forest)" strokeWidth={1.4} opacity={0.35}/><path d="M12 12l4 4" stroke="var(--bab-forest)" strokeWidth={1.5} strokeLinecap="round"/></svg>
-                  ),
-                  title: 'Follow-up questions',
-                  body: 'Targeted Socratic questions across Bloom\'s taxonomy levels, branching infinitely deeper.',
-                },
-                {
-                  icon: (
-                    <svg width={20} height={20} viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="12" rx="2" stroke="var(--bab-forest)" strokeWidth={1.4} opacity={0.35}/><path d="M8 10l2-2 2 2" stroke="var(--bab-forest)" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round"/><path d="M10 8v5" stroke="var(--bab-forest)" strokeWidth={1.4} strokeLinecap="round"/></svg>
-                  ),
-                  title: 'Upload your own video',
-                  body: 'Drop in any presentation recording and get the same full Babblet analysis on your content.',
-                },
+                'AI-generated performance score with per-dimension breakdown',
+                'Identified strengths and areas for improvement',
+                'Targeted follow-up questions grounded in the transcript',
+                'Upload your own video for a personalized demo',
               ].map((item, i) => (
-                <div key={i} style={{
-                  background: 'var(--bab-white)',
-                  border: '1px solid var(--bab-border)',
-                  borderRadius: 12,
-                  padding: '24px 22px',
-                }}>
-                  <div style={{
-                    width: 36, height: 36, borderRadius: 8,
-                    background: 'rgba(26,58,42,0.07)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    marginBottom: 14,
-                  }}>
-                    {item.icon}
+                <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'rgba(26,58,42,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
+                    <svg width={8} height={8} viewBox="0 0 8 8"><path d="M1 4l2 2 4-4" stroke="var(--bab-forest)" strokeWidth={1.4} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   </div>
-                  <p style={{ ...S.sans, ...S.forest, fontSize: '0.875rem', fontWeight: 600, margin: '0 0 6px', lineHeight: 1.3 }}>
-                    {item.title}
-                  </p>
-                  <p style={{ ...S.sans, ...S.forest, fontSize: '0.8125rem', margin: 0, lineHeight: 1.6, opacity: 0.6 }}>
-                    {item.body}
-                  </p>
+                  <p style={{ ...S.sans, fontSize: '0.8125rem', color: 'var(--bab-forest)', margin: 0, lineHeight: 1.55, opacity: 0.78, textAlign: 'left' }}>{item}</p>
                 </div>
               ))}
             </div>
