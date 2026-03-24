@@ -200,6 +200,13 @@ function findSegmentIndexForQuote(quote: string, segments: { text: string }[]): 
 }
 
 type SegmentMark = 'strength' | 'improvement' | 'both' | 'none';
+
+interface SegmentAnnotation {
+  type: 'strength' | 'improvement';
+  text: string;
+  quote: string;
+}
+
 function buildSegmentMarks(result: AnalysisResult, segCount: number): SegmentMark[] {
   const segs = result.transcript ?? [];
   const out: Array<SegmentMark | undefined> = Array(segCount).fill(undefined);
@@ -218,6 +225,20 @@ function buildSegmentMarks(result: AnalysisResult, segCount: number): SegmentMar
     }
   });
   return out.map((m) => (m ?? 'none')) as SegmentMark[];
+}
+
+/** Build a reverse map: segment index → list of observations tied to it. */
+function buildSegmentAnnotations(result: AnalysisResult, segCount: number): Map<number, SegmentAnnotation[]> {
+  const segs = result.transcript ?? [];
+  const map = new Map<number, SegmentAnnotation[]>();
+  const push = (idx: number, ann: SegmentAnnotation) => {
+    if (idx < 0 || idx >= segCount) return;
+    if (!map.has(idx)) map.set(idx, []);
+    map.get(idx)!.push(ann);
+  };
+  result.strengths.forEach((s) => push(findSegmentIndexForQuote(s.quote, segs), { type: 'strength', text: s.text, quote: s.quote }));
+  result.improvements.forEach((s) => push(findSegmentIndexForQuote(s.quote, segs), { type: 'improvement', text: s.text, quote: s.quote }));
+  return map;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -299,6 +320,98 @@ function ScoreCircle({ score, max, size = 56 }: { score: number; max: number; si
         {score}/{max}
       </text>
     </svg>
+  );
+}
+
+// ─── Transcript rows with expandable annotations ─────────────────────────────
+function TranscriptRows({
+  transcript,
+  segmentMarks,
+  segmentAnnotations,
+}: {
+  transcript: NonNullable<AnalysisResult['transcript']>;
+  segmentMarks: SegmentMark[];
+  segmentAnnotations: Map<number, SegmentAnnotation[]>;
+}) {
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const toggle = (i: number) => setExpanded(prev => {
+    const next = new Set(prev);
+    next.has(i) ? next.delete(i) : next.add(i);
+    return next;
+  });
+
+  if (transcript.length === 0) {
+    return (
+      <div className="p-5">
+        <p className="text-xs text-slate-500 text-center py-8">Run Babblet analysis to see a transcript for your upload.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-5 max-h-[480px] overflow-y-auto">
+      <div className="space-y-0">
+        {transcript.map((seg, i) => {
+          const mark = segmentMarks[i] ?? 'none';
+          const annotations = segmentAnnotations.get(i) ?? [];
+          const isExpanded = expanded.has(i);
+          const isClickable = mark !== 'none' && annotations.length > 0;
+
+          return (
+            <div key={i} className="border-b border-slate-50 last:border-0">
+              <div
+                className={`flex items-start gap-3 py-2.5 ${isClickable ? 'cursor-pointer hover:bg-slate-50 -mx-2 px-2 rounded-lg transition-colors' : ''}`}
+                onClick={() => isClickable && toggle(i)}
+              >
+                <div className="flex flex-col items-end gap-1 flex-shrink-0 w-[52px] pt-0.5">
+                  {mark !== 'none' && (
+                    <div className="flex items-center gap-0.5">
+                      {(mark === 'strength' || mark === 'both') && (
+                        <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[8px] font-bold flex items-center justify-center">S</span>
+                      )}
+                      {(mark === 'improvement' || mark === 'both') && (
+                        <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center">I</span>
+                      )}
+                    </div>
+                  )}
+                  <span className="font-mono text-[10px] text-emerald-600">[{i}]</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-slate-700 leading-relaxed">{seg.text}</p>
+                  {isClickable && (
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {isExpanded ? 'Hide feedback ↑' : 'Show feedback ↓'}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Expanded annotation cards */}
+              {isExpanded && annotations.map((ann, ai) => (
+                <div
+                  key={ai}
+                  className={`mb-2 mx-2 p-3 rounded-xl border text-xs leading-relaxed ${
+                    ann.type === 'strength'
+                      ? 'bg-emerald-50 border-emerald-100'
+                      : 'bg-amber-50 border-amber-100'
+                  }`}
+                >
+                  <p className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${ann.type === 'strength' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    {ann.type === 'strength' ? '✓ Strength' : '△ Area for improvement'}
+                  </p>
+                  <p className="text-slate-800 leading-relaxed">{ann.text}</p>
+                  {ann.quote && (
+                    <p className="mt-2 text-[11px] italic text-slate-500 border-l-2 pl-2 border-slate-300">
+                      &ldquo;{ann.quote}&rdquo;
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -770,6 +883,11 @@ export default function TryPage() {
     const base = analysisForUi ?? DEMO_RESULT;
     return buildSegmentMarks(base, transcript.length);
   }, [analysisForUi, transcript.length]);
+  const segmentAnnotations = useMemo(() => {
+    if (!transcript.length) return new Map<number, SegmentAnnotation[]>();
+    const base = analysisForUi ?? DEMO_RESULT;
+    return buildSegmentAnnotations(base, transcript.length);
+  }, [analysisForUi, transcript.length]);
   const sm = analysisForUi?.speechMetrics ?? DEMO_RESULT.speechMetrics!;
 
   return (
@@ -977,35 +1095,11 @@ export default function TryPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="p-5 max-h-[400px] overflow-y-auto">
-                    {transcript.length === 0 ? (
-                      <p className="text-xs text-slate-500 text-center py-8">Run Babblet analysis to see a transcript for your upload.</p>
-                    ) : (
-                      <div className="space-y-0">
-                        {transcript.map((seg, i) => {
-                          const mark = segmentMarks[i] ?? 'none';
-                          return (
-                            <div key={i} className="flex items-start gap-3 py-2.5 border-b border-slate-50 last:border-0">
-                              <div className="flex flex-col items-end gap-1 flex-shrink-0 w-[52px] pt-0.5">
-                                {mark !== 'none' && (
-                                  <div className="flex items-center gap-0.5">
-                                    {(mark === 'strength' || mark === 'both') && (
-                                      <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[8px] font-bold flex items-center justify-center" title="Strength">S</span>
-                                    )}
-                                    {(mark === 'improvement' || mark === 'both') && (
-                                      <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center" title="Improvement">I</span>
-                                    )}
-                                  </div>
-                                )}
-                                <span className="font-mono text-[10px] text-emerald-600">[{i}]</span>
-                              </div>
-                              <p className="text-xs text-slate-700 leading-relaxed">{seg.text}</p>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                  <TranscriptRows
+                    transcript={transcript}
+                    segmentMarks={segmentMarks}
+                    segmentAnnotations={segmentAnnotations}
+                  />
                 </div>
 
                 {/* Upload CTA — only visible when in demo mode with no upload */}
