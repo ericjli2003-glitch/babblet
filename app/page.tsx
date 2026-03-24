@@ -5,7 +5,6 @@ import { motion } from 'framer-motion';
 import {
   ArrowRight, X,
   BookOpen, MessageSquare, BarChart3, Award,
-  Upload, Zap, CheckSquare, Send,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -155,13 +154,6 @@ const SHOWCASE_FEATURES = [
     video: '/features/feature-rubric.mp4',
     alt: 'Grading rubric interface with per-criterion scoring and Babblet-generated insights',
   },
-];
-
-const HOW_IT_WORKS = [
-  { num: '01', icon: Upload,       title: 'Upload rubric & student videos',    desc: 'Add your grading rubric and upload student presentation videos in any format.' },
-  { num: '02', icon: Zap,          title: 'Babblet transcribes & analyzes',    desc: 'Our agentic AI transcribes presentations and evaluates every criterion automatically.' },
-  { num: '03', icon: CheckSquare,  title: 'Review grades & feedback',          desc: 'Inspect per-criterion scores, transcript citations, and AI-generated insights.' },
-  { num: '04', icon: Send,         title: 'Deliver to students',               desc: 'Export polished feedback reports and finalize grades with a single click.' },
 ];
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -328,85 +320,40 @@ export default function HomePage() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════════════════
-          HOW IT WORKS  (forest green bg)
+          TRY IT OUT  (forest green — brand color, generous vertical space)
       ═════════════════════════════════════════════════════════════════════ */}
-      <section style={{ background: 'var(--bab-forest)', padding: '96px 0' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
-
-          <motion.div {...fadeUp()} style={{ textAlign: 'center', marginBottom: 64 }}>
-            <span style={{ ...S.gold, ...S.sans, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 14 }}>
-              How It Works
-            </span>
-            <h2 style={{ ...S.serif, ...S.parch, fontSize: 'clamp(1.875rem, 4vw, 2.75rem)', fontWeight: 400, lineHeight: 1.2, margin: 0 }}>
-              From upload to feedback<br />
-              <em style={{ fontStyle: 'italic' }}>in minutes, not hours.</em>
-            </h2>
-          </motion.div>
-
-          {/* Steps */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 32, position: 'relative' }}>
-            {/* Connector line (decorative) */}
-            <div style={{ position: 'absolute', top: 28, left: '10%', right: '10%', height: 1, background: 'rgba(247,245,240,0.12)', pointerEvents: 'none' }} className="hidden lg:block" />
-
-            {HOW_IT_WORKS.map((step, idx) => {
-              const Icon = step.icon;
-              return (
-                <motion.div key={step.num} {...fadeUp(idx * 0.1)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 16 }}>
-                  {/* Circle */}
-                  <div style={{ width: 56, height: 56, borderRadius: '50%', border: '1.5px solid rgba(196,137,42,0.35)', background: 'rgba(196,137,42,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1, flexShrink: 0 }}>
-                    <Icon size={20} color="var(--bab-gold)" />
-                  </div>
-                  <div>
-                    <span style={{ ...S.sans, ...S.gold, fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
-                      Step {step.num}
-                    </span>
-                    <h3 style={{ ...S.sans, ...S.parch, fontWeight: 600, fontSize: '0.9375rem', margin: '0 0 8px', lineHeight: 1.4 }}>
-                      {step.title}
-                    </h3>
-                    <p style={{ ...S.sans, ...S.parch, fontSize: '0.8125rem', lineHeight: 1.7, margin: 0, opacity: 0.52 }}>
-                      {step.desc}
-                    </p>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          TRY IT OUT  (parchment bg)
-      ═════════════════════════════════════════════════════════════════════ */}
-      <section id="try" style={{ background: 'var(--bab-parchment)', padding: '96px 0' }}>
-        <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 24px' }}>
-          {/* Heading */}
-          <motion.div {...fadeUp()} style={{ textAlign: 'center', marginBottom: 56 }}>
-            <span style={{ ...S.gold, ...S.sans, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 14 }}>
+      <section id="try" style={{ background: 'var(--bab-forest)', padding: '140px 0 148px' }}>
+        <div style={{ maxWidth: 640, margin: '0 auto', padding: '0 28px' }}>
+          <motion.div {...fadeUp()} style={{ textAlign: 'center', marginBottom: 44 }}>
+            <span style={{ ...S.gold, ...S.sans, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 16 }}>
               Try it free
             </span>
-            <h2 style={{ ...S.serif, ...S.forest, fontSize: 'clamp(1.875rem, 4vw, 2.75rem)', fontWeight: 400, lineHeight: 1.2, margin: '0 0 18px' }}>
+            <h2 style={{ ...S.serif, ...S.parch, fontSize: 'clamp(1.875rem, 4vw, 2.75rem)', fontWeight: 400, lineHeight: 1.2, margin: '0 0 22px' }}>
               Experience Babblet<br /><em style={{ fontStyle: 'italic' }}>in under a minute.</em>
             </h2>
-            <p style={{ ...S.sans, ...S.forest, fontSize: '1rem', lineHeight: 1.65, margin: '0 auto', maxWidth: 460, opacity: 0.62 }}>
+            <p style={{ ...S.sans, ...S.parch, fontSize: '1.0625rem', lineHeight: 1.7, margin: '0 auto 18px', maxWidth: 480, opacity: 0.78 }}>
               Watch a real student presentation graded with Babblet—or upload your own video. No sign-up required, just 9 free credits to explore.
+            </p>
+            <p style={{ ...S.sans, ...S.parch, fontSize: '0.9375rem', lineHeight: 1.65, margin: 0, maxWidth: 440, marginLeft: 'auto', marginRight: 'auto', opacity: 0.52 }}>
+              See rubric-aligned scores, transcript-backed insights, and branching follow-up questions—the same flow faculty use in production.
             </p>
           </motion.div>
 
-          {/* CTA */}
-          <motion.div {...fadeUp(0.06)} style={{ textAlign: 'center' }}>
+          <motion.div {...fadeUp(0.08)} style={{ textAlign: 'center' }}>
             <Link href="/try"
               style={{
-                ...S.sans, ...S.parch, background: 'var(--bab-forest)', fontWeight: 600,
-                fontSize: '1rem', borderRadius: 6, padding: '14px 32px',
+                ...S.sans, ...S.forest, background: 'var(--bab-parchment)', fontWeight: 600,
+                fontSize: '1rem', borderRadius: 6, padding: '15px 34px',
                 textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 9,
                 transition: 'all 0.2s',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
               }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 28px rgba(26,58,42,0.22)'; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}>
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.18)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.12)'; }}>
               Try it out — it&apos;s free
-              <svg width={14} height={14} viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 3l4 4-4 4" stroke="#F7F5F0" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" /></svg>
+              <svg width={14} height={14} viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 3l4 4-4 4" stroke="var(--bab-forest)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" /></svg>
             </Link>
-            <p style={{ ...S.sans, fontSize: '0.8rem', color: 'var(--bab-forest)', opacity: 0.4, margin: '12px 0 0' }}>
+            <p style={{ ...S.sans, ...S.parch, fontSize: '0.8rem', opacity: 0.45, margin: '16px 0 0' }}>
               9 free credits · No credit card · No sign-up
             </p>
           </motion.div>
