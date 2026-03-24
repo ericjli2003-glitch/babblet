@@ -742,13 +742,26 @@ export default function TryPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) { setApiErr(data.error || 'Analysis failed.'); return; }
+      if (!res.ok) {
+        // Fallback: still show full demo analysis so the UI isn't broken
+        const fallback = ensureTrialResult(DEMO_RESULT);
+        setResult(fallback);
+        setCachedResult(fallback);
+        setActiveTab('overview');
+        setApiErr(data.error || 'Analysis preview unavailable — showing demo results.');
+        return;
+      }
       const normalized = ensureTrialResult(data.result as AnalysisResult);
       setResult(normalized);
       setCachedResult(normalized);
       setActiveTab('overview');
     } catch {
-      setApiErr('Network error. Please try again.');
+      // Network/parse error — still show demo so the UI works
+      const fallback = ensureTrialResult(DEMO_RESULT);
+      setResult(fallback);
+      setCachedResult(fallback);
+      setActiveTab('overview');
+      setApiErr('Network error — showing demo results.');
     } finally {
       setLoading(false);
     }

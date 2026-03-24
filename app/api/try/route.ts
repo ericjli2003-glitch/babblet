@@ -173,78 +173,25 @@ ${exampleItems}
     if (action === 'full') {
       if (!transcript) return NextResponse.json({ error: 'Transcript required.' }, { status: 400 });
 
-      const isStub = transcript.length < 200;
-      const transcriptBlock = isStub
-        ? `[No transcript available — video was uploaded but not transcribed. Generate a plausible evaluation as if the student gave a typical undergraduate presentation on the topic implied by the filename. Use generic but realistic illustrative quotes like "In my presentation today, I will discuss..." in the strengths/improvements fields.]`
-        : transcript.slice(0, 9000);
+      // For stub/trial uploads (no real transcript), send a minimal prompt.
+      // The client's ensureTrialResult fills rubric insights + transcript segments from demo data.
+      const isStub = transcript.length < 400;
+      const context = isStub
+        ? `A student uploaded a video presentation (filename hint: "${transcript.slice(0, 120)}"). No transcript is available. Generate a plausible academic presentation evaluation.`
+        : `TRANSCRIPT:\n${transcript.slice(0, 6000)}`;
 
-      const prompt = `You are Babblet. Analyze this student presentation and return a comprehensive evaluation in JSON.
+      const prompt = `You are Babblet, an academic presentation coach. Return ONLY a valid JSON object — no markdown, no commentary.
 
-TRANSCRIPT:
-${transcriptBlock}
+${context}
 
-Return ONLY valid JSON with this exact shape (be concise — keep all text fields brief):
-{
-  "overallScore": <number 0-100>,
-  "maxScore": 100,
-  "letterGrade": <"A"|"A-"|"B+"|"B"|"B-"|"C+"|"C"|"D"|"F">,
-  "summary": "<2 sentence overall assessment>",
-  "speechMetrics": { "fillerWords": <0-40>, "wordsPerMin": <90-200>, "pausesPerMin": <1-15> },
-  "strengths": [
-    { "text": "<observation, 1 sentence>", "quote": "<short illustrative quote, 10-25 words>" },
-    { "text": "<observation>", "quote": "<quote>" },
-    { "text": "<observation>", "quote": "<quote>" }
-  ],
-  "improvements": [
-    { "text": "<observation, 1 sentence>", "quote": "<short illustrative quote, 10-25 words>" },
-    { "text": "<observation>", "quote": "<quote>" },
-    { "text": "<observation>", "quote": "<quote>" }
-  ],
-  "transcript": [
-    { "timestamp": "0:00", "text": "<segment 1>" },
-    { "timestamp": "0:20", "text": "<segment 2>" },
-    { "timestamp": "0:40", "text": "<segment 3>" },
-    { "timestamp": "1:00", "text": "<segment 4>" },
-    { "timestamp": "1:20", "text": "<segment 5>" },
-    { "timestamp": "1:40", "text": "<segment 6>" },
-    { "timestamp": "2:00", "text": "<segment 7>" },
-    { "timestamp": "2:20", "text": "<segment 8>" }
-  ],
-  "rubric": [
-    {
-      "criterion": "Content & Knowledge", "score": <0-25>, "maxScore": 25, "feedback": "<1 sentence>", "status": <"strong"|"adequate"|"weak">,
-      "insights": { "overview": "<2 sentences>", "strengths": [{ "text": "<1 sentence>", "refs": [0] }, { "text": "<1 sentence>", "refs": [2] }], "improvements": [{ "text": "<1 sentence>", "refs": [1] }, { "text": "<1 sentence>", "refs": [3] }] }
-    },
-    {
-      "criterion": "Structure & Organization", "score": <0-25>, "maxScore": 25, "feedback": "<1 sentence>", "status": <"strong"|"adequate"|"weak">,
-      "insights": { "overview": "<2 sentences>", "strengths": [{ "text": "<1 sentence>", "refs": [0] }, { "text": "<1 sentence>", "refs": [1] }], "improvements": [{ "text": "<1 sentence>", "refs": [2] }, { "text": "<1 sentence>", "refs": [4] }] }
-    },
-    {
-      "criterion": "Evidence & Support", "score": <0-25>, "maxScore": 25, "feedback": "<1 sentence>", "status": <"strong"|"adequate"|"weak">,
-      "insights": { "overview": "<2 sentences>", "strengths": [{ "text": "<1 sentence>", "refs": [3] }, { "text": "<1 sentence>", "refs": [5] }], "improvements": [{ "text": "<1 sentence>", "refs": [2] }, { "text": "<1 sentence>", "refs": [6] }] }
-    },
-    {
-      "criterion": "Clarity & Delivery", "score": <0-25>, "maxScore": 25, "feedback": "<1 sentence>", "status": <"strong"|"adequate"|"weak">,
-      "insights": { "overview": "<2 sentences>", "strengths": [{ "text": "<1 sentence>", "refs": [0] }, { "text": "<1 sentence>", "refs": [7] }], "improvements": [{ "text": "<1 sentence>", "refs": [4] }, { "text": "<1 sentence>", "refs": [6] }] }
-    }
-  ],
-  "questions": [
-    { "question": "<follow-up question>", "category": "evidence", "rationale": "<1 sentence>", "timestamp": "1:00" },
-    { "question": "<follow-up question>", "category": "depth", "rationale": "<1 sentence>", "timestamp": "1:20" },
-    { "question": "<follow-up question>", "category": "application", "rationale": "<1 sentence>", "timestamp": "1:40" },
-    { "question": "<follow-up question>", "category": "assumption", "rationale": "<1 sentence>", "timestamp": "2:00" },
-    { "question": "<follow-up question>", "category": "synthesis", "rationale": "<1 sentence>", "timestamp": "0:40" }
-  ]
-}
+JSON shape (keep every string field to 1 sentence max):
+{"overallScore":<0-100>,"maxScore":100,"letterGrade":"B+","summary":"<1-2 sentences>","strengths":[{"text":"<observation>","quote":"<10-20 word excerpt>"},{"text":"<observation>","quote":"<excerpt>"},{"text":"<observation>","quote":"<excerpt>"}],"improvements":[{"text":"<observation>","quote":"<10-20 word excerpt>"},{"text":"<observation>","quote":"<excerpt>"},{"text":"<observation>","quote":"<excerpt>"}],"rubric":[{"criterion":"Content & Knowledge","score":<0-25>,"maxScore":25,"feedback":"<1 sentence>","status":"strong"},{"criterion":"Structure & Organization","score":<0-25>,"maxScore":25,"feedback":"<1 sentence>","status":"adequate"},{"criterion":"Evidence & Support","score":<0-25>,"maxScore":25,"feedback":"<1 sentence>","status":"adequate"},{"criterion":"Clarity & Delivery","score":<0-25>,"maxScore":25,"feedback":"<1 sentence>","status":"strong"}],"questions":[{"question":"<question>","category":"evidence","rationale":"<1 sentence>","timestamp":"1:00"},{"question":"<question>","category":"depth","rationale":"<1 sentence>","timestamp":"1:20"},{"question":"<question>","category":"application","rationale":"<1 sentence>","timestamp":"1:40"},{"question":"<question>","category":"assumption","rationale":"<1 sentence>","timestamp":"2:00"},{"question":"<question>","category":"synthesis","rationale":"<1 sentence>","timestamp":"0:40"}]}
 
-Rules:
-- rubric scores must sum to overallScore
-- Keep all text concise — 1-2 sentences max per field
-- Respond ONLY with the JSON object, no commentary`;
+Rules: rubric scores must sum to overallScore. Return ONLY the JSON.`;
 
       const msg = await anthropic.messages.create({
         model: 'claude-3-5-haiku-20241022',
-        max_tokens: 4096,
+        max_tokens: 900,
         messages: [{ role: 'user', content: prompt }],
       });
 
