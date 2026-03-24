@@ -6,8 +6,10 @@ const PUBLIC_PATHS = [
   '/about',
   '/contact',
   '/login',
+  '/try',
   '/api/auth',
   '/api/contact',
+  '/api/try',
   '/icon.svg',
 ];
 
