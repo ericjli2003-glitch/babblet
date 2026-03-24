@@ -392,30 +392,8 @@ export default function HomePage() {
             </p>
           </motion.div>
 
-          {/* What you get — simple list (no grid) */}
-          <motion.div {...fadeUp(0.06)} style={{ textAlign: 'center', marginBottom: 40 }}>
-            <h3 style={{ ...S.serif, ...S.forest, fontSize: '1.25rem', fontWeight: 400, margin: '0 0 18px', lineHeight: 1.35 }}>
-              What you get in the trial
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 11, maxWidth: 420, margin: '0 auto', alignItems: 'flex-start' }}>
-              {[
-                'AI-generated performance score with per-dimension breakdown',
-                'Identified strengths and areas for improvement',
-                'Targeted follow-up questions grounded in the transcript',
-                'Upload your own video for a personalized demo',
-              ].map((item, i) => (
-                <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'rgba(26,58,42,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
-                    <svg width={8} height={8} viewBox="0 0 8 8"><path d="M1 4l2 2 4-4" stroke="var(--bab-forest)" strokeWidth={1.4} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                  </div>
-                  <p style={{ ...S.sans, fontSize: '0.8125rem', color: 'var(--bab-forest)', margin: 0, lineHeight: 1.55, opacity: 0.78, textAlign: 'left' }}>{item}</p>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-
           {/* CTA */}
-          <motion.div {...fadeUp(0.12)} style={{ textAlign: 'center' }}>
+          <motion.div {...fadeUp(0.06)} style={{ textAlign: 'center' }}>
             <Link href="/try"
               style={{
                 ...S.sans, ...S.parch, background: 'var(--bab-forest)', fontWeight: 600,
