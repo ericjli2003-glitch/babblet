@@ -378,8 +378,9 @@ export default function HomePage() {
           TRY IT OUT  (parchment bg)
       ═════════════════════════════════════════════════════════════════════ */}
       <section id="try" style={{ background: 'var(--bab-parchment)', padding: '96px 0' }}>
-        <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 24px' }}>
-          <motion.div {...fadeUp()} style={{ textAlign: 'center', marginBottom: 52 }}>
+        <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 24px' }}>
+          {/* Heading */}
+          <motion.div {...fadeUp()} style={{ textAlign: 'center', marginBottom: 56 }}>
             <span style={{ ...S.gold, ...S.sans, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 14 }}>
               Try it free
             </span>
@@ -391,80 +392,81 @@ export default function HomePage() {
             </p>
           </motion.div>
 
-          {/* Preview card */}
-          <motion.div {...fadeUp(0.08)}>
-            <div style={{
-              border: '1px solid var(--bab-border)', borderRadius: 14,
-              background: 'var(--bab-white)', overflow: 'hidden',
-              display: 'grid', gridTemplateColumns: '1fr 1fr', minHeight: 280,
-            }}>
-              {/* Left — UI preview mockup */}
-              <div style={{ background: 'var(--bab-forest)', padding: '28px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {/* Fake score card */}
-                <div style={{ background: 'rgba(247,245,240,0.07)', borderRadius: 10, padding: '12px 14px', border: '1px solid rgba(247,245,240,0.12)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ ...S.sans, ...S.parch, fontSize: '0.6875rem', fontWeight: 600, opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Overall Score</span>
-                    <span style={{ ...S.sans, fontSize: '0.6875rem', fontWeight: 700, color: '#6ee7b7', background: 'rgba(110,231,183,0.15)', padding: '2px 8px', borderRadius: 20 }}>B+</span>
+          {/* Feature grid */}
+          <motion.div {...fadeUp(0.06)}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, marginBottom: 40 }}>
+              {[
+                {
+                  icon: (
+                    <svg width={20} height={20} viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="var(--bab-forest)" strokeWidth={1.4} opacity={0.3}/><path d="M10 6v4l2.5 2.5" stroke="var(--bab-forest)" strokeWidth={1.5} strokeLinecap="round"/></svg>
+                  ),
+                  title: 'AI performance score',
+                  body: 'Per-dimension breakdown across every rubric criterion, with a letter grade and overall percentile.',
+                },
+                {
+                  icon: (
+                    <svg width={20} height={20} viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="var(--bab-forest)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  ),
+                  title: 'Strengths & improvements',
+                  body: 'Pinpointed observations grounded in the transcript, with verbatim quotations for each finding.',
+                },
+                {
+                  icon: (
+                    <svg width={20} height={20} viewBox="0 0 20 20" fill="none"><circle cx="8" cy="8" r="5" stroke="var(--bab-forest)" strokeWidth={1.4} opacity={0.35}/><path d="M12 12l4 4" stroke="var(--bab-forest)" strokeWidth={1.5} strokeLinecap="round"/></svg>
+                  ),
+                  title: 'Follow-up questions',
+                  body: 'Targeted Socratic questions across Bloom\'s taxonomy levels, branching infinitely deeper.',
+                },
+                {
+                  icon: (
+                    <svg width={20} height={20} viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="12" rx="2" stroke="var(--bab-forest)" strokeWidth={1.4} opacity={0.35}/><path d="M8 10l2-2 2 2" stroke="var(--bab-forest)" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round"/><path d="M10 8v5" stroke="var(--bab-forest)" strokeWidth={1.4} strokeLinecap="round"/></svg>
+                  ),
+                  title: 'Upload your own video',
+                  body: 'Drop in any presentation recording and get the same full Babblet analysis on your content.',
+                },
+              ].map((item, i) => (
+                <div key={i} style={{
+                  background: 'var(--bab-white)',
+                  border: '1px solid var(--bab-border)',
+                  borderRadius: 12,
+                  padding: '24px 22px',
+                }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 8,
+                    background: 'rgba(26,58,42,0.07)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    marginBottom: 14,
+                  }}>
+                    {item.icon}
                   </div>
-                  <span style={{ ...S.serif, ...S.parch, fontSize: '2rem', fontWeight: 400 }}>82</span>
-                  <span style={{ ...S.sans, ...S.parch, fontSize: '0.8rem', opacity: 0.4 }}> / 100</span>
-                </div>
-                {/* Fake criterion bars */}
-                {[['Content & Knowledge', 88], ['Structure', 92], ['Evidence & Support', 68]].map(([label, pct]) => (
-                  <div key={label as string} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ ...S.sans, ...S.parch, fontSize: '0.6875rem', opacity: 0.65 }}>{label}</span>
-                      <span style={{ ...S.sans, fontSize: '0.6875rem', fontWeight: 600, color: Number(pct) >= 75 ? '#6ee7b7' : '#fcd34d' }}>{pct}%</span>
-                    </div>
-                    <div style={{ height: 4, background: 'rgba(247,245,240,0.1)', borderRadius: 99 }}>
-                      <div style={{ height: '100%', width: `${pct}%`, background: Number(pct) >= 75 ? '#6ee7b7' : '#fcd34d', borderRadius: 99 }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Right — feature bullets + CTA */}
-              <div style={{ padding: '32px 32px 28px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                <div>
-                  <h3 style={{ ...S.serif, ...S.forest, fontSize: '1.25rem', fontWeight: 400, margin: '0 0 18px', lineHeight: 1.35 }}>
-                    What you get in the trial
-                  </h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-                    {[
-                      'AI-generated performance score with per-dimension breakdown',
-                      'Identified strengths and areas for improvement',
-                      'Targeted follow-up questions grounded in the transcript',
-                      'Upload your own video for a personalized demo',
-                    ].map((item, i) => (
-                      <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                        <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'rgba(26,58,42,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
-                          <svg width={8} height={8} viewBox="0 0 8 8"><path d="M1 4l2 2 4-4" stroke="var(--bab-forest)" strokeWidth={1.4} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                        </div>
-                        <p style={{ ...S.sans, fontSize: '0.8125rem', color: 'var(--bab-forest)', margin: 0, lineHeight: 1.55, opacity: 0.78 }}>{item}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div style={{ marginTop: 24 }}>
-                  <Link href="/try"
-                    style={{
-                      ...S.sans, ...S.parch, background: 'var(--bab-forest)', fontWeight: 600,
-                      fontSize: '0.9375rem', borderRadius: 6, padding: '12px 26px',
-                      textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8,
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(26,58,42,0.22)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}>
-                    Try it out — it&apos;s free
-                    <svg width={14} height={14} viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 3l4 4-4 4" stroke="#F7F5F0" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" /></svg>
-                  </Link>
-                  <p style={{ ...S.sans, fontSize: '0.75rem', color: 'var(--bab-forest)', opacity: 0.45, margin: '10px 0 0' }}>
-                    9 free credits · No credit card · No sign-up
+                  <p style={{ ...S.sans, ...S.forest, fontSize: '0.875rem', fontWeight: 600, margin: '0 0 6px', lineHeight: 1.3 }}>
+                    {item.title}
+                  </p>
+                  <p style={{ ...S.sans, ...S.forest, fontSize: '0.8125rem', margin: 0, lineHeight: 1.6, opacity: 0.6 }}>
+                    {item.body}
                   </p>
                 </div>
-              </div>
+              ))}
             </div>
+          </motion.div>
+
+          {/* CTA */}
+          <motion.div {...fadeUp(0.12)} style={{ textAlign: 'center' }}>
+            <Link href="/try"
+              style={{
+                ...S.sans, ...S.parch, background: 'var(--bab-forest)', fontWeight: 600,
+                fontSize: '1rem', borderRadius: 6, padding: '14px 32px',
+                textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 9,
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 28px rgba(26,58,42,0.22)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}>
+              Try it out — it&apos;s free
+              <svg width={14} height={14} viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 3l4 4-4 4" stroke="#F7F5F0" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </Link>
+            <p style={{ ...S.sans, fontSize: '0.8rem', color: 'var(--bab-forest)', opacity: 0.4, margin: '12px 0 0' }}>
+              9 free credits · No credit card · No sign-up
+            </p>
           </motion.div>
         </div>
       </section>
