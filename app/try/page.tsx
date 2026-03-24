@@ -39,10 +39,61 @@ const DEMO_RESULT: AnalysisResult = {
     { text: 'Consider addressing psychosocial factors and client/family goals more explicitly in the subjective section to strengthen person-centered care documentation.', quote: 'He reports increased confidence in self-care activities over the past two weeks, stating that therapy has helped him regain independence.' },
   ],
   rubric: [
-    { criterion: 'Content & Knowledge', score: 22, maxScore: 25, feedback: 'Demonstrates strong understanding of OT principles and post-stroke rehabilitation. Clinical reasoning is sound, though could integrate more evidence-based frameworks.', status: 'strong' },
-    { criterion: 'Structure & Organization', score: 23, maxScore: 25, feedback: 'Excellent SOAP note structure with logical flow between sections. Clear transitions and well-organized presentation of clinical information.', status: 'strong' },
-    { criterion: 'Evidence & Support', score: 17, maxScore: 25, feedback: 'Functional measures are included but specific research citations are lacking. Discharge criteria need measurable benchmarks aligned with evidence-based practice.', status: 'adequate' },
-    { criterion: 'Clarity & Delivery', score: 20, maxScore: 25, feedback: 'Professional delivery with appropriate pacing. Clinical terminology is used correctly. Could benefit from more dynamic engagement with the audience.', status: 'strong' },
+    {
+      criterion: 'Content Knowledge', score: 18, maxScore: 20, feedback: 'Demonstrates solid foundational knowledge of SOAP note structure and post-stroke OT intervention.', status: 'strong',
+      insights: {
+        overview: 'Taylor demonstrates solid foundational knowledge of SOAP note structure and post-stroke OT intervention, but the content analysis reveals a pattern of asserting clinical concepts without the depth of understanding or evidence integration the rubric expects. The presentation shows familiarity with key terminology—neuroplasticity, motor relearning, executive functioning—yet struggles to move beyond surface-level application of these concepts to demonstrate true conceptual mastery.',
+        strengths: [
+          { text: 'The clinical picture includes appropriate OT-relevant deficits: "right sided hemiparesis, impaired balance, decreased coordination, expressive aphasia, and reduced executive functioning" shows understanding that CVA impacts multiple performance areas occupational therapists address.', refs: [2, 4] },
+          { text: 'Notably, the discharge summary acknowledges the multifaceted nature of OT intervention: "Occupational therapy interventions addressed ADLs, cognition, balance, and psychosocial adjustment" reflects accurate role understanding that OT extends beyond just physical rehabilitation.', refs: [3, 4] },
+          { text: 'The contextual factors mentioned—"single story home with steps at the entrance and limited community resources due to geographic isolation"—demonstrate understanding that environmental and social contexts matter for discharge planning, which aligns with client-centered practice principles.', refs: [1, 4] },
+        ],
+        improvements: [
+          { text: 'The claim that "the client demonstrates neuroplastic recovery consistent with post stroke rehabilitation literature" lacks any explanation of *what* neuroplastic recovery means or *how* the observed improvements (dressing, transfers) specifically reflect neuroplastic principles. The rubric\'s "conceptual understanding" component requires more than terminology dropping—it needs demonstration that you understand the underlying mechanism.', refs: [4] },
+          { text: 'When stating "Research supports intensive therapy following CVA to maximize functional independence," no specific research is cited, no intensity parameters are defined, and no connection is made to the client\'s actual therapy schedule of "2×/week."', refs: [3] },
+        ],
+      },
+    },
+    {
+      criterion: 'Structure', score: 14, maxScore: 20, feedback: 'Well-organized SOAP note with clear section delineation. Transitions are logical but could be more explicitly signposted.', status: 'strong',
+      insights: {
+        overview: 'The presentation follows a clear SOAP note framework with appropriate sequencing from subjective through plan. Section boundaries are explicit and the logical flow supports clinical reasoning. Minor improvements in transitional language and summary statements would strengthen the overall structure.',
+        strengths: [
+          { text: '"Beginning with the subjective section..." and "In the objective section..." clearly delineate SOAP components and orient the audience to the documentation structure being used.', refs: [1] },
+          { text: 'The plan section logically follows from the assessment findings, with therapy goals directly addressing the functional deficits identified in the objective section.', refs: [3] },
+        ],
+        improvements: [
+          { text: 'The transition from objective findings to assessment lacks an explicit synthesis statement connecting the two sections. A brief integrative sentence before the assessment would strengthen clinical reasoning demonstration.', refs: [2] },
+          { text: 'The discharge summary is presented as a separate section but its relationship to the ongoing treatment plan is unclear—is this a projected discharge or current status?', refs: [4] },
+        ],
+      },
+    },
+    {
+      criterion: 'Visual Aids', score: 8, maxScore: 15, feedback: 'Minimal use of visual support. The verbal presentation was clear but slides did not consistently reinforce spoken content.', status: 'adequate',
+      insights: {
+        overview: 'Visual aids were underutilized relative to the complexity of clinical information being presented. While the spoken delivery was organized, the slides lacked the visual reinforcement needed to help an audience track SOAP note components, understand functional metrics, or visualize the client\'s progress.',
+        strengths: [
+          { text: 'The title slide clearly identified the assignment type and client context, providing helpful orientation before the detailed clinical information began.', refs: [1] },
+        ],
+        improvements: [
+          { text: 'Objective data such as grip strength measurements (12 lbs vs 38 lbs) and functional assistance levels (minimal assist, contact guard) would benefit from visual representation—a simple table or progress chart would significantly improve comprehension.', refs: [2] },
+          { text: 'The discharge criteria ("independence in morning self-care routine") are abstract without a visual checklist or timeline showing the progression from current to target performance.', refs: [3] },
+        ],
+      },
+    },
+    {
+      criterion: 'Delivery', score: 10, maxScore: 10, feedback: 'Professional and confident delivery throughout. Pacing was appropriate and clinical terminology was used fluently and accurately.', status: 'strong',
+      insights: {
+        overview: 'Delivery was a clear strength of this presentation. Taylor maintained a professional tone, spoke at a measured pace (125 wpm—within the optimal 120–180 range), and used clinical terminology with accuracy and confidence. Only one filler word was detected across the full presentation.',
+        strengths: [
+          { text: 'Speaking rate of 125 words per minute falls within the optimal comprehension range and allowed for clear articulation of complex clinical terminology without rushing.', refs: [1] },
+          { text: 'Minimal use of filler words (1 instance detected) compared to the class average of 17 demonstrates strong verbal preparation and clinical communication skills.', refs: [2] },
+        ],
+        improvements: [
+          { text: 'While delivery was fluent, more dynamic emphasis on key findings (e.g., raising vocal intensity when reporting grip strength discrepancy) would help the audience identify critical clinical data points.', refs: [3] },
+        ],
+      },
+    },
   ],
   questions: [
     { question: 'You mention "neuroplastic recovery consistent with post-stroke rehabilitation trajectory." What specific evidence or assessment tools did you use to determine the client is on a typical recovery trajectory?', category: 'evidence', rationale: 'Tests ability to distinguish between clinical observation and evidence-based assessment.', timestamp: '1:12' },
@@ -73,6 +124,16 @@ const DEMO_RESULT: AnalysisResult = {
 const DEMO_TRANSCRIPT_TEXT = DEMO_RESULT.transcript!.map(s => s.text).join(' ');
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+interface RubricInsight {
+  overview: string;
+  strengths: Array<{ text: string; refs: number[] }>;
+  improvements: Array<{ text: string; refs: number[] }>;
+}
+interface RubricCriterion {
+  criterion: string; score: number; maxScore: number; feedback: string;
+  status: 'strong' | 'adequate' | 'weak';
+  insights?: RubricInsight;
+}
 interface AnalysisResult {
   overallScore: number;
   maxScore: number;
@@ -81,7 +142,7 @@ interface AnalysisResult {
   speechMetrics?: { fillerWords: number; wordsPerMin: number; pausesPerMin: number };
   strengths: Array<{ text: string; quote: string }>;
   improvements: Array<{ text: string; quote: string }>;
-  rubric: Array<{ criterion: string; score: number; maxScore: number; feedback: string; status: 'strong' | 'adequate' | 'weak' }>;
+  rubric: RubricCriterion[];
   questions: Array<{ question: string; category: string; rationale: string; timestamp: string }>;
   transcript?: Array<{ timestamp: string; text: string }>;
 }
@@ -109,17 +170,19 @@ function setCachedResult(result: AnalysisResult) {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(result)); } catch {}
 }
 
-const CAT_COLORS: Record<string, { bg: string; text: string; border: string; label: string }> = {
-  clarification: { bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE', label: 'Clarification' },
-  depth:         { bg: '#F5F3FF', text: '#6D28D9', border: '#DDD6FE', label: 'Depth' },
-  evidence:      { bg: '#ECFDF5', text: '#065F46', border: '#A7F3D0', label: 'Evidence' },
-  application:   { bg: '#FFF7ED', text: '#C2410C', border: '#FED7AA', label: 'Application' },
-  assumption:    { bg: '#FDF4FF', text: '#7E22CE', border: '#E9D5FF', label: 'Assumption' },
-  synthesis:     { bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0', label: 'Synthesis' },
+const CAT_STYLES: Record<string, { bg: string; text: string; border: string; label: string; icon: string }> = {
+  clarification:    { bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE', label: 'Clarification',      icon: '💬' },
+  depth:            { bg: '#F5F3FF', text: '#6D28D9', border: '#DDD6FE', label: 'Depth',              icon: '🔍' },
+  'evidence request': { bg: '#ECFDF5', text: '#065F46', border: '#A7F3D0', label: 'Evidence Request', icon: '📊' },
+  evidence:         { bg: '#ECFDF5', text: '#065F46', border: '#A7F3D0', label: 'Evidence Request',   icon: '📊' },
+  application:      { bg: '#FFF7ED', text: '#C2410C', border: '#FED7AA', label: 'Application',        icon: '⚙️' },
+  'assumption challenge': { bg: '#FDF4FF', text: '#7E22CE', border: '#E9D5FF', label: 'Assumption Challenge', icon: '🔎' },
+  assumption:       { bg: '#FDF4FF', text: '#7E22CE', border: '#E9D5FF', label: 'Assumption Challenge', icon: '🔎' },
+  synthesis:        { bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0', label: 'Synthesis',          icon: '🔗' },
 };
 
 function getCat(c: string) {
-  return CAT_COLORS[c?.toLowerCase()] ?? { bg: '#F8F6F1', text: '#1A3A2A', border: '#E8E3D8', label: c };
+  return CAT_STYLES[c?.toLowerCase()] ?? { bg: '#F8F6F1', text: '#1A3A2A', border: '#E8E3D8', label: c, icon: '❓' };
 }
 
 // ─── Score ring ───────────────────────────────────────────────────────────────
@@ -237,6 +300,7 @@ export default function TryPage() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'questions' | 'rubric'>('overview');
+  const [selectedCriterionIdx, setSelectedCriterionIdx] = useState(0);
   const [apiErr, setApiErr] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -547,7 +611,7 @@ export default function TryPage() {
 
             {/* ── Questions Tab ── */}
             {activeTab === 'questions' && (
-              <motion.div key="questions" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
+              <motion.div key="questions" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-5">
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Follow-up Questions</h2>
                   <p className="text-sm text-slate-500">Based on the transcript analysis, these questions test depth of understanding across different cognitive levels.</p>
@@ -556,20 +620,33 @@ export default function TryPage() {
                 <div className="space-y-4">
                   {(result?.questions ?? []).map((q, i) => {
                     const cat = getCat(q.category);
+                    const seg = transcript[Math.min(i * 2, transcript.length - 1)];
+                    const segPreview = seg?.text?.slice(0, 55) ?? '';
                     return (
-                      <div key={i} className="bg-white rounded-2xl border border-slate-200 p-5">
-                        <div className="flex items-start gap-3 mb-3">
-                          <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full flex-shrink-0 mt-0.5"
+                      <div key={i} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                        {/* Card header: badge + branch button */}
+                        <div className="flex items-center justify-between px-5 pt-4 pb-3">
+                          <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full"
                             style={{ background: cat.bg, color: cat.text, border: `1px solid ${cat.border}` }}>
-                            {cat.label}
+                            <span>{cat.icon}</span> {cat.label}
                           </span>
+                          <button className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg px-2.5 py-1 transition-colors">
+                            <svg width={12} height={12} viewBox="0 0 12 12" fill="none"><path d="M3 2v4a2 2 0 002 2h4M7 6l2 2-2 2" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            Branch <svg width={10} height={10} viewBox="0 0 10 10" fill="none" className="ml-0.5"><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </button>
                         </div>
-                        <p className="text-sm font-semibold text-slate-900 leading-snug mb-3">{q.question}</p>
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs text-slate-500 leading-relaxed pr-4">{q.rationale}</p>
-                          {q.timestamp && (
-                            <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded flex-shrink-0">{q.timestamp}</span>
-                          )}
+                        {/* Question */}
+                        <div className="px-5 pb-3">
+                          <p className="text-sm text-slate-900 leading-relaxed">{q.question}</p>
+                        </div>
+                        {/* Context footer */}
+                        <div className="px-5 py-3 border-t border-slate-100 flex items-start gap-1.5">
+                          <svg width={13} height={13} viewBox="0 0 13 13" fill="none" className="flex-shrink-0 mt-0.5"><circle cx="6.5" cy="6.5" r="5.5" stroke="#94a3b8" strokeWidth={1.2}/><path d="M6.5 4.5v2.5l1.5 1" stroke="#94a3b8" strokeWidth={1.2} strokeLinecap="round"/></svg>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            <span className="font-medium text-slate-500">Context:</span>{' '}
+                            Referenced during the {segPreview.toLowerCase()}{segPreview.length >= 55 ? '...' : ''} segment at{' '}
+                            <span className="font-mono text-slate-500">[{q.timestamp || '0:00'}]</span>.
+                          </p>
                         </div>
                       </div>
                     );
@@ -578,57 +655,137 @@ export default function TryPage() {
               </motion.div>
             )}
 
-            {/* ── Rubric Tab ── */}
+            {/* ── Rubric Tab — two-panel layout ── */}
             {activeTab === 'rubric' && (
-              <motion.div key="rubric" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-900">Rubric Evaluation</h2>
-                    <p className="text-sm text-slate-500">Criterion-level scores with AI-generated feedback grounded in the assignment rubric.</p>
-                  </div>
-                  {result && (
-                    <div className="flex items-center gap-3">
-                      <ScoreCircle score={result.overallScore} max={result.maxScore} size={64} />
-                      <div>
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-2xl font-bold text-slate-900">{result.overallScore}</span>
-                          <span className="text-sm text-slate-400">/ {result.maxScore}</span>
-                        </div>
-                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-lg">{result.letterGrade}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
+              <motion.div key="rubric" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+                <div className="flex gap-4 items-start">
 
-                <div className="space-y-4">
-                  {(result?.rubric ?? []).map((c, i) => {
+                  {/* ── Left: criteria list sidebar ── */}
+                  <div className="w-56 flex-shrink-0 bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                    <div className="px-4 pt-4 pb-3 border-b border-slate-100 flex items-center gap-2">
+                      <BookOpen className="w-3.5 h-3.5 text-slate-500" />
+                      <h3 className="text-xs font-semibold text-slate-700">Grading Rubric</h3>
+                    </div>
+                    {/* Total */}
+                    <div className="px-4 py-3 border-b border-slate-100">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-xl font-bold text-slate-900">{result?.overallScore ?? 0}</span>
+                        <span className="text-xs text-slate-400">/{result?.maxScore ?? 100}</span>
+                        <span className="ml-auto text-[10px] text-slate-400">{result ? Math.round((result.overallScore / result.maxScore) * 100) : 0}%</span>
+                      </div>
+                      <div className="mt-1 h-1 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${result ? (result.overallScore / result.maxScore) * 100 : 0}%` }} />
+                      </div>
+                      <p className="mt-1.5 text-[10px] text-emerald-600 font-medium flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" /> Proficiency: {result?.letterGrade ?? 'B+'}
+                      </p>
+                    </div>
+                    {/* Criterion list */}
+                    <div className="divide-y divide-slate-50">
+                      {(result?.rubric ?? []).map((c, i) => {
+                        const pct = c.maxScore > 0 ? c.score / c.maxScore : 0;
+                        const barColor = c.status === 'strong' ? '#10b981' : c.status === 'adequate' ? '#f59e0b' : '#ef4444';
+                        const isActive = selectedCriterionIdx === i;
+                        return (
+                          <button key={i} onClick={() => setSelectedCriterionIdx(i)}
+                            className={`w-full text-left px-4 py-3 transition-colors ${isActive ? 'bg-slate-50' : 'hover:bg-slate-50/60'}`}>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-[11px] font-semibold text-slate-800">{c.criterion}</span>
+                              <span className="text-[11px] text-slate-500 font-mono">{c.score}/{c.maxScore}</span>
+                            </div>
+                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${pct * 100}%`, backgroundColor: barColor }} />
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* ── Right: criterion detail + Babblet Insights ── */}
+                  {result && result.rubric[selectedCriterionIdx] && (() => {
+                    const c = result.rubric[selectedCriterionIdx];
                     const pct = c.maxScore > 0 ? c.score / c.maxScore : 0;
-                    const statusColor = c.status === 'strong' ? '#10b981' : c.status === 'adequate' ? '#f59e0b' : '#ef4444';
-                    const statusBg = c.status === 'strong' ? 'bg-emerald-100 text-emerald-700' : c.status === 'adequate' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700';
-                    const statusLabels = { strong: 'Strong', adequate: 'Adequate', weak: 'Needs Work' };
+                    const barColor = c.status === 'strong' ? '#10b981' : c.status === 'adequate' ? '#f59e0b' : '#ef4444';
+                    const statusLabel = c.status === 'strong' ? 'Excellent' : c.status === 'adequate' ? 'Adequate' : 'Needs Work';
+                    const statusTextColor = c.status === 'strong' ? 'text-emerald-600' : c.status === 'adequate' ? 'text-amber-600' : 'text-red-600';
                     return (
-                      <div key={i} className="bg-white rounded-2xl border border-slate-200 p-5">
-                        <div className="flex items-center justify-between gap-4 mb-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <ScoreCircle score={c.score} max={c.maxScore} size={52} />
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-slate-900">{c.criterion}</p>
-                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${statusBg}`}>
-                                {statusLabels[c.status]}
-                              </span>
+                      <div className="flex-1 min-w-0 space-y-4">
+                        {/* Criterion header card */}
+                        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-base font-semibold text-slate-900">{c.criterion}</h3>
+                            <div className="flex items-center gap-3">
+                              <span className={`text-sm font-semibold ${statusTextColor}`}>{statusLabel}</span>
+                              <span className="text-base font-bold text-slate-900">{c.score}<span className="text-xs text-slate-400 font-normal">/{c.maxScore}</span></span>
                             </div>
                           </div>
-                          <div className="w-32 flex-shrink-0">
-                            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                              <div className="h-full rounded-full transition-all" style={{ width: `${pct * 100}%`, backgroundColor: statusColor }} />
-                            </div>
-                            <p className="text-right text-[10px] text-slate-400 mt-0.5">{c.score}/{c.maxScore}</p>
+                          <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full transition-all" style={{ width: `${pct * 100}%`, backgroundColor: barColor }} />
                           </div>
                         </div>
-                        <p className="text-xs text-slate-600 leading-relaxed">{c.feedback}</p>
+
+                        {/* Babblet Insights card */}
+                        {c.insights && (
+                          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+                              <div className="flex items-center gap-2">
+                                <Sparkles className="w-3.5 h-3.5 text-slate-400" />
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Babblet Insights</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button className="text-slate-300 hover:text-slate-500 transition-colors"><svg width={14} height={14} viewBox="0 0 14 14" fill="none"><path d="M3 2h8a1 1 0 011 1v7l-3 2H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" strokeWidth={1.2}/></svg></button>
+                                <button className="text-slate-300 hover:text-red-400 transition-colors"><svg width={14} height={14} viewBox="0 0 14 14" fill="none"><path d="M2 4h10M5 4V3h4v1M6 7v3M8 7v3M3 4l1 8h6l1-8" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round"/></svg></button>
+                              </div>
+                            </div>
+                            <div className="p-5 space-y-5">
+                              {/* Overview */}
+                              <div>
+                                <h4 className="text-xs font-semibold text-slate-800 mb-2">Overview</h4>
+                                <p className="text-xs text-slate-600 leading-relaxed">{c.insights.overview}</p>
+                              </div>
+                              {/* What worked well */}
+                              <div>
+                                <h4 className="text-xs font-semibold text-slate-800 mb-2">What worked well:</h4>
+                                <div className="space-y-2.5">
+                                  {c.insights.strengths.map((s, si) => (
+                                    <div key={si} className="flex gap-2">
+                                      <span className="text-slate-400 mt-0.5 flex-shrink-0">•</span>
+                                      <p className="text-xs text-slate-600 leading-relaxed">
+                                        {s.text}
+                                        {' '}
+                                        {s.refs.map(r => (
+                                          <span key={r} className="inline-flex items-center justify-center w-4 h-4 rounded bg-slate-100 text-[9px] font-bold text-slate-500 ml-0.5">{r}</span>
+                                        ))}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              {/* Areas to develop */}
+                              <div>
+                                <h4 className="text-xs font-semibold text-slate-800 mb-2">Areas to develop:</h4>
+                                <div className="space-y-2.5">
+                                  {c.insights.improvements.map((s, si) => (
+                                    <div key={si} className="flex gap-2">
+                                      <span className="text-slate-400 mt-0.5 flex-shrink-0">•</span>
+                                      <p className="text-xs text-slate-600 leading-relaxed">
+                                        {s.text}
+                                        {' '}
+                                        {s.refs.map(r => (
+                                          <span key={r} className="inline-flex items-center justify-center w-4 h-4 rounded bg-slate-100 text-[9px] font-bold text-slate-500 ml-0.5">{r}</span>
+                                        ))}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
-                  })}
+                  })()}
                 </div>
               </motion.div>
             )}

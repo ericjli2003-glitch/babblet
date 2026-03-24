@@ -398,37 +398,29 @@ export default function HomePage() {
               background: 'var(--bab-white)', overflow: 'hidden',
               display: 'grid', gridTemplateColumns: '1fr 1fr', minHeight: 280,
             }}>
-              {/* Left — video thumbnail */}
-              <div style={{ position: 'relative', background: '#0E0F0C', overflow: 'hidden' }}>
-                <video
-                  src="/demo/demo-presentation.mp4"
-                  muted
-                  playsInline
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }}
-                />
-                <div style={{
-                  position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'rgba(14,15,12,0.35)',
-                }}>
-                  <div style={{
-                    width: 56, height: 56, borderRadius: '50%',
-                    background: 'rgba(247,245,240,0.15)', border: '1.5px solid rgba(247,245,240,0.3)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)',
-                  }}>
-                    <svg width={20} height={20} viewBox="0 0 20 20" fill="none">
-                      <path d="M6 4l12 6-12 6V4z" fill="#F7F5F0" />
-                    </svg>
+              {/* Left — UI preview mockup */}
+              <div style={{ background: 'var(--bab-forest)', padding: '28px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {/* Fake score card */}
+                <div style={{ background: 'rgba(247,245,240,0.07)', borderRadius: 10, padding: '12px 14px', border: '1px solid rgba(247,245,240,0.12)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ ...S.sans, ...S.parch, fontSize: '0.6875rem', fontWeight: 600, opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Overall Score</span>
+                    <span style={{ ...S.sans, fontSize: '0.6875rem', fontWeight: 700, color: '#6ee7b7', background: 'rgba(110,231,183,0.15)', padding: '2px 8px', borderRadius: 20 }}>B+</span>
                   </div>
+                  <span style={{ ...S.serif, ...S.parch, fontSize: '2rem', fontWeight: 400 }}>82</span>
+                  <span style={{ ...S.sans, ...S.parch, fontSize: '0.8rem', opacity: 0.4 }}> / 100</span>
                 </div>
-                <div style={{
-                  position: 'absolute', bottom: 14, left: 14,
-                  background: 'rgba(26,58,42,0.75)', borderRadius: 6, padding: '4px 10px',
-                  border: '1px solid rgba(247,245,240,0.16)',
-                }}>
-                  <span style={{ ...S.sans, fontSize: '0.7rem', fontWeight: 600, color: 'var(--bab-parchment)' }}>
-                    Demo: OT Presentation
-                  </span>
-                </div>
+                {/* Fake criterion bars */}
+                {[['Content & Knowledge', 88], ['Structure', 92], ['Evidence & Support', 68]].map(([label, pct]) => (
+                  <div key={label as string} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ ...S.sans, ...S.parch, fontSize: '0.6875rem', opacity: 0.65 }}>{label}</span>
+                      <span style={{ ...S.sans, fontSize: '0.6875rem', fontWeight: 600, color: Number(pct) >= 75 ? '#6ee7b7' : '#fcd34d' }}>{pct}%</span>
+                    </div>
+                    <div style={{ height: 4, background: 'rgba(247,245,240,0.1)', borderRadius: 99 }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: Number(pct) >= 75 ? '#6ee7b7' : '#fcd34d', borderRadius: 99 }} />
+                    </div>
+                  </div>
+                ))}
               </div>
 
               {/* Right — feature bullets + CTA */}
