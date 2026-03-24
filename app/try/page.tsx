@@ -655,6 +655,8 @@ export default function TryPage() {
       const focus = userInstruction.trim();
       const kids: QBranch[] = template.map((t, i) => ({
         ...t,
+        // Force child category to match parent so the badge stays aligned
+        category: parent.category,
         question: focus ? `${t.question} (Your focus: ${focus.slice(0, 140)}${focus.length > 140 ? '…' : ''})` : t.question,
         rationale: focus ? `${t.rationale} — Guided by: ${focus.slice(0, 160)}` : t.rationale,
         id: `${parent.id}-b${i}-${Date.now()}`,
@@ -666,6 +668,14 @@ export default function TryPage() {
     };
 
     if (videoMode === 'demo') {
+      const cur = getStoredCredits();
+      if (cur <= 0 && !isUnlocked()) {
+        setShowGate(true);
+        return;
+      }
+      const next = Math.max(0, cur - 1);
+      setStoredCredits(next);
+      setCredits(next);
       setBranchingId(parent.id);
       try {
         await new Promise((r) => setTimeout(r, 380));
@@ -719,7 +729,7 @@ export default function TryPage() {
       }
       const kids: QBranch[] = raw.slice(0, count).map((t, i) => ({
         question: t.question,
-        category: t.category || 'depth',
+        category: parent.category,  // always inherit parent's category
         rationale: t.rationale || '',
         timestamp: t.timestamp || '0:00',
         id: `${parent.id}-b${i}-${Date.now()}`,

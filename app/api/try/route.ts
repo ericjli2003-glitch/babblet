@@ -121,17 +121,30 @@ export async function POST(req: NextRequest) {
       const exampleItems = Array.from({ length: n }, (_, i) =>
         `    { "question": "...", "category": "clarification"|"depth"|"evidence"|"application"|"assumption"|"synthesis", "rationale": "one sentence", "timestamp": "M:SS or empty" }${i < n - 1 ? ',' : ''}`
       ).join('\n');
-      const branchPrompt = `You are Babblet, an academic presentation coach. Given a follow-up question that was already asked about a student presentation, generate exactly ${n} deeper follow-up question${n > 1 ? 's' : ''} that branch from it — more specific, still grounded in the transcript.
+      const categoryDescriptions: Record<string, string> = {
+        clarification: 'Clarification — ask the student to explain or define something they said more precisely',
+        depth: 'Depth — probe the underlying reasoning, mechanisms, or implications behind their claim',
+        evidence: 'Evidence Request — challenge them to cite specific research, data, or examples supporting their statement',
+        application: 'Application — ask how they would apply the concept to a different scenario or constraint',
+        assumption: 'Assumption Challenge — surface and question an unstated assumption embedded in their answer',
+        synthesis: 'Synthesis — ask them to connect two ideas or reconcile a tension in their argument',
+      };
+      const catKey = (parentCategory || '').toLowerCase();
+      const catDesc = categoryDescriptions[catKey] ?? `${parentCategory || 'general'} — stay consistent with the cognitive demand of the parent question`;
+
+      const branchPrompt = `You are Babblet, an academic presentation coach. Given a follow-up question that was already asked about a student presentation, generate exactly ${n} deeper follow-up question${n > 1 ? 's' : ''} that branch from it.
+
+IMPORTANT: Every generated question MUST be of the same cognitive category as the parent:
+Category: ${catDesc}
+Do NOT switch to a different category. The questions should go deeper within this same category.
 
 PARENT QUESTION:
 ${pq.slice(0, 2000)}
 
-PARENT CATEGORY (optional): ${parentCategory || 'general'}
-
 ${focus ? `USER PRIORITIES (honor these in all questions — tone, angle, or subtopics):\n${focus}\n\n` : ''}TRANSCRIPT (excerpt):
 ${tx.slice(0, 6000)}
 
-Return ONLY valid JSON with exactly ${n} item${n > 1 ? 's' : ''} in the branches array:
+Return ONLY valid JSON with exactly ${n} item${n > 1 ? 's' : ''} in the branches array. Set "category" to "${catKey || 'depth'}" for every item:
 {
   "branches": [
 ${exampleItems}
