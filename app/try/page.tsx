@@ -1,61 +1,22 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowRight, ArrowLeft, Upload, Play, Loader2, CheckCircle,
-  MessageSquare, BarChart3, Zap, Star, AlertCircle, ChevronRight,
+  ThumbsUp, AlertCircle, BarChart3, MessageSquare, BookOpen,
+  Loader2, CheckCircle, X, Zap, ArrowLeft, Upload, Play,
+  ChevronRight, Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
 
-// ─── Design tokens (mirror homepage) ─────────────────────────────────────────
-const S = {
-  serif:  { fontFamily: 'var(--font-instrument-serif), Georgia, serif' } as const,
-  sans:   { fontFamily: 'var(--font-dm-sans), system-ui, sans-serif' } as const,
-  forest: { color: 'var(--bab-forest)' } as const,
-  gold:   { color: 'var(--bab-gold)' } as const,
-  parch:  { color: 'var(--bab-parchment)' } as const,
-};
-
-const fadeUp = (delay = 0) => ({
-  initial: { opacity: 0, y: 20 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.45, ease: 'easeOut', delay },
-});
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-interface LeadForm {
-  name: string;
-  institution: string;
-  phone: string;
-  email: string;
-}
-
-interface AnalysisResult {
-  overallScore: number;
-  summary: string;
-  strengths: string[];
-  improvements: string[];
-  delivery: { score: number; feedback: string };
-  content:  { score: number; feedback: string };
-  structure: { score: number; feedback: string };
-}
-
-interface Question {
-  question: string;
-  category: string;
-  rationale: string;
-}
-
-type Step = 'form' | 'demo';
-
-const MAX_CREDITS = 5;
-const MAX_FILE_MB = 200;
+// ─── Constants ────────────────────────────────────────────────────────────────
+const MAX_CREDITS = 2;
+const MAX_FILE_MB = 300;
 const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
+const CREDIT_KEY = 'babblet_try_credits';
+const UNLOCKED_KEY = 'babblet_try_unlocked';
 
-// Rough transcript extraction from video: we just send a placeholder and use
-// the filename + metadata. Real transcription would need Deepgram/Whisper.
-// For the demo video we use a pre-baked transcript excerpt.
+// ─── Demo transcript ──────────────────────────────────────────────────────────
 const DEMO_TRANSCRIPT = `Good afternoon everyone. My name is Sarah Chen and today I will be presenting my analysis of occupational therapy interventions for post-stroke rehabilitation. I will cover the SOAP note documentation, the discharge summary, and evidence-based justification for the skilled services provided.
 
 Beginning with the subjective section of my SOAP note. The client is a 67-year-old male who presents to outpatient occupational therapy following a left hemisphere ischemic stroke six weeks ago. He reports increased confidence in self-care activities over the past two weeks, stating that therapy has helped him regain independence. His primary concern remains difficulty with fine motor tasks, particularly buttoning shirts and handling utensils.
@@ -68,553 +29,521 @@ For the plan, therapy will continue two times per week focusing on ADL training,
 
 Regarding the discharge summary, the client has achieved improved independence in basic ADLs and demonstrates understanding of compensatory techniques. Improvements in dressing and transfers indicate effective motor relearning. Discharge to home with home health follow-up is recommended once optimal recovery has been achieved.
 
-The justification for skilled services is grounded in current evidence supporting task-specific training for upper extremity recovery post-stroke. Occupational therapy interventions addressed ADLs, cognition, and environmental modification consistent with best practice guidelines. The skilled nature of these services is evidenced by the complex clinical reasoning required to address this client's multifaceted presentation.
+The justification for skilled services is grounded in current evidence supporting task-specific training for upper extremity recovery post-stroke. Occupational therapy interventions addressed ADLs, cognition, and environmental modification consistent with best practice guidelines.`;
 
-Thank you for your attention. I am happy to answer any questions.`;
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface AnalysisResult {
+  overallScore: number;
+  maxScore: number;
+  letterGrade: string;
+  summary: string;
+  strengths: Array<{ text: string; quote: string }>;
+  improvements: Array<{ text: string; quote: string }>;
+  rubric: Array<{ criterion: string; score: number; maxScore: number; feedback: string; status: 'strong' | 'adequate' | 'weak' }>;
+  questions: Array<{ question: string; category: string; rationale: string; timestamp: string }>;
+}
 
-// ─── Credit pill ──────────────────────────────────────────────────────────────
-function CreditPill({ credits }: { credits: number }) {
-  return (
-    <div style={{
-      display: 'inline-flex', alignItems: 'center', gap: 6,
-      background: credits > 1 ? 'rgba(26,58,42,0.08)' : 'rgba(196,137,42,0.12)',
-      borderRadius: 999, padding: '4px 12px 4px 8px',
-      border: `1px solid ${credits > 1 ? 'rgba(26,58,42,0.15)' : 'rgba(196,137,42,0.3)'}`,
-    }}>
-      <Zap size={12} color={credits > 1 ? 'var(--bab-forest)' : 'var(--bab-gold)'} />
-      <span style={{ ...S.sans, fontSize: '0.75rem', fontWeight: 600, color: credits > 1 ? 'var(--bab-forest)' : 'var(--bab-gold)' }}>
-        {credits} / {MAX_CREDITS} credits remaining
-      </span>
-    </div>
-  );
+interface GateForm { email: string; phone: string }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function getStoredCredits(): number {
+  try { const v = localStorage.getItem(CREDIT_KEY); return v !== null ? parseInt(v) : MAX_CREDITS; } catch { return MAX_CREDITS; }
+}
+function setStoredCredits(n: number) {
+  try { localStorage.setItem(CREDIT_KEY, String(n)); } catch {}
+}
+function isUnlocked(): boolean {
+  try { return localStorage.getItem(UNLOCKED_KEY) === '1'; } catch { return false; }
+}
+function setUnlocked() {
+  try { localStorage.setItem(UNLOCKED_KEY, '1'); localStorage.setItem(CREDIT_KEY, String(MAX_CREDITS)); } catch {}
+}
+
+const CAT_COLORS: Record<string, { bg: string; text: string; border: string; label: string }> = {
+  clarification: { bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE', label: 'Clarification' },
+  depth:         { bg: '#F5F3FF', text: '#6D28D9', border: '#DDD6FE', label: 'Depth' },
+  evidence:      { bg: '#ECFDF5', text: '#065F46', border: '#A7F3D0', label: 'Evidence' },
+  application:   { bg: '#FFF7ED', text: '#C2410C', border: '#FED7AA', label: 'Application' },
+  assumption:    { bg: '#FDF4FF', text: '#7E22CE', border: '#E9D5FF', label: 'Assumption' },
+  synthesis:     { bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0', label: 'Synthesis' },
+};
+
+function getCat(c: string) {
+  return CAT_COLORS[c?.toLowerCase()] ?? { bg: '#F8F6F1', text: '#1A3A2A', border: '#E8E3D8', label: c };
 }
 
 // ─── Score ring ───────────────────────────────────────────────────────────────
-function ScoreRing({ score, label }: { score: number; label: string }) {
-  const r = 28, circ = 2 * Math.PI * r;
-  const dash = (score / 100) * circ;
-  const color = score >= 75 ? '#4A6741' : score >= 55 ? '#C4892A' : '#b45309';
+function ScoreCircle({ score, max, size = 56 }: { score: number; max: number; size?: number }) {
+  const pct = max > 0 ? score / max : 0;
+  const r = (size - 8) / 2;
+  const circ = 2 * Math.PI * r;
+  const c = size / 2;
+  const color = pct >= 0.75 ? '#10b981' : pct >= 0.55 ? '#f59e0b' : '#ef4444';
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-      <svg width={70} height={70} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={35} cy={35} r={r} fill="none" stroke="rgba(26,58,42,0.08)" strokeWidth={5} />
-        <circle cx={35} cy={35} r={r} fill="none" stroke={color} strokeWidth={5}
-          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" />
-        <text x={35} y={35} textAnchor="middle" dominantBaseline="central"
-          style={{ ...S.sans, fontSize: '1rem', fontWeight: 700, fill: color, transform: 'rotate(90deg)', transformOrigin: '35px 35px' }}>
-          {score}
-        </text>
-      </svg>
-      <span style={{ ...S.sans, fontSize: '0.7rem', fontWeight: 600, color: 'var(--bab-forest)', opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
-    </div>
+    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)', flexShrink: 0 }}>
+      <circle cx={c} cy={c} r={r} fill="none" stroke="#f1f5f9" strokeWidth={5} />
+      <circle cx={c} cy={c} r={r} fill="none" stroke={color} strokeWidth={5}
+        strokeDasharray={`${pct * circ} ${circ}`} strokeLinecap="round" />
+      <text x={c} y={c} textAnchor="middle" dominantBaseline="central"
+        style={{ fontSize: size < 50 ? '0.6rem' : '0.8rem', fontWeight: 700, fill: '#0f172a', transform: `rotate(90deg)`, transformOrigin: `${c}px ${c}px`, fontFamily: 'system-ui' }}>
+        {score}/{max}
+      </text>
+    </svg>
   );
 }
 
-// ─── Lead capture form ────────────────────────────────────────────────────────
-function LeadForm({ onSubmit }: { onSubmit: (f: LeadForm) => void }) {
-  const [form, setForm] = useState<LeadForm>({ name: '', institution: '', phone: '', email: '' });
-  const [errors, setErrors] = useState<Partial<LeadForm>>({});
+// ─── Credit pill ──────────────────────────────────────────────────────────────
+function CreditBadge({ credits }: { credits: number }) {
+  const ok = credits > 0;
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${ok ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+      <Zap className="w-3 h-3" />
+      {credits} credit{credits !== 1 ? 's' : ''} left
+    </span>
+  );
+}
 
-  const validate = () => {
-    const e: Partial<LeadForm> = {};
-    if (!form.name.trim()) e.name = 'Required';
-    if (!form.institution.trim()) e.institution = 'Required';
-    if (!form.email.trim() || !form.email.includes('@')) e.email = 'Valid email required';
-    return e;
-  };
+// ─── Gate modal ───────────────────────────────────────────────────────────────
+function GateModal({ onUnlock }: { onUnlock: () => void }) {
+  const [form, setForm] = useState<GateForm>({ email: '', phone: '' });
+  const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handle = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const errs = validate();
-    if (Object.keys(errs).length) { setErrors(errs); return; }
-    onSubmit(form);
+    if (!form.email.includes('@')) { setErr('Enter a valid email.'); return; }
+    setLoading(true);
+    await new Promise(r => setTimeout(r, 600)); // simulate
+    setUnlocked();
+    onUnlock();
+    setLoading(false);
   };
 
-  const field = (key: keyof LeadForm, label: string, type = 'text', placeholder = '') => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <label style={{ ...S.sans, fontSize: '0.8125rem', fontWeight: 600, color: 'var(--bab-forest)', opacity: 0.8 }}>{label}</label>
-      <input
-        type={type}
-        value={form[key]}
-        onChange={e => { setForm(p => ({ ...p, [key]: e.target.value })); setErrors(p => ({ ...p, [key]: undefined })); }}
-        placeholder={placeholder}
-        style={{
-          ...S.sans, fontSize: '0.9rem', color: 'var(--bab-forest)',
-          background: 'var(--bab-white)', border: `1.5px solid ${errors[key] ? '#ef4444' : 'var(--bab-border)'}`,
-          borderRadius: 6, padding: '10px 14px', outline: 'none', width: '100%', boxSizing: 'border-box',
-          transition: 'border-color 0.15s',
-        }}
-        onFocus={e => { e.currentTarget.style.borderColor = 'var(--bab-forest)'; }}
-        onBlur={e => { e.currentTarget.style.borderColor = errors[key] ? '#ef4444' : 'var(--bab-border)'; }}
-      />
-      {errors[key] && <span style={{ ...S.sans, fontSize: '0.75rem', color: '#ef4444' }}>{errors[key]}</span>}
-    </div>
-  );
-
   return (
-    <motion.div {...fadeUp()} style={{ width: '100%', maxWidth: 460, margin: '0 auto' }}>
-      <form onSubmit={handle} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {field('name', 'Full name', 'text', 'Dr. Jane Smith')}
-        {field('institution', 'Institution', 'text', 'University of...')}
-        {field('phone', 'Phone number (optional)', 'tel', '+1 (555) 000-0000')}
-        {field('email', 'Work email', 'email', 'you@university.edu')}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backdropFilter: 'blur(12px)', background: 'rgba(14,15,12,0.55)' }}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: 'easeOut' }}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+      >
+        {/* Header */}
+        <div className="px-6 pt-7 pb-5 border-b border-slate-100">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center">
+              <Sparkles className="w-4.5 h-4.5 text-emerald-600" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Unlock unlimited access</h2>
+              <p className="text-xs text-slate-500">You've used your free credits</p>
+            </div>
+          </div>
+          <p className="text-sm text-slate-600 leading-relaxed">
+            Enter your details to get <strong>5 more credits</strong> and continue exploring Babblet's AI grading. No credit card required.
+          </p>
+        </div>
 
-        <p style={{ ...S.sans, fontSize: '0.75rem', color: 'var(--bab-forest)', opacity: 0.45, margin: 0, lineHeight: 1.6 }}>
-          You get {MAX_CREDITS} free AI credits to explore Babblet. No credit card required.
-        </p>
-
-        <button
-          type="submit"
-          style={{
-            ...S.sans, ...S.parch, background: 'var(--bab-forest)', fontWeight: 600,
-            fontSize: '0.9375rem', borderRadius: 6, padding: '12px 24px', border: 'none',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            transition: 'all 0.2s',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(26,58,42,0.22)'; }}
-          onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
-        >
-          Try it out <ArrowRight size={16} />
-        </button>
-      </form>
-    </motion.div>
+        {/* Form */}
+        <form onSubmit={submit} className="px-6 py-5 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Work email <span className="text-red-400">*</span></label>
+            <input
+              type="email" required value={form.email}
+              onChange={e => { setForm(p => ({ ...p, email: e.target.value })); setErr(''); }}
+              placeholder="you@university.edu"
+              className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Phone number <span className="text-slate-400 font-normal">(optional)</span></label>
+            <input
+              type="tel" value={form.phone}
+              onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
+              placeholder="+1 (555) 000-0000"
+              className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all"
+            />
+          </div>
+          {err && <p className="text-xs text-red-500">{err}</p>}
+          <button
+            type="submit" disabled={loading}
+            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Zap className="w-4 h-4" /> Get 5 more credits</>}
+          </button>
+          <p className="text-center text-xs text-slate-400">We won't spam you. Your info helps us improve Babblet.</p>
+        </form>
+      </motion.div>
+    </div>
   );
 }
 
-// ─── Demo workspace ───────────────────────────────────────────────────────────
-function DemoWorkspace({ lead }: { lead: LeadForm }) {
+// ─── Main page ────────────────────────────────────────────────────────────────
+export default function TryPage() {
   const [credits, setCredits] = useState(MAX_CREDITS);
+  const [showGate, setShowGate] = useState(false);
   const [videoMode, setVideoMode] = useState<'demo' | 'upload'>('demo');
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
-  const [uploadedName, setUploadedName] = useState<string>('');
-  const [uploadError, setUploadError] = useState<string>('');
+  const [uploadedName, setUploadedName] = useState('');
+  const [uploadErr, setUploadErr] = useState('');
   const [transcript, setTranscript] = useState(DEMO_TRANSCRIPT);
-  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
-  const [questions, setQuestions] = useState<Question[] | null>(null);
-  const [loading, setLoading] = useState<'analyze' | 'questions' | null>(null);
-  const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'overview' | 'questions'>('overview');
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'questions' | 'rubric'>('overview');
+  const [apiErr, setApiErr] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Hydrate credits from localStorage
+  useEffect(() => { setCredits(getStoredCredits()); }, []);
 
   const videoSrc = videoMode === 'upload' && uploadedUrl ? uploadedUrl : '/demo/demo-presentation.mp4';
 
   const handleUpload = useCallback((file: File) => {
-    setUploadError('');
-    if (!file.type.startsWith('video/')) {
-      setUploadError('Please upload a video file.');
-      return;
-    }
-    if (file.size > MAX_FILE_BYTES) {
-      setUploadError(`File too large. Max ${MAX_FILE_MB} MB.`);
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setUploadedUrl(url);
+    setUploadErr('');
+    if (!file.type.startsWith('video/')) { setUploadErr('Please upload a video file (MP4, MOV, WebM).'); return; }
+    if (file.size > MAX_FILE_BYTES) { setUploadErr(`File too large. Max ${MAX_FILE_MB} MB.`); return; }
+    setUploadedUrl(URL.createObjectURL(file));
     setUploadedName(file.name);
     setVideoMode('upload');
-    // For uploaded videos, use a generic placeholder transcript
-    setTranscript(`[Transcript from "${file.name}"] — This is a student presentation video uploaded for analysis. The AI will evaluate the content based on academic presentation standards including clarity, structure, evidence, and delivery.`);
-    setAnalysis(null);
-    setQuestions(null);
+    setTranscript(`[Transcript from "${file.name}"] — Student presentation video uploaded for analysis. Evaluating content, structure, delivery, and evidence quality.`);
+    setResult(null);
   }, []);
 
-  const callApi = async (action: 'analyze' | 'questions') => {
-    setError('');
-    setLoading(action);
+  const runAnalysis = async () => {
+    const cur = getStoredCredits();
+    if (cur <= 0 && !isUnlocked()) { setShowGate(true); return; }
+
+    setApiErr('');
+    setLoading(true);
+
+    const newCredits = Math.max(0, cur - 1);
+    setStoredCredits(newCredits);
+    setCredits(newCredits);
+
     try {
       const res = await fetch('/api/try', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, email: lead.email, transcript }),
+        body: JSON.stringify({ action: 'full', email: 'trial@babblet.io', transcript }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || 'Request failed.'); return; }
-      if (data.creditsRemaining !== undefined) setCredits(data.creditsRemaining);
-      if (action === 'analyze') { setAnalysis(data.result); setActiveTab('overview'); }
-      if (action === 'questions') { setQuestions(data.result); setActiveTab('questions'); }
+      if (!res.ok) { setApiErr(data.error || 'Analysis failed.'); return; }
+      setResult(data.result);
+      setActiveTab('overview');
     } catch {
-      setError('Network error. Please try again.');
+      setApiErr('Network error. Please try again.');
     } finally {
-      setLoading(null);
+      setLoading(false);
     }
   };
 
-  const catColor = (c: string) => ({
-    clarification: { bg: 'rgba(59,130,246,0.08)', text: '#1d4ed8', border: 'rgba(59,130,246,0.2)' },
-    depth:         { bg: 'rgba(139,92,246,0.08)', text: '#6d28d9', border: 'rgba(139,92,246,0.2)' },
-    evidence:      { bg: 'rgba(20,184,166,0.08)', text: '#0f766e', border: 'rgba(20,184,166,0.2)' },
-    application:   { bg: 'rgba(249,115,22,0.08)', text: '#c2410c', border: 'rgba(249,115,22,0.2)' },
-  }[c] || { bg: 'rgba(26,58,42,0.06)', text: 'var(--bab-forest)', border: 'var(--bab-border)' });
-
-  return (
-    <motion.div {...fadeUp()} style={{ width: '100%' }}>
-      {/* ── Top bar ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <p style={{ ...S.sans, fontSize: '0.8125rem', color: 'var(--bab-forest)', opacity: 0.6, margin: 0 }}>
-            Welcome, <strong style={{ opacity: 1 }}>{lead.name}</strong>
-          </p>
-        </div>
-        <CreditPill credits={credits} />
-      </div>
-
-      {/* ── Video + controls ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 340px', gap: 20, alignItems: 'start' }}>
-
-        {/* Left — video */}
-        <div>
-          {/* Video toggle */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            {(['demo', 'upload'] as const).map(m => (
-              <button key={m} onClick={() => setVideoMode(m)}
-                style={{
-                  ...S.sans, fontSize: '0.8rem', fontWeight: 600, padding: '5px 14px',
-                  borderRadius: 999, border: '1.5px solid var(--bab-border)', cursor: 'pointer',
-                  background: videoMode === m ? 'var(--bab-forest)' : 'transparent',
-                  color: videoMode === m ? 'var(--bab-parchment)' : 'var(--bab-forest)',
-                  transition: 'all 0.15s',
-                }}>
-                {m === 'demo' ? 'Demo video' : 'Upload your own'}
-              </button>
-            ))}
-          </div>
-
-          {/* Upload drop zone */}
-          {videoMode === 'upload' && !uploadedUrl && (
-            <div
-              onClick={() => fileRef.current?.click()}
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleUpload(f); }}
-              style={{
-                aspectRatio: '16/9', border: '2px dashed var(--bab-border)', borderRadius: 10,
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                gap: 12, cursor: 'pointer', background: 'rgba(26,58,42,0.03)', transition: 'background 0.15s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(26,58,42,0.06)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(26,58,42,0.03)'; }}
-            >
-              <Upload size={28} color="var(--bab-forest)" style={{ opacity: 0.4 }} />
-              <div style={{ textAlign: 'center' }}>
-                <p style={{ ...S.sans, fontWeight: 600, fontSize: '0.875rem', color: 'var(--bab-forest)', margin: '0 0 4px' }}>
-                  Drop a video here
-                </p>
-                <p style={{ ...S.sans, fontSize: '0.75rem', color: 'var(--bab-forest)', opacity: 0.5, margin: 0 }}>
-                  MP4, MOV, WebM · Max {MAX_FILE_MB} MB
-                </p>
-              </div>
-              <input ref={fileRef} type="file" accept="video/*" style={{ display: 'none' }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
-            </div>
-          )}
-
-          {uploadError && (
-            <p style={{ ...S.sans, fontSize: '0.8rem', color: '#ef4444', marginTop: 8 }}>{uploadError}</p>
-          )}
-
-          {/* Video player */}
-          {(videoMode === 'demo' || uploadedUrl) && (
-            <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--bab-border)', background: '#000' }}>
-              <video
-                key={videoSrc}
-                src={videoSrc}
-                controls
-                playsInline
-                style={{ width: '100%', aspectRatio: '16/9', display: 'block' }}
-              />
-              {videoMode === 'upload' && uploadedName && (
-                <div style={{ padding: '8px 12px', background: 'var(--bab-parchment)', borderTop: '1px solid var(--bab-border)' }}>
-                  <p style={{ ...S.sans, fontSize: '0.75rem', color: 'var(--bab-forest)', opacity: 0.6, margin: 0 }}>
-                    📎 {uploadedName}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Action buttons */}
-          <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
-            <button
-              onClick={() => callApi('analyze')}
-              disabled={loading !== null || credits <= 0}
-              style={{
-                ...S.sans, fontWeight: 600, fontSize: '0.875rem', padding: '10px 20px',
-                borderRadius: 6, border: 'none', cursor: loading !== null || credits <= 0 ? 'not-allowed' : 'pointer',
-                background: loading !== null || credits <= 0 ? 'rgba(26,58,42,0.15)' : 'var(--bab-forest)',
-                color: loading !== null || credits <= 0 ? 'rgba(26,58,42,0.4)' : 'var(--bab-parchment)',
-                display: 'flex', alignItems: 'center', gap: 7, transition: 'all 0.15s',
-              }}
-            >
-              {loading === 'analyze' ? <Loader2 size={15} className="animate-spin" /> : <BarChart3 size={15} />}
-              Analyze presentation
-            </button>
-            <button
-              onClick={() => callApi('questions')}
-              disabled={loading !== null || credits <= 0}
-              style={{
-                ...S.sans, fontWeight: 500, fontSize: '0.875rem', padding: '10px 20px',
-                borderRadius: 6, cursor: loading !== null || credits <= 0 ? 'not-allowed' : 'pointer',
-                border: '1.5px solid var(--bab-border)',
-                background: 'transparent',
-                color: loading !== null || credits <= 0 ? 'rgba(26,58,42,0.3)' : 'var(--bab-forest)',
-                display: 'flex', alignItems: 'center', gap: 7, transition: 'all 0.15s',
-              }}
-            >
-              {loading === 'questions' ? <Loader2 size={15} className="animate-spin" /> : <MessageSquare size={15} />}
-              Generate questions
-            </button>
-          </div>
-          {error && (
-            <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 6 }}>
-              <AlertCircle size={14} color="#ef4444" />
-              <p style={{ ...S.sans, fontSize: '0.8rem', color: '#ef4444', margin: 0 }}>{error}</p>
-            </div>
-          )}
-        </div>
-
-        {/* Right — results panel */}
-        <div style={{ background: 'var(--bab-white)', borderRadius: 10, border: '1px solid var(--bab-border)', overflow: 'hidden', minHeight: 360 }}>
-
-          {/* Tab bar */}
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--bab-border)' }}>
-            {(['overview', 'questions'] as const).map(t => (
-              <button key={t} onClick={() => setActiveTab(t)}
-                style={{
-                  ...S.sans, flex: 1, padding: '11px 0', fontSize: '0.8125rem', fontWeight: 600,
-                  border: 'none', cursor: 'pointer', transition: 'all 0.15s',
-                  borderBottom: `2px solid ${activeTab === t ? 'var(--bab-forest)' : 'transparent'}`,
-                  background: activeTab === t ? 'rgba(26,58,42,0.04)' : 'transparent',
-                  color: activeTab === t ? 'var(--bab-forest)' : 'rgba(26,58,42,0.45)',
-                }}>
-                {t === 'overview' ? 'Overview' : 'Questions'}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ padding: 18, overflowY: 'auto', maxHeight: 560 }}>
-            <AnimatePresence mode="wait">
-
-              {/* Overview tab */}
-              {activeTab === 'overview' && (
-                <motion.div key="overview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-                  {!analysis && !loading && (
-                    <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                      <BarChart3 size={32} color="var(--bab-forest)" style={{ opacity: 0.18, marginBottom: 12 }} />
-                      <p style={{ ...S.sans, fontSize: '0.8rem', color: 'var(--bab-forest)', opacity: 0.45, margin: 0 }}>
-                        Click "Analyze presentation" to generate AI feedback
-                      </p>
-                    </div>
-                  )}
-                  {loading === 'analyze' && (
-                    <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                      <Loader2 size={28} color="var(--bab-forest)" className="animate-spin" style={{ marginBottom: 12 }} />
-                      <p style={{ ...S.sans, fontSize: '0.8rem', color: 'var(--bab-forest)', opacity: 0.5, margin: 0 }}>
-                        Analyzing presentation…
-                      </p>
-                    </div>
-                  )}
-                  {analysis && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                      {/* Scores */}
-                      <div style={{ display: 'flex', justifyContent: 'space-around', padding: '12px 0', borderBottom: '1px solid var(--bab-border)' }}>
-                        <ScoreRing score={analysis.overallScore} label="Overall" />
-                        <ScoreRing score={analysis.content.score} label="Content" />
-                        <ScoreRing score={analysis.delivery.score} label="Delivery" />
-                        <ScoreRing score={analysis.structure.score} label="Structure" />
-                      </div>
-
-                      {/* Summary */}
-                      <div>
-                        <p style={{ ...S.sans, fontSize: '0.78rem', fontWeight: 700, color: 'var(--bab-forest)', opacity: 0.5, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px' }}>Summary</p>
-                        <p style={{ ...S.sans, fontSize: '0.8125rem', color: 'var(--bab-forest)', lineHeight: 1.65, margin: 0 }}>{analysis.summary}</p>
-                      </div>
-
-                      {/* Strengths */}
-                      <div>
-                        <p style={{ ...S.sans, fontSize: '0.78rem', fontWeight: 700, color: '#4A6741', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Strengths</p>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          {analysis.strengths.map((s, i) => (
-                            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                              <CheckCircle size={13} color="#4A6741" style={{ flexShrink: 0, marginTop: 2 }} />
-                              <p style={{ ...S.sans, fontSize: '0.8rem', color: 'var(--bab-forest)', margin: 0, lineHeight: 1.55 }}>{s}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Improvements */}
-                      <div>
-                        <p style={{ ...S.sans, fontSize: '0.78rem', fontWeight: 700, color: '#b45309', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Areas to improve</p>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          {analysis.improvements.map((s, i) => (
-                            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                              <ChevronRight size={13} color="#b45309" style={{ flexShrink: 0, marginTop: 2 }} />
-                              <p style={{ ...S.sans, fontSize: '0.8rem', color: 'var(--bab-forest)', margin: 0, lineHeight: 1.55 }}>{s}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </motion.div>
-              )}
-
-              {/* Questions tab */}
-              {activeTab === 'questions' && (
-                <motion.div key="questions" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-                  {!questions && !loading && (
-                    <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                      <MessageSquare size={32} color="var(--bab-forest)" style={{ opacity: 0.18, marginBottom: 12 }} />
-                      <p style={{ ...S.sans, fontSize: '0.8rem', color: 'var(--bab-forest)', opacity: 0.45, margin: 0 }}>
-                        Click "Generate questions" to create targeted follow-up questions
-                      </p>
-                    </div>
-                  )}
-                  {loading === 'questions' && (
-                    <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                      <Loader2 size={28} color="var(--bab-forest)" className="animate-spin" style={{ marginBottom: 12 }} />
-                      <p style={{ ...S.sans, fontSize: '0.8rem', color: 'var(--bab-forest)', opacity: 0.5, margin: 0 }}>
-                        Generating questions…
-                      </p>
-                    </div>
-                  )}
-                  {questions && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {questions.map((q, i) => {
-                        const c = catColor(q.category);
-                        return (
-                          <div key={i} style={{ padding: '12px 14px', borderRadius: 8, border: '1px solid var(--bab-border)', background: 'var(--bab-parchment)' }}>
-                            <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'flex-start' }}>
-                              <span style={{
-                                ...S.sans, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
-                                letterSpacing: '0.06em', padding: '2px 8px', borderRadius: 999,
-                                background: c.bg, color: c.text, border: `1px solid ${c.border}`,
-                                flexShrink: 0, marginTop: 1,
-                              }}>
-                                {q.category}
-                              </span>
-                              <p style={{ ...S.sans, fontSize: '0.8125rem', fontWeight: 600, color: 'var(--bab-forest)', margin: 0, lineHeight: 1.5 }}>
-                                {q.question}
-                              </p>
-                            </div>
-                            <p style={{ ...S.sans, fontSize: '0.75rem', color: 'var(--bab-forest)', opacity: 0.5, margin: 0, lineHeight: 1.5 }}>
-                              {q.rationale}
-                            </p>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Upsell ── */}
-      {credits <= 2 && (
-        <motion.div {...fadeUp(0.1)} style={{
-          marginTop: 24, padding: '18px 24px', borderRadius: 10,
-          background: 'var(--bab-forest)', display: 'flex', alignItems: 'center',
-          justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
-        }}>
-          <div>
-            <p style={{ ...S.sans, ...S.parch, fontWeight: 700, fontSize: '0.9375rem', margin: '0 0 4px' }}>
-              {credits === 0 ? 'Credits used up' : `${credits} credit${credits === 1 ? '' : 's'} left`}
-            </p>
-            <p style={{ ...S.sans, ...S.parch, fontSize: '0.8125rem', margin: 0, opacity: 0.65 }}>
-              Get unlimited grading, rubric uploads, class management, and more.
-            </p>
-          </div>
-          <Link href="/contact"
-            style={{
-              ...S.sans, fontWeight: 600, fontSize: '0.875rem', borderRadius: 6,
-              padding: '10px 22px', textDecoration: 'none', whiteSpace: 'nowrap',
-              background: 'var(--bab-gold)', color: 'var(--bab-dark)', transition: 'opacity 0.15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.opacity = '0.88'; }}
-            onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}>
-            Book a Demo <ArrowRight size={14} style={{ display: 'inline', verticalAlign: 'middle' }} />
-          </Link>
-        </motion.div>
-      )}
-    </motion.div>
-  );
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
-export default function TryPage() {
-  const [step, setStep] = useState<Step>('form');
-  const [lead, setLead] = useState<LeadForm | null>(null);
-
-  const handleFormSubmit = (f: LeadForm) => {
-    setLead(f);
-    setStep('demo');
+  const handleUnlock = () => {
+    setShowGate(false);
+    setCredits(MAX_CREDITS + 3);
+    setStoredCredits(MAX_CREDITS + 3);
   };
 
+  const tabs = [
+    { id: 'overview' as const, label: 'Key Observations', icon: BarChart3 },
+    { id: 'questions' as const, label: 'Questions', icon: MessageSquare },
+    { id: 'rubric' as const, label: 'Rubric', icon: BookOpen },
+  ];
+
   return (
-    <div style={{ background: 'var(--bab-parchment)', minHeight: '100vh', ...S.sans }}>
-      {/* Navbar */}
-      <header style={{ background: 'var(--bab-parchment)', borderBottom: '1px solid var(--bab-border)', position: 'sticky', top: 0, zIndex: 50 }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Link href="/" style={{ ...S.serif, ...S.forest, fontSize: '1.25rem', fontWeight: 400, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <ArrowLeft size={16} style={{ opacity: 0.5 }} /> Babblet
+    <div className="min-h-screen bg-[#F8F9FA]">
+      {/* Gate modal */}
+      <AnimatePresence>{showGate && <GateModal onUnlock={handleUnlock} />}</AnimatePresence>
+
+      {/* Nav */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
+        <div className="max-w-[1320px] mx-auto px-4 h-14 flex items-center justify-between gap-4">
+          <Link href="/" className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800 transition-colors">
+            <ArrowLeft className="w-4 h-4" />
+            <span className="font-medium" style={{ fontFamily: 'Georgia, serif', fontSize: '1.05rem', color: '#1A3A2A' }}>Babblet</span>
           </Link>
-          <Link href="/contact"
-            style={{ ...S.parch, ...S.sans, background: 'var(--bab-forest)', fontSize: '0.875rem', fontWeight: 600, borderRadius: 4, padding: '8px 18px', textDecoration: 'none' }}>
-            Book a Demo
-          </Link>
+          <div className="flex items-center gap-3">
+            <CreditBadge credits={credits} />
+            <Link href="/contact" className="px-3 py-1.5 bg-emerald-700 text-white text-xs font-semibold rounded-lg hover:bg-emerald-800 transition-colors">
+              Book a Demo
+            </Link>
+          </div>
         </div>
       </header>
 
-      {/* Main */}
-      <main style={{ maxWidth: step === 'demo' ? 1160 : 760, margin: '0 auto', padding: '56px 24px 80px' }}>
-        <AnimatePresence mode="wait">
-          {step === 'form' && (
-            <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ textAlign: 'center' }}>
-              {/* Header */}
-              <motion.div {...fadeUp(0)} style={{ marginBottom: 40 }}>
-                <span style={{ ...S.gold, ...S.sans, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 14 }}>
-                  Free Trial
-                </span>
-                <h1 style={{ ...S.serif, ...S.forest, fontSize: 'clamp(2rem, 4vw, 2.75rem)', fontWeight: 400, lineHeight: 1.15, margin: '0 0 16px' }}>
-                  See Babblet in action,<br /><em>on your terms.</em>
-                </h1>
-                <p style={{ ...S.sans, ...S.forest, fontSize: '1rem', lineHeight: 1.65, margin: '0 auto', maxWidth: 420, opacity: 0.62 }}>
-                  Watch a real OT presentation get analyzed by AI — or upload your own. You get {MAX_CREDITS} free credits to explore.
-                </p>
-              </motion.div>
+      {/* Main layout */}
+      <div className="max-w-[1320px] mx-auto px-4 py-6">
+        <div className="grid grid-cols-[1fr_400px] gap-5 items-start">
 
-              {/* What you'll see chips */}
-              <motion.div {...fadeUp(0.08)} style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 36 }}>
-                {[
-                  { icon: BarChart3, label: 'Performance scores' },
-                  { icon: Star,      label: 'Strengths & gaps' },
-                  { icon: MessageSquare, label: 'Follow-up questions' },
-                ].map(({ icon: Icon, label }) => (
-                  <div key={label} style={{
-                    display: 'flex', alignItems: 'center', gap: 7, padding: '6px 14px',
-                    borderRadius: 999, border: '1px solid var(--bab-border)', background: 'var(--bab-white)',
-                  }}>
-                    <Icon size={13} color="var(--bab-forest)" />
-                    <span style={{ ...S.sans, fontSize: '0.8125rem', fontWeight: 500, color: 'var(--bab-forest)' }}>{label}</span>
+          {/* ── Left column ── */}
+          <div className="space-y-4">
+            {/* Student header card (mirrors real app) */}
+            <div className="bg-white rounded-2xl border border-slate-200 px-5 py-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">SC</div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h1 className="text-base font-bold text-slate-900">Sarah Chen</h1>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[11px] font-medium rounded-full">
+                      <CheckCircle className="w-3 h-3" /> Demo submission
+                    </span>
                   </div>
+                  <p className="text-xs text-slate-500 mt-0.5">OT 401 — Post-Stroke Rehabilitation Presentation</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Video card */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              {/* Toggle */}
+              <div className="px-4 pt-4 pb-3 flex items-center gap-2 border-b border-slate-100">
+                {(['demo', 'upload'] as const).map(m => (
+                  <button key={m} onClick={() => setVideoMode(m)}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${videoMode === m ? 'bg-emerald-700 text-white' : 'text-slate-500 hover:text-slate-800'}`}>
+                    {m === 'demo' ? 'Demo video' : 'Upload your own'}
+                  </button>
                 ))}
-              </motion.div>
+              </div>
 
-              <motion.div {...fadeUp(0.12)}>
-                <LeadForm onSubmit={handleFormSubmit} />
-              </motion.div>
-            </motion.div>
-          )}
+              {/* Upload zone */}
+              {videoMode === 'upload' && !uploadedUrl && (
+                <div
+                  className="m-4 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-3 py-12 cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/30 transition-all"
+                  onClick={() => fileRef.current?.click()}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleUpload(f); }}
+                >
+                  <Upload className="w-7 h-7 text-slate-300" />
+                  <div className="text-center">
+                    <p className="text-sm font-semibold text-slate-700">Drop your video here</p>
+                    <p className="text-xs text-slate-400 mt-1">MP4, MOV, WebM · Max {MAX_FILE_MB} MB</p>
+                  </div>
+                  <input ref={fileRef} type="file" accept="video/*" className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
+                </div>
+              )}
+              {uploadErr && <p className="px-4 pb-3 text-xs text-red-500">{uploadErr}</p>}
 
-          {step === 'demo' && lead && (
-            <motion.div key="demo" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <DemoWorkspace lead={lead} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </main>
+              {/* Player */}
+              {(videoMode === 'demo' || uploadedUrl) && (
+                <video key={videoSrc} src={videoSrc} controls playsInline
+                  className="w-full aspect-video block bg-black" />
+              )}
+              {videoMode === 'upload' && uploadedName && (
+                <div className="px-4 py-2 bg-slate-50 border-t border-slate-100">
+                  <p className="text-[11px] text-slate-500">📎 {uploadedName}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Analyze button */}
+            <div>
+              <button
+                onClick={runAnalysis}
+                disabled={loading}
+                className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-sm rounded-xl transition-colors flex items-center justify-center gap-2.5 disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
+              >
+                {loading
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Analyzing presentation…</>
+                  : <><Sparkles className="w-4 h-4" /> Analyze with Babblet</>}
+              </button>
+              {apiErr && (
+                <div className="mt-3 flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl">
+                  <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-600">{apiErr}</p>
+                </div>
+              )}
+              {credits <= 1 && credits > 0 && !isUnlocked() && (
+                <p className="mt-2 text-center text-xs text-amber-600">⚡ {credits} credit remaining — unlock more below</p>
+              )}
+            </div>
+          </div>
+
+          {/* ── Right column — results panel ── */}
+          <div className="space-y-4">
+            {/* Score card */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Overall Score</p>
+                  {result ? (
+                    <div className="flex items-baseline gap-2 mt-0.5">
+                      <span className="text-3xl font-bold text-slate-900">{result.overallScore}</span>
+                      <span className="text-sm text-slate-400">/ {result.maxScore}</span>
+                      <span className="ml-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-sm font-bold rounded-lg">{result.letterGrade}</span>
+                    </div>
+                  ) : (
+                    <div className="h-9 flex items-center">
+                      <span className="text-sm text-slate-400">{loading ? 'Analyzing…' : 'Run analysis to see score'}</span>
+                    </div>
+                  )}
+                </div>
+                {result && (
+                  <ScoreCircle score={result.overallScore} max={result.maxScore} size={64} />
+                )}
+              </div>
+              {result && (
+                <p className="text-xs text-slate-600 leading-relaxed border-t border-slate-100 pt-3">{result.summary}</p>
+              )}
+              {!result && !loading && (
+                <div className="border-t border-slate-100 pt-3 text-center py-6">
+                  <BarChart3 className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+                  <p className="text-xs text-slate-400">Click "Analyze with Babblet" to generate a detailed report</p>
+                </div>
+              )}
+              {loading && (
+                <div className="border-t border-slate-100 pt-3 text-center py-6">
+                  <Loader2 className="w-6 h-6 text-emerald-500 animate-spin mx-auto mb-2" />
+                  <p className="text-xs text-slate-400">AI is evaluating the presentation…</p>
+                </div>
+              )}
+            </div>
+
+            {/* Results tabs */}
+            {result && (
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                {/* Tab bar */}
+                <div className="flex border-b border-slate-100">
+                  {tabs.map(t => {
+                    const Icon = t.icon;
+                    return (
+                      <button key={t.id} onClick={() => setActiveTab(t.id)}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-semibold transition-all border-b-2 ${activeTab === t.id ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+                        <Icon className="w-3.5 h-3.5" />
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="p-4 max-h-[560px] overflow-y-auto">
+                  <AnimatePresence mode="wait">
+
+                    {/* ── Overview / Key Observations ── */}
+                    {activeTab === 'overview' && (
+                      <motion.div key="overview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
+                        {/* Strengths */}
+                        <div>
+                          <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1 mb-2">
+                            <ThumbsUp className="w-3 h-3" /> Strengths
+                          </p>
+                          <div className="space-y-2">
+                            {result.strengths.map((s, i) => (
+                              <div key={i} className="flex gap-2.5 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+                                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs text-slate-800 leading-relaxed">{s.text}</p>
+                                  {s.quote && (
+                                    <div className="mt-2 pt-2 border-t border-emerald-200/70">
+                                      <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide mb-1">Transcript quotation</p>
+                                      <p className="text-[11px] text-slate-700 italic leading-relaxed border-l-2 border-emerald-300 pl-2.5">"{s.quote}"</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Improvements */}
+                        <div>
+                          <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider flex items-center gap-1 mb-2">
+                            <AlertCircle className="w-3 h-3" /> Areas for Improvement
+                          </p>
+                          <div className="space-y-2">
+                            {result.improvements.map((s, i) => (
+                              <div key={i} className="flex gap-2.5 p-3 bg-amber-50 border border-amber-100 rounded-xl">
+                                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs text-slate-800 leading-relaxed">{s.text}</p>
+                                  {s.quote && (
+                                    <div className="mt-2 pt-2 border-t border-amber-200/70">
+                                      <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide mb-1">Transcript quotation</p>
+                                      <p className="text-[11px] text-slate-700 italic leading-relaxed border-l-2 border-amber-300 pl-2.5">"{s.quote}"</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* ── Questions ── */}
+                    {activeTab === 'questions' && (
+                      <motion.div key="questions" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3">
+                        {result.questions.map((q, i) => {
+                          const cat = getCat(q.category);
+                          return (
+                            <div key={i} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50">
+                              <div className="flex items-start gap-2 mb-2">
+                                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5"
+                                  style={{ background: cat.bg, color: cat.text, border: `1px solid ${cat.border}` }}>
+                                  {cat.label}
+                                </span>
+                                <p className="text-xs font-semibold text-slate-900 leading-snug">{q.question}</p>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <p className="text-[11px] text-slate-500 leading-relaxed pr-2">{q.rationale}</p>
+                                {q.timestamp && (
+                                  <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded flex-shrink-0">{q.timestamp}</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+
+                    {/* ── Rubric ── */}
+                    {activeTab === 'rubric' && (
+                      <motion.div key="rubric" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3">
+                        {result.rubric.map((c, i) => {
+                          const pct = c.maxScore > 0 ? c.score / c.maxScore : 0;
+                          const statusColor = c.status === 'strong' ? 'emerald' : c.status === 'adequate' ? 'amber' : 'red';
+                          const statusLabels = { strong: 'Strong', adequate: 'Adequate', weak: 'Needs Work' };
+                          return (
+                            <div key={i} className="p-3.5 rounded-xl border border-slate-200 bg-white">
+                              <div className="flex items-center justify-between gap-3 mb-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <ScoreCircle score={c.score} max={c.maxScore} size={44} />
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-semibold text-slate-900 truncate">{c.criterion}</p>
+                                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-${statusColor}-100 text-${statusColor}-700`}>
+                                      {statusLabels[c.status]}
+                                    </span>
+                                  </div>
+                                </div>
+                                {/* Mini bar */}
+                                <div className="w-20 h-1.5 bg-slate-100 rounded-full flex-shrink-0">
+                                  <div className={`h-full rounded-full bg-${statusColor}-500`} style={{ width: `${pct * 100}%` }} />
+                                </div>
+                              </div>
+                              <p className="text-[11px] text-slate-600 leading-relaxed">{c.feedback}</p>
+                            </div>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+
+                  </AnimatePresence>
+                </div>
+              </div>
+            )}
+
+            {/* Upsell card */}
+            {credits <= 0 && !isUnlocked() && (
+              <div className="bg-emerald-800 rounded-2xl p-5 text-white">
+                <p className="text-sm font-bold mb-1">Want the full Babblet experience?</p>
+                <p className="text-xs opacity-75 mb-4 leading-relaxed">Unlimited grading, rubric uploads, class management, and detailed rubric-grounded feedback.</p>
+                <Link href="/contact"
+                  className="inline-flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 text-xs font-bold px-4 py-2 rounded-lg transition-colors">
+                  Book a Demo <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
