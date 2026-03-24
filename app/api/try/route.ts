@@ -55,12 +55,13 @@ function safeParseJson(raw: string): unknown {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { action, email, transcript, parentQuestion, parentCategory } = body as {
+    const { action, email, transcript, parentQuestion, parentCategory, userInstruction } = body as {
       action: 'full' | 'credits' | 'branch';
       email: string;
       transcript?: string;
       parentQuestion?: string;
       parentCategory?: string;
+      userInstruction?: string;
     };
 
     if (!email || typeof email !== 'string' || !email.includes('@')) {
@@ -73,7 +74,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ credits, max: MAX_CREDITS });
     }
 
-    const combined = transcript || '';
+    const combined = [transcript, userInstruction].filter(Boolean).join('\n');
     if (detectMisuse(combined)) {
       return NextResponse.json({ error: 'Request flagged by content guardrails.' }, { status: 422 });
     }
@@ -111,6 +112,10 @@ export async function POST(req: NextRequest) {
     if (action === 'branch') {
       const pq = parentQuestion as string;
       const tx = transcript as string;
+      const focus =
+        typeof userInstruction === 'string' && userInstruction.trim()
+          ? userInstruction.trim().slice(0, 1400)
+          : '';
       const branchPrompt = `You are Babblet, an academic presentation coach. Given a follow-up question that was already asked about a student presentation, generate exactly 2 deeper follow-up questions that branch from it — more specific, still grounded in the transcript.
 
 PARENT QUESTION:
@@ -118,7 +123,7 @@ ${pq.slice(0, 2000)}
 
 PARENT CATEGORY (optional): ${parentCategory || 'general'}
 
-TRANSCRIPT (excerpt):
+${focus ? `USER PRIORITIES (honor these in both questions — tone, angle, or subtopics):\n${focus}\n\n` : ''}TRANSCRIPT (excerpt):
 ${tx.slice(0, 6000)}
 
 Return ONLY valid JSON:
@@ -131,7 +136,7 @@ Return ONLY valid JSON:
 
       const msg = await anthropic.messages.create({
         model: 'claude-3-5-haiku-20241022',
-        max_tokens: 900,
+        max_tokens: 1100,
         messages: [{ role: 'user', content: branchPrompt }],
       });
 
@@ -153,27 +158,70 @@ Return ONLY valid JSON:
 TRANSCRIPT:
 ${transcript.slice(0, 9000)}
 
+First, split the transcript into 10–18 chronological segments for reference. Index them 0,1,2,... in the "transcript" array below. Each segment should be a natural phrase or sentence block (not one giant string).
+
 Return ONLY valid JSON with this exact shape:
 {
   "overallScore": <number 0-100>,
   "maxScore": 100,
   "letterGrade": <"A"|"A-"|"B+"|"B"|"B-"|"C+"|"C"|"D"|"F">,
   "summary": "<2-3 sentence overall assessment>",
+  "speechMetrics": { "fillerWords": <estimate 0-40>, "wordsPerMin": <estimate 90-200>, "pausesPerMin": <estimate 1-15> },
   "strengths": [
-    { "text": "<observation>", "quote": "<verbatim short excerpt from transcript that supports this, 15-35 words>" },
+    { "text": "<observation>", "quote": "<verbatim short excerpt from transcript segments that supports this, 15-35 words>" },
     { "text": "<observation>", "quote": "<verbatim short excerpt>" },
     { "text": "<observation>", "quote": "<verbatim short excerpt>" }
   ],
   "improvements": [
-    { "text": "<observation>", "quote": "<verbatim short excerpt from transcript that shows the gap, 15-35 words>" },
+    { "text": "<observation>", "quote": "<verbatim short excerpt that shows the gap, 15-35 words>" },
     { "text": "<observation>", "quote": "<verbatim short excerpt>" },
     { "text": "<observation>", "quote": "<verbatim short excerpt>" }
   ],
+  "transcript": [
+    { "timestamp": "<M:SS or best guess>", "text": "<segment text — must match wording in TRANSCRIPT above>" },
+    { "timestamp": "...", "text": "..." }
+  ],
   "rubric": [
-    { "criterion": "Content & Knowledge", "score": <0-25>, "maxScore": 25, "feedback": "<1-2 sentences>", "status": <"strong"|"adequate"|"weak"> },
-    { "criterion": "Structure & Organization", "score": <0-25>, "maxScore": 25, "feedback": "<1-2 sentences>", "status": <"strong"|"adequate"|"weak"> },
-    { "criterion": "Evidence & Support", "score": <0-25>, "maxScore": 25, "feedback": "<1-2 sentences>", "status": <"strong"|"adequate"|"weak"> },
-    { "criterion": "Clarity & Delivery", "score": <0-25>, "maxScore": 25, "feedback": "<1-2 sentences>", "status": <"strong"|"adequate"|"weak"> }
+    {
+      "criterion": "Content & Knowledge",
+      "score": <0-25>,
+      "maxScore": 25,
+      "feedback": "<1-2 sentences>",
+      "status": <"strong"|"adequate"|"weak">,
+      "insights": {
+        "overview": "<2-4 sentences: how this criterion was met vs rubric expectations>",
+        "strengths": [
+          { "text": "<specific strength tied to the presentation>", "refs": [<segment indices e.g. 0,2>] }
+        ],
+        "improvements": [
+          { "text": "<specific gap or next step>", "refs": [<segment indices>] }
+        ]
+      }
+    },
+    {
+      "criterion": "Structure & Organization",
+      "score": <0-25>,
+      "maxScore": 25,
+      "feedback": "<1-2 sentences>",
+      "status": <"strong"|"adequate"|"weak">,
+      "insights": { "overview": "...", "strengths": [...], "improvements": [...] }
+    },
+    {
+      "criterion": "Evidence & Support",
+      "score": <0-25>,
+      "maxScore": 25,
+      "feedback": "<1-2 sentences>",
+      "status": <"strong"|"adequate"|"weak">,
+      "insights": { "overview": "...", "strengths": [...], "improvements": [...] }
+    },
+    {
+      "criterion": "Clarity & Delivery",
+      "score": <0-25>,
+      "maxScore": 25,
+      "feedback": "<1-2 sentences>",
+      "status": <"strong"|"adequate"|"weak">,
+      "insights": { "overview": "...", "strengths": [...], "improvements": [...] }
+    }
   ],
   "questions": [
     { "question": "<targeted follow-up question>", "category": <"clarification"|"depth"|"evidence"|"application"|"assumption"|"synthesis">, "rationale": "<why this question matters, 1 sentence>", "timestamp": "<approximate timestamp like '1:45' or '' if unknown>" },
@@ -185,13 +233,15 @@ Return ONLY valid JSON with this exact shape:
 }
 
 Rules:
-- quotes must be verbatim from the transcript, not paraphrased
+- "transcript" segments must be copied from the source TRANSCRIPT (verbatim splits). refs in insights use indices into this same "transcript" array (0-based).
+- quotes in strengths/improvements must be verbatim from those segments.
+- Every rubric row MUST include a complete "insights" object with overview, at least 2 strengths items, and at least 2 improvements items.
 - rubric scores must sum to overallScore
 - Respond ONLY with the JSON object, no commentary`;
 
       const msg = await anthropic.messages.create({
         model: 'claude-3-5-haiku-20241022',
-        max_tokens: 2048,
+        max_tokens: 8192,
         messages: [{ role: 'user', content: prompt }],
       });
 

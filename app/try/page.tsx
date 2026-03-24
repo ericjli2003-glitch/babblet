@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ThumbsUp, AlertCircle, BarChart3, MessageSquare, BookOpen,
   Loader2, CheckCircle, Zap, ArrowLeft, Upload, Download,
-  ChevronRight, Sparkles, Mic,
+  ChevronRight, Sparkles, Mic, X,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -15,7 +15,7 @@ const MAX_FILE_MB = 300;
 const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
 const CREDIT_KEY = 'babblet_try_credits';
 const UNLOCKED_KEY = 'babblet_try_unlocked';
-const CACHE_KEY = 'babblet_try_result';
+const CACHE_KEY = 'babblet_try_result_v3';
 
 // ─── Pre-computed demo results ────────────────────────────────────────────────
 const DEMO_RESULT: AnalysisResult = {
@@ -168,6 +168,58 @@ function transcriptToText(t: AnalysisResult['transcript']): string {
   return t.map(s => s.text).join('\n\n');
 }
 
+/** Merge demo rubric insights when API rows lack detailed analysis (by index). */
+function mergeRubricInsights(api: RubricCriterion[], demo: RubricCriterion[]): RubricCriterion[] {
+  return api.map((row, i) => {
+    if (row.insights && row.insights.overview) return row;
+    const fallback = demo[i];
+    if (fallback?.insights) return { ...row, insights: fallback.insights };
+    return row;
+  });
+}
+
+/** Ensure transcript + speech metrics + rubric insights always present for trial UI. */
+function ensureTrialResult(r: AnalysisResult): AnalysisResult {
+  const transcript =
+    r.transcript && r.transcript.length > 0 ? r.transcript : (DEMO_RESULT.transcript as NonNullable<AnalysisResult['transcript']>);
+  const speechMetrics = r.speechMetrics ?? DEMO_RESULT.speechMetrics;
+  const baseRubric = r.rubric?.length ? r.rubric : DEMO_RESULT.rubric;
+  const rubric = mergeRubricInsights(baseRubric, DEMO_RESULT.rubric);
+  return { ...r, transcript, speechMetrics, rubric };
+}
+
+/** Find segment index for a quote (substring match). */
+function findSegmentIndexForQuote(quote: string, segments: { text: string }[]): number {
+  const q = quote.trim().slice(0, 80).toLowerCase();
+  if (!q) return -1;
+  for (let i = 0; i < segments.length; i++) {
+    const t = segments[i].text.toLowerCase();
+    if (t.includes(q.slice(0, 40)) || q.slice(0, 30).length >= 12 && t.includes(q.slice(0, 30))) return i;
+  }
+  return -1;
+}
+
+type SegmentMark = 'strength' | 'improvement' | 'both' | 'none';
+function buildSegmentMarks(result: AnalysisResult, segCount: number): SegmentMark[] {
+  const segs = result.transcript ?? [];
+  const out: Array<SegmentMark | undefined> = Array(segCount).fill(undefined);
+  result.strengths.forEach((s) => {
+    const idx = findSegmentIndexForQuote(s.quote, segs);
+    if (idx >= 0 && idx < segCount) {
+      if (out[idx] === 'improvement') out[idx] = 'both';
+      else if (!out[idx]) out[idx] = 'strength';
+    }
+  });
+  result.improvements.forEach((s) => {
+    const idx = findSegmentIndexForQuote(s.quote, segs);
+    if (idx >= 0 && idx < segCount) {
+      if (out[idx] === 'strength') out[idx] = 'both';
+      else if (!out[idx]) out[idx] = 'improvement';
+    }
+  });
+  return out.map((m) => (m ?? 'none')) as SegmentMark[];
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface RubricInsight {
   overview: string;
@@ -256,13 +308,13 @@ function QuestionCardBlock({
   transcriptSegs,
   branchMap,
   branchingId,
-  onBranch,
+  onBranchRequest,
 }: {
   q: QBranch;
   transcriptSegs: NonNullable<AnalysisResult['transcript']>;
   branchMap: Record<string, QBranch[]>;
   branchingId: string | null;
-  onBranch: (q: QBranch) => void;
+  onBranchRequest: (q: QBranch) => void;
 }) {
   const cat = getCat(q.category);
   const segIdx = Math.min(
@@ -292,7 +344,7 @@ function QuestionCardBlock({
             <button
               type="button"
               disabled={hasBranched || isBranching}
-              onClick={() => onBranch(q)}
+              onClick={() => onBranchRequest(q)}
               className={`inline-flex items-center gap-1 text-[11px] border rounded-lg px-2.5 py-1 transition-colors ${
                 hasBranched
                   ? 'text-slate-300 border-slate-100 cursor-default'
@@ -328,10 +380,75 @@ function QuestionCardBlock({
             transcriptSegs={transcriptSegs}
             branchMap={branchMap}
             branchingId={branchingId}
-            onBranch={onBranch}
+            onBranchRequest={onBranchRequest}
           />
         </div>
       ))}
+    </div>
+  );
+}
+
+// ─── Branch modal (optional instructions for Babblet) ─────────────────────────
+function BranchModal({
+  open,
+  onClose,
+  instruction,
+  onInstructionChange,
+  onConfirm,
+  loading,
+}: {
+  open: boolean;
+  onClose: () => void;
+  instruction: string;
+  onInstructionChange: (v: string) => void;
+  onConfirm: () => void;
+  loading: boolean;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+      style={{ backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', background: 'rgba(15,23,42,0.45)' }}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200"
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">Branch this question</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Optional: tell Babblet what to emphasize. Leave blank for default follow-ups.</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-5 space-y-3">
+          <label className="block text-xs font-semibold text-slate-700">Your instructions</label>
+          <textarea
+            value={instruction}
+            onChange={(e) => onInstructionChange(e.target.value)}
+            placeholder="e.g. Ask more about discharge criteria and FIM scores…"
+            rows={4}
+            className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 resize-y min-h-[100px]"
+            maxLength={800}
+          />
+          <p className="text-[10px] text-slate-400">{instruction.length}/800</p>
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100 bg-slate-50">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200/80 rounded-lg">
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className="px-4 py-2 text-sm font-semibold bg-emerald-700 text-white rounded-lg hover:bg-emerald-800 disabled:opacity-50 flex items-center gap-2"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            Generate follow-ups
+          </button>
+        </div>
+      </motion.div>
     </div>
   );
 }
@@ -434,19 +551,21 @@ export default function TryPage() {
   const [selectedCriterionIdx, setSelectedCriterionIdx] = useState(0);
   const [branchMap, setBranchMap] = useState<Record<string, QBranch[]>>({});
   const [branchingId, setBranchingId] = useState<string | null>(null);
+  const [branchModalParent, setBranchModalParent] = useState<QBranch | null>(null);
+  const [branchInstruction, setBranchInstruction] = useState('');
   const [apiErr, setApiErr] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
   // On mount: hydrate credits, load demo result immediately
   useEffect(() => {
     setCredits(getStoredCredits());
-    // Demo always shows pre-computed results
     const cached = getCachedResult();
     if (cached) {
-      setResult(cached);
+      setResult(ensureTrialResult(cached));
     } else {
-      setResult(DEMO_RESULT);
-      setCachedResult(DEMO_RESULT);
+      const initial = ensureTrialResult(DEMO_RESULT);
+      setResult(initial);
+      setCachedResult(initial);
     }
   }, []);
 
@@ -468,8 +587,9 @@ export default function TryPage() {
 
   const runAnalysis = async () => {
     if (videoMode === 'demo') {
-      setResult(DEMO_RESULT);
-      setCachedResult(DEMO_RESULT);
+      const d = ensureTrialResult(DEMO_RESULT);
+      setResult(d);
+      setCachedResult(d);
       return;
     }
 
@@ -494,8 +614,9 @@ export default function TryPage() {
       });
       const data = await res.json();
       if (!res.ok) { setApiErr(data.error || 'Analysis failed.'); return; }
-      setResult(data.result);
-      setCachedResult(data.result);
+      const normalized = ensureTrialResult(data.result as AnalysisResult);
+      setResult(normalized);
+      setCachedResult(normalized);
       setActiveTab('overview');
     } catch {
       setApiErr('Network error. Please try again.');
@@ -504,7 +625,7 @@ export default function TryPage() {
     }
   };
 
-  const handleBranchQuestion = useCallback(async (parent: QBranch) => {
+  const executeBranch = useCallback(async (parent: QBranch, userInstruction: string) => {
     if ((branchMap[parent.id]?.length ?? 0) > 0) return;
 
     const runDemoBranches = () => {
@@ -513,8 +634,11 @@ export default function TryPage() {
         parent.depth === 0
           ? (DEMO_BRANCHES[rootIdx] ?? DEMO_BRANCHES[0])
           : NESTED_BRANCH_FALLBACK;
+      const focus = userInstruction.trim();
       const kids: QBranch[] = template.map((t, i) => ({
         ...t,
+        question: focus ? `${t.question} (Your focus: ${focus.slice(0, 140)}${focus.length > 140 ? '…' : ''})` : t.question,
+        rationale: focus ? `${t.rationale} — Guided by: ${focus.slice(0, 160)}` : t.rationale,
         id: `${parent.id}-b${i}-${Date.now()}`,
         parentId: parent.id,
         parentRootIndex: parent.parentRootIndex,
@@ -557,6 +681,7 @@ export default function TryPage() {
           transcript: transcriptToText(result?.transcript),
           parentQuestion: parent.question,
           parentCategory: parent.category,
+          userInstruction: userInstruction.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -593,19 +718,53 @@ export default function TryPage() {
     }
   }, [branchMap, result, videoMode]);
 
+  const handleBranchRequest = useCallback((q: QBranch) => {
+    if ((branchMap[q.id]?.length ?? 0) > 0) return;
+    setBranchModalParent(q);
+    setBranchInstruction('');
+  }, [branchMap]);
+
+  const confirmBranchModal = useCallback(async () => {
+    if (!branchModalParent) return;
+    const p = branchModalParent;
+    const instr = branchInstruction;
+    await executeBranch(p, instr);
+    setBranchModalParent(null);
+  }, [branchModalParent, branchInstruction, executeBranch]);
+
   const handleUnlock = () => {
     setShowGate(false);
     setCredits(MAX_CREDITS);
     setStoredCredits(MAX_CREDITS);
   };
 
-  const sm = result?.speechMetrics ?? DEMO_RESULT.speechMetrics!;
-  const transcript = result?.transcript ?? DEMO_RESULT.transcript!;
+  const analysisForUi = useMemo(() => {
+    if (result) return ensureTrialResult(result);
+    if (videoMode === 'demo') return ensureTrialResult(DEMO_RESULT);
+    return null;
+  }, [result, videoMode]);
+
+  const transcript = analysisForUi?.transcript ?? (videoMode === 'demo' ? DEMO_RESULT.transcript! : []);
+  const segmentMarks = useMemo(() => {
+    if (!transcript.length) return [] as SegmentMark[];
+    const base = analysisForUi ?? DEMO_RESULT;
+    return buildSegmentMarks(base, transcript.length);
+  }, [analysisForUi, transcript.length]);
+  const sm = analysisForUi?.speechMetrics ?? DEMO_RESULT.speechMetrics!;
 
   return (
     <div className="h-screen flex flex-col bg-[#F9FAFB]">
       {/* Gate modal */}
       <AnimatePresence>{showGate && <GateModal onUnlock={handleUnlock} />}</AnimatePresence>
+
+      <BranchModal
+        open={branchModalParent !== null}
+        onClose={() => setBranchModalParent(null)}
+        instruction={branchInstruction}
+        onInstructionChange={setBranchInstruction}
+        onConfirm={confirmBranchModal}
+        loading={branchModalParent != null && branchingId === branchModalParent?.id}
+      />
 
       {/* ── Header (matches real submission page) ── */}
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0">
@@ -727,19 +886,19 @@ export default function TryPage() {
                 </div>
 
                 {/* Key Observations */}
-                {result && (result.strengths.length > 0 || result.improvements.length > 0) && (
+                {analysisForUi && (analysisForUi.strengths.length > 0 || analysisForUi.improvements.length > 0) && (
                   <div className="bg-white rounded-2xl border border-slate-200 p-5">
                     <div className="mb-4">
                       <h3 className="text-sm font-semibold text-slate-900">Key Observations</h3>
                       <p className="text-xs text-slate-500 mt-0.5">The most noteworthy moments from this presentation, grounded in the rubric and course materials.</p>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      {result.strengths.length > 0 && (
+                      {analysisForUi.strengths.length > 0 && (
                         <div className="space-y-2">
                           <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1">
                             <ThumbsUp className="w-3 h-3" /> Strengths
                           </p>
-                          {result.strengths.map((s, i) => (
+                          {analysisForUi.strengths.map((s, i) => (
                             <div key={i} className="flex gap-2.5 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
                               <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
                               <div className="min-w-0 flex-1">
@@ -757,12 +916,12 @@ export default function TryPage() {
                           ))}
                         </div>
                       )}
-                      {result.improvements.length > 0 && (
+                      {analysisForUi.improvements.length > 0 && (
                         <div className="space-y-2">
                           <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider flex items-center gap-1">
                             <AlertCircle className="w-3 h-3" /> Areas for Improvement
                           </p>
-                          {result.improvements.map((s, i) => (
+                          {analysisForUi.improvements.map((s, i) => (
                             <div key={i} className="flex gap-2.5 p-3 bg-amber-50 border border-amber-100 rounded-xl">
                               <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
                               <div className="min-w-0 flex-1">
@@ -789,7 +948,7 @@ export default function TryPage() {
                   <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                     <div>
                       <h3 className="text-sm font-semibold text-slate-900">Transcript</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">Numbered segments align with follow-up questions and rubric references.</p>
+                      <p className="text-xs text-slate-500 mt-0.5">S / I marks strength or improvement moments tied to Key Observations.</p>
                     </div>
                     {loading && (
                       <div className="flex items-center gap-1.5 text-xs text-slate-400">
@@ -798,24 +957,43 @@ export default function TryPage() {
                     )}
                     <div className="flex items-center gap-3 ml-4">
                       <div className="flex items-center gap-1.5">
-                        <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center">1</span>
+                        <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[8px] font-bold flex items-center justify-center">S</span>
                         <span className="text-[10px] text-slate-500">Strength</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">1</span>
+                        <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center">I</span>
                         <span className="text-[10px] text-slate-500">Improvement</span>
                       </div>
                     </div>
                   </div>
                   <div className="p-5 max-h-[400px] overflow-y-auto">
-                    <div className="space-y-0">
-                      {transcript.map((seg, i) => (
-                        <div key={i} className="flex items-start gap-3 py-2.5 border-b border-slate-50 last:border-0">
-                          <span className="font-mono text-[10px] text-emerald-600 mt-0.5 w-10 flex-shrink-0 text-right">[{i}]</span>
-                          <p className="text-xs text-slate-700 leading-relaxed">{seg.text}</p>
-                        </div>
-                      ))}
-                    </div>
+                    {transcript.length === 0 ? (
+                      <p className="text-xs text-slate-500 text-center py-8">Run Babblet analysis to see a transcript for your upload.</p>
+                    ) : (
+                      <div className="space-y-0">
+                        {transcript.map((seg, i) => {
+                          const mark = segmentMarks[i] ?? 'none';
+                          return (
+                            <div key={i} className="flex items-start gap-3 py-2.5 border-b border-slate-50 last:border-0">
+                              <div className="flex flex-col items-end gap-1 flex-shrink-0 w-[52px] pt-0.5">
+                                {mark !== 'none' && (
+                                  <div className="flex items-center gap-0.5">
+                                    {(mark === 'strength' || mark === 'both') && (
+                                      <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[8px] font-bold flex items-center justify-center" title="Strength">S</span>
+                                    )}
+                                    {(mark === 'improvement' || mark === 'both') && (
+                                      <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center" title="Improvement">I</span>
+                                    )}
+                                  </div>
+                                )}
+                                <span className="font-mono text-[10px] text-emerald-600">[{i}]</span>
+                              </div>
+                              <p className="text-xs text-slate-700 leading-relaxed">{seg.text}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -847,8 +1025,16 @@ export default function TryPage() {
                   <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">{apiErr}</div>
                 )}
 
+                {(analysisForUi?.questions?.length ?? 0) === 0 && (
+                  <p className="text-sm text-slate-500 text-center py-10 rounded-2xl border border-dashed border-slate-200 bg-white">
+                    {videoMode === 'upload' && !result
+                      ? 'Run Babblet analysis on your video to generate follow-up questions.'
+                      : 'No follow-up questions in this result.'}
+                  </p>
+                )}
+
                 <div className="space-y-4">
-                  {(result?.questions ?? []).map((q, i) => (
+                  {(analysisForUi?.questions ?? []).map((q, i) => (
                     <QuestionCardBlock
                       key={`root-${i}`}
                       q={{
@@ -857,10 +1043,10 @@ export default function TryPage() {
                         depth: 0,
                         parentRootIndex: i,
                       }}
-                      transcriptSegs={transcript}
+                      transcriptSegs={transcript.length > 0 ? transcript : DEMO_RESULT.transcript!}
                       branchMap={branchMap}
                       branchingId={branchingId}
-                      onBranch={handleBranchQuestion}
+                      onBranchRequest={handleBranchRequest}
                     />
                   ))}
                 </div>
@@ -881,20 +1067,20 @@ export default function TryPage() {
                     {/* Total */}
                     <div className="px-4 py-3 border-b border-slate-100">
                       <div className="flex items-baseline gap-1">
-                        <span className="text-xl font-bold text-slate-900">{result?.overallScore ?? 0}</span>
-                        <span className="text-xs text-slate-400">/{result?.maxScore ?? 100}</span>
-                        <span className="ml-auto text-[10px] text-slate-400">{result ? Math.round((result.overallScore / result.maxScore) * 100) : 0}%</span>
+                        <span className="text-xl font-bold text-slate-900">{analysisForUi?.overallScore ?? 0}</span>
+                        <span className="text-xs text-slate-400">/{analysisForUi?.maxScore ?? 100}</span>
+                        <span className="ml-auto text-[10px] text-slate-400">{analysisForUi ? Math.round((analysisForUi.overallScore / analysisForUi.maxScore) * 100) : 0}%</span>
                       </div>
                       <div className="mt-1 h-1 bg-slate-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${result ? (result.overallScore / result.maxScore) * 100 : 0}%` }} />
+                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${analysisForUi ? (analysisForUi.overallScore / analysisForUi.maxScore) * 100 : 0}%` }} />
                       </div>
                       <p className="mt-1.5 text-[10px] text-emerald-600 font-medium flex items-center gap-1">
-                        <CheckCircle className="w-3 h-3" /> Proficiency: {result?.letterGrade ?? 'B+'}
+                        <CheckCircle className="w-3 h-3" /> Proficiency: {analysisForUi?.letterGrade ?? 'B+'}
                       </p>
                     </div>
                     {/* Criterion list */}
                     <div className="divide-y divide-slate-50">
-                      {(result?.rubric ?? []).map((c, i) => {
+                      {(analysisForUi?.rubric ?? []).map((c, i) => {
                         const pct = c.maxScore > 0 ? c.score / c.maxScore : 0;
                         const barColor = c.status === 'strong' ? '#10b981' : c.status === 'adequate' ? '#f59e0b' : '#ef4444';
                         const isActive = selectedCriterionIdx === i;
@@ -915,8 +1101,8 @@ export default function TryPage() {
                   </div>
 
                   {/* ── Right: criterion detail + Babblet Insights ── */}
-                  {result && result.rubric[selectedCriterionIdx] && (() => {
-                    const c = result.rubric[selectedCriterionIdx];
+                  {analysisForUi && analysisForUi.rubric[selectedCriterionIdx] && (() => {
+                    const c = analysisForUi.rubric[selectedCriterionIdx];
                     const pct = c.maxScore > 0 ? c.score / c.maxScore : 0;
                     const barColor = c.status === 'strong' ? '#10b981' : c.status === 'adequate' ? '#f59e0b' : '#ef4444';
                     const statusLabel = c.status === 'strong' ? 'Excellent' : c.status === 'adequate' ? 'Adequate' : 'Needs Work';
@@ -938,7 +1124,7 @@ export default function TryPage() {
                         </div>
 
                         {/* Babblet Insights card */}
-                        {c.insights && (
+                        {c.insights?.overview && (
                           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
                             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
                               <div className="flex items-center gap-2">
@@ -960,7 +1146,7 @@ export default function TryPage() {
                               <div>
                                 <h4 className="text-xs font-semibold text-slate-800 mb-2">What worked well:</h4>
                                 <div className="space-y-2.5">
-                                  {c.insights.strengths.map((s, si) => (
+                                  {(c.insights.strengths ?? []).map((s, si) => (
                                     <div key={si} className="flex gap-2">
                                       <span className="text-slate-400 mt-0.5 flex-shrink-0">•</span>
                                       <p className="text-xs text-slate-600 leading-relaxed">
@@ -978,7 +1164,7 @@ export default function TryPage() {
                               <div>
                                 <h4 className="text-xs font-semibold text-slate-800 mb-2">Areas to develop:</h4>
                                 <div className="space-y-2.5">
-                                  {c.insights.improvements.map((s, si) => (
+                                  {(c.insights.improvements ?? []).map((s, si) => (
                                     <div key={si} className="flex gap-2">
                                       <span className="text-slate-400 mt-0.5 flex-shrink-0">•</span>
                                       <p className="text-xs text-slate-600 leading-relaxed">
@@ -996,7 +1182,7 @@ export default function TryPage() {
                           </div>
                         )}
 
-                        {!c.insights && (
+                        {!c.insights?.overview && (
                           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
                             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
                               <div className="flex items-center gap-2">
@@ -1063,7 +1249,7 @@ export default function TryPage() {
             {/* Upload toggle */}
             <div className="flex items-center gap-2 mt-4">
               {(['demo', 'upload'] as const).map(m => (
-                <button key={m} onClick={() => { setVideoMode(m); if (m === 'demo') { setResult(DEMO_RESULT); } }}
+                <button key={m} onClick={() => { setVideoMode(m); if (m === 'demo') { setResult(ensureTrialResult(DEMO_RESULT)); } }}
                   className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${videoMode === m ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:text-white'}`}>
                   {m === 'demo' ? 'Demo video' : 'Upload your own'}
                 </button>
@@ -1073,20 +1259,20 @@ export default function TryPage() {
           </div>
 
           {/* Score summary in sidebar */}
-          {result && (
+          {analysisForUi && (
             <div className="border-t border-slate-700 p-4 flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Overall Score</p>
                   <div className="flex items-baseline gap-1.5 mt-1">
-                    <span className="text-2xl font-bold">{result.overallScore}</span>
-                    <span className="text-sm text-slate-400">/ {result.maxScore}</span>
-                    <span className="ml-1 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs font-bold rounded">{result.letterGrade}</span>
+                    <span className="text-2xl font-bold">{analysisForUi.overallScore}</span>
+                    <span className="text-sm text-slate-400">/ {analysisForUi.maxScore}</span>
+                    <span className="ml-1 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs font-bold rounded">{analysisForUi.letterGrade}</span>
                   </div>
                 </div>
-                <ScoreCircle score={result.overallScore} max={result.maxScore} size={56} />
+                <ScoreCircle score={analysisForUi.overallScore} max={analysisForUi.maxScore} size={56} />
               </div>
-              <p className="text-xs text-slate-400 leading-relaxed mt-3">{result.summary}</p>
+              <p className="text-xs text-slate-400 leading-relaxed mt-3">{analysisForUi.summary}</p>
             </div>
           )}
 
