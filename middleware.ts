@@ -10,6 +10,7 @@ const PUBLIC_PATHS = [
   '/api/auth',
   '/api/contact',
   '/api/try',
+  '/api/deepgram-key',
   '/icon.svg',
 ];
 

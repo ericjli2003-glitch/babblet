@@ -684,6 +684,8 @@ export default function TryPage() {
   const [branchingId, setBranchingId] = useState<string | null>(null);
   const [apiErr, setApiErr] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const uploadedFileRef = useRef<File | null>(null);
+  const [loadingMsg, setLoadingMsg] = useState('');
 
   // On mount: hydrate credits, load demo result immediately
   useEffect(() => {
@@ -710,6 +712,7 @@ export default function TryPage() {
     if (file.size > MAX_FILE_BYTES) { setUploadErr(`File too large. Max ${MAX_FILE_MB} MB.`); return; }
     setUploadedUrl(URL.createObjectURL(file));
     setUploadedName(file.name);
+    uploadedFileRef.current = file;
     setVideoMode('upload');
     setResult(null);
   }, []);
@@ -731,32 +734,77 @@ export default function TryPage() {
     setStoredCredits(newCredits);
     setCredits(newCredits);
 
+    let transcriptText = '';
+    let dgSegments: Array<{ timestamp: string; text: string }> = [];
+
     try {
+      // ── Step 1: Transcribe the actual video with Deepgram ──────────────────
+      const file = uploadedFileRef.current;
+      if (file) {
+        setLoadingMsg('Transcribing your video…');
+        try {
+          const keyRes = await fetch('/api/deepgram-key');
+          if (!keyRes.ok) throw new Error('key_unavailable');
+          const { key } = await keyRes.json() as { key?: string };
+          if (!key) throw new Error('key_unavailable');
+
+          const dgRes = await fetch(
+            'https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&punctuate=true&language=en&paragraphs=true',
+            {
+              method: 'POST',
+              headers: { Authorization: `Token ${key}`, 'Content-Type': file.type || 'video/mp4' },
+              body: file,
+            }
+          );
+          if (!dgRes.ok) throw new Error(`dg_${dgRes.status}`);
+
+          type DgParagraph = { start?: number; sentences?: Array<{ text: string }> };
+          type DgResponse = { results?: { channels?: Array<{ alternatives?: Array<{ transcript?: string; paragraphs?: { paragraphs?: DgParagraph[] } }> }> } };
+          const dgData = await dgRes.json() as DgResponse;
+          const alt = dgData?.results?.channels?.[0]?.alternatives?.[0];
+          transcriptText = alt?.transcript ?? '';
+          const paras = alt?.paragraphs?.paragraphs ?? [];
+          dgSegments = paras
+            .map((p) => {
+              const secs = Math.floor(p.start ?? 0);
+              const timestamp = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+              const text = (p.sentences ?? []).map((s) => s.text).join(' ');
+              return { timestamp, text };
+            })
+            .filter((s) => s.text.trim().length > 0);
+        } catch (dgErr) {
+          console.warn('[trial] Deepgram transcription failed, using filename fallback:', dgErr);
+          transcriptText = `[Student presentation: ${uploadedName}] — Uploaded video for analysis.`;
+        }
+      } else {
+        transcriptText = `[Student presentation: ${uploadedName}] — Uploaded video for analysis.`;
+      }
+
+      // ── Step 2: Run Claude analysis on the real transcript ─────────────────
+      setLoadingMsg('Analyzing presentation…');
       const res = await fetch('/api/try', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'full',
-          email: 'trial@babblet.io',
-          transcript: `[Student presentation: ${uploadedName}] — Uploaded video for analysis.`,
-        }),
+        body: JSON.stringify({ action: 'full', email: 'trial@babblet.io', transcript: transcriptText }),
       });
       const data = await res.json();
       if (!res.ok) {
-        // Fallback: still show full demo analysis so the UI isn't broken
         const fallback = ensureTrialResult(DEMO_RESULT);
         setResult(fallback);
         setCachedResult(fallback);
         setActiveTab('overview');
-        setApiErr(data.error || 'Analysis preview unavailable — showing demo results.');
+        setApiErr(data.error || 'Analysis unavailable — showing demo results.');
         return;
       }
-      const normalized = ensureTrialResult(data.result as AnalysisResult);
+
+      // Inject real Deepgram segments so transcript tab shows actual speech
+      const rawResult = data.result as AnalysisResult;
+      if (dgSegments.length > 0) rawResult.transcript = dgSegments;
+      const normalized = ensureTrialResult(rawResult);
       setResult(normalized);
       setCachedResult(normalized);
       setActiveTab('overview');
     } catch {
-      // Network/parse error — still show demo so the UI works
       const fallback = ensureTrialResult(DEMO_RESULT);
       setResult(fallback);
       setCachedResult(fallback);
@@ -764,6 +812,7 @@ export default function TryPage() {
       setApiErr('Network error — showing demo results.');
     } finally {
       setLoading(false);
+      setLoadingMsg('');
     }
   };
 
@@ -1402,7 +1451,7 @@ export default function TryPage() {
                 disabled={loading}
                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl transition-colors flex items-center justify-center gap-2.5 disabled:opacity-60">
                 {loading
-                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Analyzing…</>
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> {loadingMsg || 'Analyzing…'}</>
                   : <><Sparkles className="w-4 h-4" /> Analyze with Babblet</>}
               </button>
               {apiErr && <p className="mt-2 text-xs text-red-400">{apiErr}</p>}

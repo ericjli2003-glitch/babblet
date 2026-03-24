@@ -173,25 +173,81 @@ ${exampleItems}
     if (action === 'full') {
       if (!transcript) return NextResponse.json({ error: 'Transcript required.' }, { status: 400 });
 
-      // For stub/trial uploads (no real transcript), send a minimal prompt.
-      // The client's ensureTrialResult fills rubric insights + transcript segments from demo data.
       const isStub = transcript.length < 400;
-      const context = isStub
-        ? `A student uploaded a video presentation (filename hint: "${transcript.slice(0, 120)}"). No transcript is available. Generate a plausible academic presentation evaluation.`
-        : `TRANSCRIPT:\n${transcript.slice(0, 6000)}`;
 
-      const prompt = `You are Babblet, an academic presentation coach. Return ONLY a valid JSON object — no markdown, no commentary.
+      let prompt: string;
+      let maxTokens: number;
 
-${context}
+      if (isStub) {
+        // No real transcript — generate a plausible generic demo evaluation
+        prompt = `You are Babblet, an academic presentation coach. Return ONLY a valid JSON object — no markdown, no commentary.
 
-JSON shape (keep every string field to 1 sentence max):
-{"overallScore":<0-100>,"maxScore":100,"letterGrade":"B+","summary":"<1-2 sentences>","strengths":[{"text":"<observation>","quote":"<10-20 word excerpt>"},{"text":"<observation>","quote":"<excerpt>"},{"text":"<observation>","quote":"<excerpt>"}],"improvements":[{"text":"<observation>","quote":"<10-20 word excerpt>"},{"text":"<observation>","quote":"<excerpt>"},{"text":"<observation>","quote":"<excerpt>"}],"rubric":[{"criterion":"Content & Knowledge","score":<0-25>,"maxScore":25,"feedback":"<1 sentence>","status":"strong"},{"criterion":"Structure & Organization","score":<0-25>,"maxScore":25,"feedback":"<1 sentence>","status":"adequate"},{"criterion":"Evidence & Support","score":<0-25>,"maxScore":25,"feedback":"<1 sentence>","status":"adequate"},{"criterion":"Clarity & Delivery","score":<0-25>,"maxScore":25,"feedback":"<1 sentence>","status":"strong"}],"questions":[{"question":"<question>","category":"evidence","rationale":"<1 sentence>","timestamp":"1:00"},{"question":"<question>","category":"depth","rationale":"<1 sentence>","timestamp":"1:20"},{"question":"<question>","category":"application","rationale":"<1 sentence>","timestamp":"1:40"},{"question":"<question>","category":"assumption","rationale":"<1 sentence>","timestamp":"2:00"},{"question":"<question>","category":"synthesis","rationale":"<1 sentence>","timestamp":"0:40"}]}
+A student uploaded a video presentation (filename hint: "${transcript.slice(0, 120)}"). No transcript is available. Generate a plausible academic presentation evaluation.
+
+JSON shape (1 sentence max per field):
+{"overallScore":<0-100>,"maxScore":100,"letterGrade":"B+","summary":"<1-2 sentences>","speechMetrics":{"fillerWords":<0-30>,"wordsPerMin":<100-180>,"pausesPerMin":<2-10>},"strengths":[{"text":"<observation>","quote":"<illustrative quote>"},{"text":"<observation>","quote":"<quote>"},{"text":"<observation>","quote":"<quote>"}],"improvements":[{"text":"<observation>","quote":"<illustrative quote>"},{"text":"<observation>","quote":"<quote>"},{"text":"<observation>","quote":"<quote>"}],"rubric":[{"criterion":"Content & Knowledge","score":<0-25>,"maxScore":25,"feedback":"<1 sentence>","status":"strong"},{"criterion":"Structure & Organization","score":<0-25>,"maxScore":25,"feedback":"<1 sentence>","status":"adequate"},{"criterion":"Evidence & Support","score":<0-25>,"maxScore":25,"feedback":"<1 sentence>","status":"adequate"},{"criterion":"Clarity & Delivery","score":<0-25>,"maxScore":25,"feedback":"<1 sentence>","status":"strong"}],"questions":[{"question":"<question>","category":"evidence","rationale":"<1 sentence>","timestamp":"1:00"},{"question":"<question>","category":"depth","rationale":"<1 sentence>","timestamp":"1:20"},{"question":"<question>","category":"application","rationale":"<1 sentence>","timestamp":"1:40"},{"question":"<question>","category":"assumption","rationale":"<1 sentence>","timestamp":"2:00"},{"question":"<question>","category":"synthesis","rationale":"<1 sentence>","timestamp":"0:40"}]}
 
 Rules: rubric scores must sum to overallScore. Return ONLY the JSON.`;
+        maxTokens = 900;
+      } else {
+        // Real transcript — produce a genuine analysis with verbatim quotes
+        const tx = transcript.slice(0, 8000);
+        // Estimate filler word count for the prompt hint
+        const fillerRx = /\b(um+|uh+|like|you know|basically|literally|sort of|kind of|right\?|okay so)\b/gi;
+        const fillerHint = (tx.match(fillerRx) ?? []).length;
+        const wordCount = tx.split(/\s+/).length;
+
+        prompt = `You are Babblet, an AI academic presentation coach. Analyze the transcript below and return a precise evaluation in JSON.
+
+TRANSCRIPT:
+${tx}
+
+Return ONLY valid JSON — no markdown fences, no commentary:
+{
+  "overallScore": <integer 0-100>,
+  "maxScore": 100,
+  "letterGrade": "<A|A-|B+|B|B-|C+|C|D|F>",
+  "summary": "<2-sentence overall assessment grounded in the transcript>",
+  "speechMetrics": {
+    "fillerWords": ${fillerHint > 0 ? fillerHint : '<count of um/uh/like/basically/literally in transcript>'},
+    "wordsPerMin": <estimate based on ~${wordCount} words in the transcript; assume 3-5 min presentation if uncertain>,
+    "pausesPerMin": <estimate 1-10>
+  },
+  "strengths": [
+    { "text": "<1-2 sentence observation grounded in transcript>", "quote": "<VERBATIM excerpt 10-25 words from transcript>" },
+    { "text": "<observation>", "quote": "<verbatim excerpt>" },
+    { "text": "<observation>", "quote": "<verbatim excerpt>" }
+  ],
+  "improvements": [
+    { "text": "<1-2 sentence observation grounded in transcript>", "quote": "<VERBATIM excerpt 10-25 words from transcript>" },
+    { "text": "<observation>", "quote": "<verbatim excerpt>" },
+    { "text": "<observation>", "quote": "<verbatim excerpt>" }
+  ],
+  "rubric": [
+    { "criterion": "Content & Knowledge", "score": <0-25>, "maxScore": 25, "feedback": "<1 sentence>", "status": "<strong|adequate|weak>" },
+    { "criterion": "Structure & Organization", "score": <0-25>, "maxScore": 25, "feedback": "<1 sentence>", "status": "<strong|adequate|weak>" },
+    { "criterion": "Evidence & Support", "score": <0-25>, "maxScore": 25, "feedback": "<1 sentence>", "status": "<strong|adequate|weak>" },
+    { "criterion": "Clarity & Delivery", "score": <0-25>, "maxScore": 25, "feedback": "<1 sentence>", "status": "<strong|adequate|weak>" }
+  ],
+  "questions": [
+    { "question": "<follow-up probing something specific the student said>", "category": "evidence", "rationale": "<1 sentence>", "timestamp": "<M:SS or empty>" },
+    { "question": "<follow-up>", "category": "depth", "rationale": "<1 sentence>", "timestamp": "<M:SS or empty>" },
+    { "question": "<follow-up>", "category": "application", "rationale": "<1 sentence>", "timestamp": "<M:SS or empty>" },
+    { "question": "<follow-up>", "category": "assumption", "rationale": "<1 sentence>", "timestamp": "<M:SS or empty>" },
+    { "question": "<follow-up>", "category": "synthesis", "rationale": "<1 sentence>", "timestamp": "<M:SS or empty>" }
+  ]
+}
+
+Rules:
+- Quotes MUST be verbatim from the transcript (copy exact words).
+- rubric scores must sum to overallScore.
+- Return ONLY the JSON object.`;
+        maxTokens = 1500;
+      }
 
       const msg = await anthropic.messages.create({
         model: 'claude-3-5-haiku-20241022',
-        max_tokens: 900,
+        max_tokens: maxTokens,
         messages: [{ role: 'user', content: prompt }],
       });
 
