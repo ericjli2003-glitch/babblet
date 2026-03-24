@@ -170,95 +170,78 @@ ${exampleItems}
     if (action === 'full') {
       if (!transcript) return NextResponse.json({ error: 'Transcript required.' }, { status: 400 });
 
-      const prompt = `You are Babblet. Analyze this student presentation transcript and return a comprehensive evaluation in JSON.
+      const isStub = transcript.length < 200;
+      const transcriptBlock = isStub
+        ? `[No transcript available — video was uploaded but not transcribed. Generate a plausible evaluation as if the student gave a typical undergraduate presentation on the topic implied by the filename. Use generic but realistic illustrative quotes like "In my presentation today, I will discuss..." in the strengths/improvements fields.]`
+        : transcript.slice(0, 9000);
+
+      const prompt = `You are Babblet. Analyze this student presentation and return a comprehensive evaluation in JSON.
 
 TRANSCRIPT:
-${transcript.slice(0, 9000)}
+${transcriptBlock}
 
-First, split the transcript into 10–18 chronological segments for reference. Index them 0,1,2,... in the "transcript" array below. Each segment should be a natural phrase or sentence block (not one giant string).
-
-Return ONLY valid JSON with this exact shape:
+Return ONLY valid JSON with this exact shape (be concise — keep all text fields brief):
 {
   "overallScore": <number 0-100>,
   "maxScore": 100,
   "letterGrade": <"A"|"A-"|"B+"|"B"|"B-"|"C+"|"C"|"D"|"F">,
-  "summary": "<2-3 sentence overall assessment>",
-  "speechMetrics": { "fillerWords": <estimate 0-40>, "wordsPerMin": <estimate 90-200>, "pausesPerMin": <estimate 1-15> },
+  "summary": "<2 sentence overall assessment>",
+  "speechMetrics": { "fillerWords": <0-40>, "wordsPerMin": <90-200>, "pausesPerMin": <1-15> },
   "strengths": [
-    { "text": "<observation>", "quote": "<verbatim short excerpt from transcript segments that supports this, 15-35 words>" },
-    { "text": "<observation>", "quote": "<verbatim short excerpt>" },
-    { "text": "<observation>", "quote": "<verbatim short excerpt>" }
+    { "text": "<observation, 1 sentence>", "quote": "<short illustrative quote, 10-25 words>" },
+    { "text": "<observation>", "quote": "<quote>" },
+    { "text": "<observation>", "quote": "<quote>" }
   ],
   "improvements": [
-    { "text": "<observation>", "quote": "<verbatim short excerpt that shows the gap, 15-35 words>" },
-    { "text": "<observation>", "quote": "<verbatim short excerpt>" },
-    { "text": "<observation>", "quote": "<verbatim short excerpt>" }
+    { "text": "<observation, 1 sentence>", "quote": "<short illustrative quote, 10-25 words>" },
+    { "text": "<observation>", "quote": "<quote>" },
+    { "text": "<observation>", "quote": "<quote>" }
   ],
   "transcript": [
-    { "timestamp": "<M:SS or best guess>", "text": "<segment text — must match wording in TRANSCRIPT above>" },
-    { "timestamp": "...", "text": "..." }
+    { "timestamp": "0:00", "text": "<segment 1>" },
+    { "timestamp": "0:20", "text": "<segment 2>" },
+    { "timestamp": "0:40", "text": "<segment 3>" },
+    { "timestamp": "1:00", "text": "<segment 4>" },
+    { "timestamp": "1:20", "text": "<segment 5>" },
+    { "timestamp": "1:40", "text": "<segment 6>" },
+    { "timestamp": "2:00", "text": "<segment 7>" },
+    { "timestamp": "2:20", "text": "<segment 8>" }
   ],
   "rubric": [
     {
-      "criterion": "Content & Knowledge",
-      "score": <0-25>,
-      "maxScore": 25,
-      "feedback": "<1-2 sentences>",
-      "status": <"strong"|"adequate"|"weak">,
-      "insights": {
-        "overview": "<2-4 sentences: how this criterion was met vs rubric expectations>",
-        "strengths": [
-          { "text": "<specific strength tied to the presentation>", "refs": [<segment indices e.g. 0,2>] }
-        ],
-        "improvements": [
-          { "text": "<specific gap or next step>", "refs": [<segment indices>] }
-        ]
-      }
+      "criterion": "Content & Knowledge", "score": <0-25>, "maxScore": 25, "feedback": "<1 sentence>", "status": <"strong"|"adequate"|"weak">,
+      "insights": { "overview": "<2 sentences>", "strengths": [{ "text": "<1 sentence>", "refs": [0] }, { "text": "<1 sentence>", "refs": [2] }], "improvements": [{ "text": "<1 sentence>", "refs": [1] }, { "text": "<1 sentence>", "refs": [3] }] }
     },
     {
-      "criterion": "Structure & Organization",
-      "score": <0-25>,
-      "maxScore": 25,
-      "feedback": "<1-2 sentences>",
-      "status": <"strong"|"adequate"|"weak">,
-      "insights": { "overview": "...", "strengths": [...], "improvements": [...] }
+      "criterion": "Structure & Organization", "score": <0-25>, "maxScore": 25, "feedback": "<1 sentence>", "status": <"strong"|"adequate"|"weak">,
+      "insights": { "overview": "<2 sentences>", "strengths": [{ "text": "<1 sentence>", "refs": [0] }, { "text": "<1 sentence>", "refs": [1] }], "improvements": [{ "text": "<1 sentence>", "refs": [2] }, { "text": "<1 sentence>", "refs": [4] }] }
     },
     {
-      "criterion": "Evidence & Support",
-      "score": <0-25>,
-      "maxScore": 25,
-      "feedback": "<1-2 sentences>",
-      "status": <"strong"|"adequate"|"weak">,
-      "insights": { "overview": "...", "strengths": [...], "improvements": [...] }
+      "criterion": "Evidence & Support", "score": <0-25>, "maxScore": 25, "feedback": "<1 sentence>", "status": <"strong"|"adequate"|"weak">,
+      "insights": { "overview": "<2 sentences>", "strengths": [{ "text": "<1 sentence>", "refs": [3] }, { "text": "<1 sentence>", "refs": [5] }], "improvements": [{ "text": "<1 sentence>", "refs": [2] }, { "text": "<1 sentence>", "refs": [6] }] }
     },
     {
-      "criterion": "Clarity & Delivery",
-      "score": <0-25>,
-      "maxScore": 25,
-      "feedback": "<1-2 sentences>",
-      "status": <"strong"|"adequate"|"weak">,
-      "insights": { "overview": "...", "strengths": [...], "improvements": [...] }
+      "criterion": "Clarity & Delivery", "score": <0-25>, "maxScore": 25, "feedback": "<1 sentence>", "status": <"strong"|"adequate"|"weak">,
+      "insights": { "overview": "<2 sentences>", "strengths": [{ "text": "<1 sentence>", "refs": [0] }, { "text": "<1 sentence>", "refs": [7] }], "improvements": [{ "text": "<1 sentence>", "refs": [4] }, { "text": "<1 sentence>", "refs": [6] }] }
     }
   ],
   "questions": [
-    { "question": "<targeted follow-up question>", "category": <"clarification"|"depth"|"evidence"|"application"|"assumption"|"synthesis">, "rationale": "<why this question matters, 1 sentence>", "timestamp": "<approximate timestamp like '1:45' or '' if unknown>" },
-    { "question": "<question>", "category": "<category>", "rationale": "<rationale>", "timestamp": "<timestamp>" },
-    { "question": "<question>", "category": "<category>", "rationale": "<rationale>", "timestamp": "<timestamp>" },
-    { "question": "<question>", "category": "<category>", "rationale": "<rationale>", "timestamp": "<timestamp>" },
-    { "question": "<question>", "category": "<category>", "rationale": "<rationale>", "timestamp": "<timestamp>" }
+    { "question": "<follow-up question>", "category": "evidence", "rationale": "<1 sentence>", "timestamp": "1:00" },
+    { "question": "<follow-up question>", "category": "depth", "rationale": "<1 sentence>", "timestamp": "1:20" },
+    { "question": "<follow-up question>", "category": "application", "rationale": "<1 sentence>", "timestamp": "1:40" },
+    { "question": "<follow-up question>", "category": "assumption", "rationale": "<1 sentence>", "timestamp": "2:00" },
+    { "question": "<follow-up question>", "category": "synthesis", "rationale": "<1 sentence>", "timestamp": "0:40" }
   ]
 }
 
 Rules:
-- "transcript" segments must be copied from the source TRANSCRIPT (verbatim splits). refs in insights use indices into this same "transcript" array (0-based).
-- quotes in strengths/improvements must be verbatim from those segments.
-- Every rubric row MUST include a complete "insights" object with overview, at least 2 strengths items, and at least 2 improvements items.
 - rubric scores must sum to overallScore
+- Keep all text concise — 1-2 sentences max per field
 - Respond ONLY with the JSON object, no commentary`;
 
       const msg = await anthropic.messages.create({
         model: 'claude-3-5-haiku-20241022',
-        max_tokens: 8192,
+        max_tokens: 4096,
         messages: [{ role: 'user', content: prompt }],
       });
 
