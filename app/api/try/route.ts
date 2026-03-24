@@ -55,13 +55,14 @@ function safeParseJson(raw: string): unknown {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { action, email, transcript, parentQuestion, parentCategory, userInstruction } = body as {
+    const { action, email, transcript, parentQuestion, parentCategory, userInstruction, branchCount } = body as {
       action: 'full' | 'credits' | 'branch';
       email: string;
       transcript?: string;
       parentQuestion?: string;
       parentCategory?: string;
       userInstruction?: string;
+      branchCount?: number;
     };
 
     if (!email || typeof email !== 'string' || !email.includes('@')) {
@@ -112,25 +113,28 @@ export async function POST(req: NextRequest) {
     if (action === 'branch') {
       const pq = parentQuestion as string;
       const tx = transcript as string;
+      const n = Math.min(Math.max(1, branchCount ?? 1), 3);
       const focus =
         typeof userInstruction === 'string' && userInstruction.trim()
           ? userInstruction.trim().slice(0, 1400)
           : '';
-      const branchPrompt = `You are Babblet, an academic presentation coach. Given a follow-up question that was already asked about a student presentation, generate exactly 2 deeper follow-up questions that branch from it — more specific, still grounded in the transcript.
+      const exampleItems = Array.from({ length: n }, (_, i) =>
+        `    { "question": "...", "category": "clarification"|"depth"|"evidence"|"application"|"assumption"|"synthesis", "rationale": "one sentence", "timestamp": "M:SS or empty" }${i < n - 1 ? ',' : ''}`
+      ).join('\n');
+      const branchPrompt = `You are Babblet, an academic presentation coach. Given a follow-up question that was already asked about a student presentation, generate exactly ${n} deeper follow-up question${n > 1 ? 's' : ''} that branch from it — more specific, still grounded in the transcript.
 
 PARENT QUESTION:
 ${pq.slice(0, 2000)}
 
 PARENT CATEGORY (optional): ${parentCategory || 'general'}
 
-${focus ? `USER PRIORITIES (honor these in both questions — tone, angle, or subtopics):\n${focus}\n\n` : ''}TRANSCRIPT (excerpt):
+${focus ? `USER PRIORITIES (honor these in all questions — tone, angle, or subtopics):\n${focus}\n\n` : ''}TRANSCRIPT (excerpt):
 ${tx.slice(0, 6000)}
 
-Return ONLY valid JSON:
+Return ONLY valid JSON with exactly ${n} item${n > 1 ? 's' : ''} in the branches array:
 {
   "branches": [
-    { "question": "...", "category": "clarification"|"depth"|"evidence"|"application"|"assumption"|"synthesis", "rationale": "one sentence", "timestamp": "M:SS or empty" },
-    { "question": "...", "category": "...", "rationale": "...", "timestamp": "..." }
+${exampleItems}
   ]
 }`;
 

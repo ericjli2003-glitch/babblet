@@ -314,8 +314,12 @@ function QuestionCardBlock({
   transcriptSegs: NonNullable<AnalysisResult['transcript']>;
   branchMap: Record<string, QBranch[]>;
   branchingId: string | null;
-  onBranchRequest: (q: QBranch) => void;
+  onBranchRequest: (q: QBranch, instruction: string, count: number) => void;
 }) {
+  const [showPanel, setShowPanel] = useState(false);
+  const [instruction, setInstruction] = useState('');
+  const [howMany, setHowMany] = useState<1 | 2 | 3>(1);
+
   const cat = getCat(q.category);
   const segIdx = Math.min(
     Math.max(0, (q.parentRootIndex ?? 0) * 2 + q.depth),
@@ -333,6 +337,7 @@ function QuestionCardBlock({
         <div className="absolute -left-3 top-7 w-3 h-px bg-blue-200" aria-hidden />
       )}
       <div className={q.depth > 0 ? 'rounded-xl border border-blue-100/80 bg-blue-50/40 p-1' : ''}>
+        {/* Question card */}
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
           <div className="flex items-center justify-between px-5 pt-4 pb-3">
             <span
@@ -343,12 +348,17 @@ function QuestionCardBlock({
             </span>
             <button
               type="button"
-              disabled={hasBranched || isBranching}
-              onClick={() => onBranchRequest(q)}
-              className={`inline-flex items-center gap-1 text-[11px] border rounded-lg px-2.5 py-1 transition-colors ${
+              disabled={isBranching}
+              onClick={() => {
+                if (hasBranched) return;
+                setShowPanel(prev => !prev);
+              }}
+              className={`inline-flex items-center gap-1.5 text-[11px] border rounded-lg px-2.5 py-1 transition-colors ${
                 hasBranched
                   ? 'text-slate-300 border-slate-100 cursor-default'
-                  : 'text-slate-500 hover:text-slate-700 border-slate-200 hover:border-slate-300'
+                  : showPanel
+                    ? 'text-emerald-700 border-emerald-300 bg-emerald-50'
+                    : 'text-slate-500 hover:text-slate-700 border-slate-200 hover:border-slate-300'
               }`}
             >
               {isBranching ? (
@@ -357,7 +367,11 @@ function QuestionCardBlock({
                 <svg width={12} height={12} viewBox="0 0 12 12" fill="none"><path d="M3 2v4a2 2 0 002 2h4M7 6l2 2-2 2" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round"/></svg>
               )}
               {hasBranched ? 'Branched' : 'Branch'}
-              <svg width={10} height={10} viewBox="0 0 10 10" fill="none" className="ml-0.5"><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round"/></svg>
+              {!hasBranched && (
+                <svg width={10} height={10} viewBox="0 0 10 10" fill="none" className="ml-0.5" style={{ transform: showPanel ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+                  <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
             </button>
           </div>
           <div className="px-5 pb-3">
@@ -372,7 +386,76 @@ function QuestionCardBlock({
             </p>
           </div>
         </div>
+
+        {/* Inline Generate Similar Questions panel */}
+        {showPanel && !hasBranched && (
+          <div className="mt-2 bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-slate-500" />
+                <span className="text-sm font-semibold text-slate-900">Generate Similar Questions</span>
+              </div>
+              <button type="button" onClick={() => setShowPanel(false)} className="p-1 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs text-slate-600 mb-1.5">
+                  What would you like to change? <span className="text-slate-400">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={instruction}
+                  onChange={e => setInstruction(e.target.value)}
+                  placeholder="e.g. Make it harder. Focus on methodology. Add real-world context..."
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all"
+                  maxLength={800}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      onBranchRequest(q, instruction, howMany);
+                      setShowPanel(false);
+                    }
+                  }}
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-xs text-slate-600 flex-shrink-0">How many?</span>
+                <div className="flex gap-1">
+                  {([1, 2, 3] as const).map(n => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setHowMany(n)}
+                      className={`w-8 h-8 rounded-lg text-sm font-semibold transition-colors ${
+                        howMany === n
+                          ? 'bg-emerald-700 text-white'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  disabled={isBranching}
+                  onClick={() => {
+                    onBranchRequest(q, instruction, howMany);
+                    setShowPanel(false);
+                  }}
+                  className="ml-auto flex items-center gap-2 px-4 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white text-sm font-semibold rounded-xl transition-colors"
+                >
+                  {isBranching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  Generate {howMany} Question{howMany > 1 ? 's' : ''}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Branched children */}
       {children.map((child) => (
         <div key={child.id} style={{ marginLeft: Math.min(child.depth, 3) * 24 }}>
           <QuestionCardBlock
@@ -384,71 +467,6 @@ function QuestionCardBlock({
           />
         </div>
       ))}
-    </div>
-  );
-}
-
-// ─── Branch modal (optional instructions for Babblet) ─────────────────────────
-function BranchModal({
-  open,
-  onClose,
-  instruction,
-  onInstructionChange,
-  onConfirm,
-  loading,
-}: {
-  open: boolean;
-  onClose: () => void;
-  instruction: string;
-  onInstructionChange: (v: string) => void;
-  onConfirm: () => void;
-  loading: boolean;
-}) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-      style={{ backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', background: 'rgba(15,23,42,0.45)' }}>
-      <motion.div
-        initial={{ opacity: 0, scale: 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200"
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-900">Branch this question</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Optional: tell Babblet what to emphasize. Leave blank for default follow-ups.</p>
-          </div>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="p-5 space-y-3">
-          <label className="block text-xs font-semibold text-slate-700">Your instructions</label>
-          <textarea
-            value={instruction}
-            onChange={(e) => onInstructionChange(e.target.value)}
-            placeholder="e.g. Ask more about discharge criteria and FIM scores…"
-            rows={4}
-            className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 resize-y min-h-[100px]"
-            maxLength={800}
-          />
-          <p className="text-[10px] text-slate-400">{instruction.length}/800</p>
-        </div>
-        <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100 bg-slate-50">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200/80 rounded-lg">
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={loading}
-            onClick={onConfirm}
-            className="px-4 py-2 text-sm font-semibold bg-emerald-700 text-white rounded-lg hover:bg-emerald-800 disabled:opacity-50 flex items-center gap-2"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-            Generate follow-ups
-          </button>
-        </div>
-      </motion.div>
     </div>
   );
 }
@@ -551,8 +569,6 @@ export default function TryPage() {
   const [selectedCriterionIdx, setSelectedCriterionIdx] = useState(0);
   const [branchMap, setBranchMap] = useState<Record<string, QBranch[]>>({});
   const [branchingId, setBranchingId] = useState<string | null>(null);
-  const [branchModalParent, setBranchModalParent] = useState<QBranch | null>(null);
-  const [branchInstruction, setBranchInstruction] = useState('');
   const [apiErr, setApiErr] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -625,15 +641,17 @@ export default function TryPage() {
     }
   };
 
-  const executeBranch = useCallback(async (parent: QBranch, userInstruction: string) => {
+  const executeBranch = useCallback(async (parent: QBranch, userInstruction: string, count: number = 2) => {
     if ((branchMap[parent.id]?.length ?? 0) > 0) return;
 
     const runDemoBranches = () => {
       const rootIdx = parent.parentRootIndex ?? 0;
-      const template =
+      const base =
         parent.depth === 0
           ? (DEMO_BRANCHES[rootIdx] ?? DEMO_BRANCHES[0])
           : NESTED_BRANCH_FALLBACK;
+      // Pad to requested count with fallback items
+      const template = Array.from({ length: count }, (_, i) => base[i] ?? NESTED_BRANCH_FALLBACK[i % NESTED_BRANCH_FALLBACK.length]);
       const focus = userInstruction.trim();
       const kids: QBranch[] = template.map((t, i) => ({
         ...t,
@@ -682,6 +700,7 @@ export default function TryPage() {
           parentQuestion: parent.question,
           parentCategory: parent.category,
           userInstruction: userInstruction.trim() || undefined,
+          branchCount: count,
         }),
       });
       const data = await res.json();
@@ -698,7 +717,7 @@ export default function TryPage() {
         setCredits(before);
         return;
       }
-      const kids: QBranch[] = raw.slice(0, 2).map((t, i) => ({
+      const kids: QBranch[] = raw.slice(0, count).map((t, i) => ({
         question: t.question,
         category: t.category || 'depth',
         rationale: t.rationale || '',
@@ -718,19 +737,10 @@ export default function TryPage() {
     }
   }, [branchMap, result, videoMode]);
 
-  const handleBranchRequest = useCallback((q: QBranch) => {
+  const handleBranchRequest = useCallback((q: QBranch, instruction: string, count: number) => {
     if ((branchMap[q.id]?.length ?? 0) > 0) return;
-    setBranchModalParent(q);
-    setBranchInstruction('');
-  }, [branchMap]);
-
-  const confirmBranchModal = useCallback(async () => {
-    if (!branchModalParent) return;
-    const p = branchModalParent;
-    const instr = branchInstruction;
-    await executeBranch(p, instr);
-    setBranchModalParent(null);
-  }, [branchModalParent, branchInstruction, executeBranch]);
+    executeBranch(q, instruction, count);
+  }, [branchMap, executeBranch]);
 
   const handleUnlock = () => {
     setShowGate(false);
@@ -756,15 +766,6 @@ export default function TryPage() {
     <div className="h-screen flex flex-col bg-[#F9FAFB]">
       {/* Gate modal */}
       <AnimatePresence>{showGate && <GateModal onUnlock={handleUnlock} />}</AnimatePresence>
-
-      <BranchModal
-        open={branchModalParent !== null}
-        onClose={() => setBranchModalParent(null)}
-        instruction={branchInstruction}
-        onInstructionChange={setBranchInstruction}
-        onConfirm={confirmBranchModal}
-        loading={branchModalParent != null && branchingId === branchModalParent?.id}
-      />
 
       {/* ── Header (matches real submission page) ── */}
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0">
