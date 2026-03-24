@@ -5,7 +5,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ─── In-memory rate store ─────────────────────────────────────────────────────
 const CREDIT_STORE = new Map<string, { credits: number; resetAt: number }>();
-const MAX_CREDITS = 2;
+const MAX_CREDITS = 9;
 const RESET_MS = 24 * 60 * 60 * 1000;
 
 // ─── Guardrails ───────────────────────────────────────────────────────────────
@@ -55,10 +55,12 @@ function safeParseJson(raw: string): unknown {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { action, email, transcript } = body as {
-      action: 'full' | 'credits';
+    const { action, email, transcript, parentQuestion, parentCategory } = body as {
+      action: 'full' | 'credits' | 'branch';
       email: string;
       transcript?: string;
+      parentQuestion?: string;
+      parentCategory?: string;
     };
 
     if (!email || typeof email !== 'string' || !email.includes('@')) {
@@ -82,6 +84,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (action === 'branch') {
+      if (!parentQuestion || typeof parentQuestion !== 'string') {
+        return NextResponse.json({ error: 'Parent question required.' }, { status: 400 });
+      }
+      if (!transcript || transcript.length < 20) {
+        return NextResponse.json({ error: 'Transcript required for branching.' }, { status: 400 });
+      }
+    }
+
     // Credits handled client-side for trial; server still gates via email
     const { credits } = getCredits(cleanEmail);
     if (credits <= 0) {
@@ -94,13 +105,50 @@ export async function POST(req: NextRequest) {
     const remainingAfter = getCredits(cleanEmail).credits;
 
     if (!process.env.ANTHROPIC_API_KEY) {
-      return NextResponse.json({ error: 'AI service not configured.' }, { status: 503 });
+      return NextResponse.json({ error: 'Babblet analysis is not configured on this server.' }, { status: 503 });
+    }
+
+    if (action === 'branch') {
+      const pq = parentQuestion as string;
+      const tx = transcript as string;
+      const branchPrompt = `You are Babblet, an academic presentation coach. Given a follow-up question that was already asked about a student presentation, generate exactly 2 deeper follow-up questions that branch from it — more specific, still grounded in the transcript.
+
+PARENT QUESTION:
+${pq.slice(0, 2000)}
+
+PARENT CATEGORY (optional): ${parentCategory || 'general'}
+
+TRANSCRIPT (excerpt):
+${tx.slice(0, 6000)}
+
+Return ONLY valid JSON:
+{
+  "branches": [
+    { "question": "...", "category": "clarification"|"depth"|"evidence"|"application"|"assumption"|"synthesis", "rationale": "one sentence", "timestamp": "M:SS or empty" },
+    { "question": "...", "category": "...", "rationale": "...", "timestamp": "..." }
+  ]
+}`;
+
+      const msg = await anthropic.messages.create({
+        model: 'claude-3-5-haiku-20241022',
+        max_tokens: 900,
+        messages: [{ role: 'user', content: branchPrompt }],
+      });
+
+      const raw = msg.content[0].type === 'text' ? msg.content[0].text : '{}';
+      const parsed = safeParseJson(raw) as { branches?: unknown } | null;
+      const branches = parsed && Array.isArray(parsed.branches) ? parsed.branches : null;
+      if (!branches || branches.length === 0) {
+        return NextResponse.json({ error: 'Could not generate branch questions.' }, { status: 500 });
+      }
+
+      return NextResponse.json({ branches, creditsRemaining: remainingAfter });
     }
 
     if (action === 'full') {
       if (!transcript) return NextResponse.json({ error: 'Transcript required.' }, { status: 400 });
 
-      const prompt = `You are an expert academic presentation evaluator. Analyze this student presentation transcript and return a comprehensive evaluation in JSON.
+      const prompt = `You are Babblet. Analyze this student presentation transcript and return a comprehensive evaluation in JSON.
 
 TRANSCRIPT:
 ${transcript.slice(0, 9000)}
@@ -149,7 +197,7 @@ Rules:
 
       const raw = msg.content[0].type === 'text' ? msg.content[0].text : '{}';
       const parsed = safeParseJson(raw);
-      if (!parsed) return NextResponse.json({ error: 'Failed to parse AI response.' }, { status: 500 });
+      if (!parsed) return NextResponse.json({ error: 'Failed to parse Babblet response.' }, { status: 500 });
 
       return NextResponse.json({ result: parsed, creditsRemaining: remainingAfter });
     }

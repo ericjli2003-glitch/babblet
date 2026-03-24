@@ -10,7 +10,7 @@ import {
 import Link from 'next/link';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const MAX_CREDITS = 2;
+const MAX_CREDITS = 9;
 const MAX_FILE_MB = 300;
 const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
 const CREDIT_KEY = 'babblet_try_credits';
@@ -121,7 +121,52 @@ const DEMO_RESULT: AnalysisResult = {
   ],
 };
 
-const DEMO_TRANSCRIPT_TEXT = DEMO_RESULT.transcript!.map(s => s.text).join(' ');
+const DEMO_TRANSCRIPT_TEXT = DEMO_RESULT.transcript!.map(s => s.text).join('\n\n');
+
+/** Pre-built branch pairs for demo mode (no server call). */
+const DEMO_BRANCHES: Record<number, { question: string; category: string; rationale: string; timestamp: string }[]> = {
+  0: [
+    { question: 'If you repeated the same neuroplasticity assessment in two weeks, what specific behavioral markers would you expect to shift first?', category: 'depth', rationale: 'Tests whether the claim is tied to observable, time-bound outcomes.', timestamp: '1:15' },
+    { question: 'Name one peer-reviewed source you would cite to defend the “typical recovery trajectory” statement.', category: 'evidence', rationale: 'Surfaces whether the assertion is literature-backed.', timestamp: '1:12' },
+  ],
+  1: [
+    { question: 'How would you operationalize “independence in morning self-care” using a standardized OT outcome measure?', category: 'application', rationale: 'Checks alignment between goals and measurable criteria.', timestamp: '1:38' },
+    { question: 'What trade-off exists between maximizing independence and minimizing caregiver burden in your discharge plan?', category: 'synthesis', rationale: 'Exposes competing priorities in discharge planning.', timestamp: '1:40' },
+  ],
+  2: [
+    { question: 'Which telehealth modality would you prioritize for this client given geographic isolation, and why?', category: 'application', rationale: 'Links environmental constraint to a concrete service model.', timestamp: '0:52' },
+    { question: 'What barrier might prevent the partner from supporting home programs you outlined?', category: 'assumption', rationale: 'Surfaces unstated assumptions about informal support.', timestamp: '0:55' },
+  ],
+  3: [
+    { question: 'When would you choose a restorative versus compensatory approach for the expressive aphasia you described?', category: 'depth', rationale: 'Probes clinical reasoning across intervention philosophies.', timestamp: '1:22' },
+    { question: 'How would you document progress on executive functioning for billing and team communication?', category: 'clarification', rationale: 'Connects cognitive deficits to documentation practice.', timestamp: '1:25' },
+  ],
+  4: [
+    { question: 'What would change in your education plan if the primary caregiver could only attend every other week?', category: 'application', rationale: 'Stress-tests plan feasibility under schedule constraints.', timestamp: '1:48' },
+    { question: 'Which assumption about caregiver motivation is riskiest if it turns out to be wrong?', category: 'assumption', rationale: 'Highlights single point of failure in the care model.', timestamp: '1:50' },
+  ],
+};
+
+const NESTED_BRANCH_FALLBACK = [
+  { question: 'How would you document the student’s answer in the SOAP note if you were the supervising clinician?', category: 'application', rationale: 'Bridges discussion back to documentation standards.', timestamp: '1:00' },
+  { question: 'What counterargument would a peer reviewer raise to your last point, and how would you respond?', category: 'depth', rationale: 'Builds argumentative rigor beyond the first reply.', timestamp: '1:05' },
+];
+
+interface QBranch {
+  id: string;
+  parentId?: string;
+  parentRootIndex?: number;
+  depth: number;
+  question: string;
+  category: string;
+  rationale: string;
+  timestamp: string;
+}
+
+function transcriptToText(t: AnalysisResult['transcript']): string {
+  if (!t?.length) return DEMO_TRANSCRIPT_TEXT;
+  return t.map(s => s.text).join('\n\n');
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface RubricInsight {
@@ -158,7 +203,7 @@ function isUnlocked(): boolean {
   try { return localStorage.getItem(UNLOCKED_KEY) === '1'; } catch { return false; }
 }
 function setUnlocked() {
-  try { localStorage.setItem(UNLOCKED_KEY, '1'); localStorage.setItem(CREDIT_KEY, String(MAX_CREDITS + 3)); } catch {}
+  try { localStorage.setItem(UNLOCKED_KEY, '1'); localStorage.setItem(CREDIT_KEY, String(MAX_CREDITS)); } catch {}
 }
 function getCachedResult(): AnalysisResult | null {
   try {
@@ -205,6 +250,92 @@ function ScoreCircle({ score, max, size = 56 }: { score: number; max: number; si
   );
 }
 
+// ─── Question card (recursive branching) ─────────────────────────────────────
+function QuestionCardBlock({
+  q,
+  transcriptSegs,
+  branchMap,
+  branchingId,
+  onBranch,
+}: {
+  q: QBranch;
+  transcriptSegs: NonNullable<AnalysisResult['transcript']>;
+  branchMap: Record<string, QBranch[]>;
+  branchingId: string | null;
+  onBranch: (q: QBranch) => void;
+}) {
+  const cat = getCat(q.category);
+  const segIdx = Math.min(
+    Math.max(0, (q.parentRootIndex ?? 0) * 2 + q.depth),
+    transcriptSegs.length - 1
+  );
+  const seg = transcriptSegs[segIdx];
+  const segPreview = seg?.text?.slice(0, 55) ?? '';
+  const children = branchMap[q.id] ?? [];
+  const isBranching = branchingId === q.id;
+  const hasBranched = children.length > 0;
+
+  return (
+    <div className={q.depth > 0 ? 'relative mt-3' : ''}>
+      {q.depth > 0 && (
+        <div className="absolute -left-3 top-7 w-3 h-px bg-blue-200" aria-hidden />
+      )}
+      <div className={q.depth > 0 ? 'rounded-xl border border-blue-100/80 bg-blue-50/40 p-1' : ''}>
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div className="flex items-center justify-between px-5 pt-4 pb-3">
+            <span
+              className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full"
+              style={{ background: cat.bg, color: cat.text, border: `1px solid ${cat.border}` }}
+            >
+              <span>{cat.icon}</span> {cat.label}
+            </span>
+            <button
+              type="button"
+              disabled={hasBranched || isBranching}
+              onClick={() => onBranch(q)}
+              className={`inline-flex items-center gap-1 text-[11px] border rounded-lg px-2.5 py-1 transition-colors ${
+                hasBranched
+                  ? 'text-slate-300 border-slate-100 cursor-default'
+                  : 'text-slate-500 hover:text-slate-700 border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              {isBranching ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <svg width={12} height={12} viewBox="0 0 12 12" fill="none"><path d="M3 2v4a2 2 0 002 2h4M7 6l2 2-2 2" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round"/></svg>
+              )}
+              {hasBranched ? 'Branched' : 'Branch'}
+              <svg width={10} height={10} viewBox="0 0 10 10" fill="none" className="ml-0.5"><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          </div>
+          <div className="px-5 pb-3">
+            <p className="text-sm text-slate-900 leading-relaxed">{q.question}</p>
+          </div>
+          <div className="px-5 py-3 border-t border-slate-100 flex items-start gap-1.5">
+            <svg width={13} height={13} viewBox="0 0 13 13" fill="none" className="flex-shrink-0 mt-0.5"><circle cx="6.5" cy="6.5" r="5.5" stroke="#94a3b8" strokeWidth={1.2}/><path d="M6.5 4.5v2.5l1.5 1" stroke="#94a3b8" strokeWidth={1.2} strokeLinecap="round"/></svg>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              <span className="font-medium text-slate-500">Context:</span>{' '}
+              Referenced during the {segPreview.toLowerCase()}{segPreview.length >= 55 ? '...' : ''} segment at{' '}
+              <span className="font-mono text-slate-500">[{q.timestamp || '0:00'}]</span>.
+            </p>
+          </div>
+        </div>
+      </div>
+      {children.map((child) => (
+        <div key={child.id} style={{ marginLeft: Math.min(child.depth, 3) * 24 }}>
+          <QuestionCardBlock
+            q={child}
+            transcriptSegs={transcriptSegs}
+            branchMap={branchMap}
+            branchingId={branchingId}
+            onBranch={onBranch}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Gate modal (blurred background) ──────────────────────────────────────────
 function GateModal({ onUnlock }: { onUnlock: () => void }) {
   const [form, setForm] = useState({ name: '', institution: '', email: '', phone: '' });
@@ -242,7 +373,7 @@ function GateModal({ onUnlock }: { onUnlock: () => void }) {
             </div>
           </div>
           <p className="text-sm text-slate-600 leading-relaxed">
-            Enter your details to get <strong>5 more credits</strong> and continue AI-powered grading. No credit card required.
+            Enter your details to get <strong>9 more credits</strong> and continue with Babblet. No credit card required.
           </p>
         </div>
 
@@ -280,7 +411,7 @@ function GateModal({ onUnlock }: { onUnlock: () => void }) {
           {err && <p className="text-xs text-red-500">{err}</p>}
           <button type="submit" disabled={loading}
             className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-60">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Zap className="w-4 h-4" /> Get 5 more credits</>}
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Zap className="w-4 h-4" /> Get 9 more credits</>}
           </button>
           <p className="text-center text-[11px] text-slate-400">We&apos;ll never spam you. Your info helps us improve Babblet.</p>
         </form>
@@ -301,6 +432,8 @@ export default function TryPage() {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'questions' | 'rubric'>('overview');
   const [selectedCriterionIdx, setSelectedCriterionIdx] = useState(0);
+  const [branchMap, setBranchMap] = useState<Record<string, QBranch[]>>({});
+  const [branchingId, setBranchingId] = useState<string | null>(null);
   const [apiErr, setApiErr] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -316,6 +449,10 @@ export default function TryPage() {
       setCachedResult(DEMO_RESULT);
     }
   }, []);
+
+  useEffect(() => {
+    setBranchMap({});
+  }, [result]);
 
   const videoSrc = videoMode === 'upload' && uploadedUrl ? uploadedUrl : '/demo/demo-video.mp4';
 
@@ -367,10 +504,99 @@ export default function TryPage() {
     }
   };
 
+  const handleBranchQuestion = useCallback(async (parent: QBranch) => {
+    if ((branchMap[parent.id]?.length ?? 0) > 0) return;
+
+    const runDemoBranches = () => {
+      const rootIdx = parent.parentRootIndex ?? 0;
+      const template =
+        parent.depth === 0
+          ? (DEMO_BRANCHES[rootIdx] ?? DEMO_BRANCHES[0])
+          : NESTED_BRANCH_FALLBACK;
+      const kids: QBranch[] = template.map((t, i) => ({
+        ...t,
+        id: `${parent.id}-b${i}-${Date.now()}`,
+        parentId: parent.id,
+        parentRootIndex: parent.parentRootIndex,
+        depth: parent.depth + 1,
+      }));
+      setBranchMap((prev) => ({ ...prev, [parent.id]: kids }));
+    };
+
+    if (videoMode === 'demo') {
+      setBranchingId(parent.id);
+      try {
+        await new Promise((r) => setTimeout(r, 380));
+        runDemoBranches();
+      } finally {
+        setBranchingId(null);
+      }
+      return;
+    }
+
+    const cur = getStoredCredits();
+    if (cur <= 0 && !isUnlocked()) {
+      setShowGate(true);
+      return;
+    }
+
+    setBranchingId(parent.id);
+    setApiErr('');
+    const before = cur;
+    const next = Math.max(0, cur - 1);
+    setStoredCredits(next);
+    setCredits(next);
+
+    try {
+      const res = await fetch('/api/try', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'branch',
+          email: 'trial@babblet.io',
+          transcript: transcriptToText(result?.transcript),
+          parentQuestion: parent.question,
+          parentCategory: parent.category,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setApiErr(data.error || 'Could not branch this question.');
+        setStoredCredits(before);
+        setCredits(before);
+        return;
+      }
+      const raw = data.branches as Array<{ question: string; category: string; rationale: string; timestamp?: string }>;
+      if (!Array.isArray(raw) || raw.length === 0) {
+        setApiErr('Could not branch this question.');
+        setStoredCredits(before);
+        setCredits(before);
+        return;
+      }
+      const kids: QBranch[] = raw.slice(0, 2).map((t, i) => ({
+        question: t.question,
+        category: t.category || 'depth',
+        rationale: t.rationale || '',
+        timestamp: t.timestamp || '0:00',
+        id: `${parent.id}-b${i}-${Date.now()}`,
+        parentId: parent.id,
+        parentRootIndex: parent.parentRootIndex,
+        depth: parent.depth + 1,
+      }));
+      setBranchMap((prev) => ({ ...prev, [parent.id]: kids }));
+    } catch {
+      setApiErr('Network error. Please try again.');
+      setStoredCredits(before);
+      setCredits(before);
+    } finally {
+      setBranchingId(null);
+    }
+  }, [branchMap, result, videoMode]);
+
   const handleUnlock = () => {
     setShowGate(false);
-    setCredits(MAX_CREDITS + 3);
-    setStoredCredits(MAX_CREDITS + 3);
+    setCredits(MAX_CREDITS);
+    setStoredCredits(MAX_CREDITS);
   };
 
   const sm = result?.speechMetrics ?? DEMO_RESULT.speechMetrics!;
@@ -454,7 +680,7 @@ export default function TryPage() {
 
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900 mb-1">Submission Overview & Insights</h2>
-                  <p className="text-sm text-slate-500">A high-level summary of performance metrics, sentiment analysis, and verification checks.</p>
+                  <p className="text-sm text-slate-500">Performance metrics, verification checks, and rubric-aligned highlights from Babblet.</p>
                 </div>
 
                 {/* Speech Delivery */}
@@ -496,41 +722,6 @@ export default function TryPage() {
                       <div className="text-2xl font-bold text-slate-900 mb-0.5">{sm.pausesPerMin}</div>
                       <p className="text-[10px] text-slate-500 mb-0.5">Pauses/min</p>
                       <p className="text-[9px] text-slate-600 leading-tight">Class Avg: 1.8 — Strategic pauses aid emphasis.</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Transcript */}
-                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                  <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-900">Transcript</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">Numbered circles mark key moments — click to see specific feedback.</p>
-                    </div>
-                    {loading && (
-                      <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                        <Loader2 className="w-3 h-3 animate-spin" /> Analyzing...
-                      </div>
-                    )}
-                    <div className="flex items-center gap-3 ml-4">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center">1</span>
-                        <span className="text-[10px] text-slate-500">Strength</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">1</span>
-                        <span className="text-[10px] text-slate-500">Improvement</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="p-5 max-h-[400px] overflow-y-auto">
-                    <div className="space-y-0">
-                      {transcript.map((seg, i) => (
-                        <div key={i} className="flex items-start gap-3 py-2.5 border-b border-slate-50 last:border-0">
-                          <span className="font-mono text-[10px] text-emerald-600 mt-0.5 w-10 flex-shrink-0 text-right">[{i}]</span>
-                          <p className="text-xs text-slate-700 leading-relaxed">{seg.text}</p>
-                        </div>
-                      ))}
                     </div>
                   </div>
                 </div>
@@ -593,12 +784,47 @@ export default function TryPage() {
                   </div>
                 )}
 
+                {/* Transcript */}
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                  <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-900">Transcript</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">Numbered segments align with follow-up questions and rubric references.</p>
+                    </div>
+                    {loading && (
+                      <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                        <Loader2 className="w-3 h-3 animate-spin" /> Analyzing...
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3 ml-4">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center">1</span>
+                        <span className="text-[10px] text-slate-500">Strength</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">1</span>
+                        <span className="text-[10px] text-slate-500">Improvement</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-5 max-h-[400px] overflow-y-auto">
+                    <div className="space-y-0">
+                      {transcript.map((seg, i) => (
+                        <div key={i} className="flex items-start gap-3 py-2.5 border-b border-slate-50 last:border-0">
+                          <span className="font-mono text-[10px] text-emerald-600 mt-0.5 w-10 flex-shrink-0 text-right">[{i}]</span>
+                          <p className="text-xs text-slate-700 leading-relaxed">{seg.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
                 {/* Upload CTA — only visible when in demo mode with no upload */}
                 {videoMode === 'demo' && (
                   <div className="bg-emerald-800 rounded-2xl p-5 text-white flex items-center justify-between">
                     <div>
                       <p className="text-sm font-bold mb-1">Want to try with your own presentation?</p>
-                      <p className="text-xs opacity-75 leading-relaxed">Upload a video and get the same AI-powered analysis on your own content.</p>
+                      <p className="text-xs opacity-75 leading-relaxed">Upload a video and get the same Babblet analysis on your own content.</p>
                     </div>
                     <button onClick={() => setVideoMode('upload')}
                       className="inline-flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 text-xs font-bold px-4 py-2 rounded-lg transition-colors flex-shrink-0 ml-4">
@@ -614,43 +840,29 @@ export default function TryPage() {
               <motion.div key="questions" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-5">
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Follow-up Questions</h2>
-                  <p className="text-sm text-slate-500">Based on the transcript analysis, these questions test depth of understanding across different cognitive levels.</p>
+                  <p className="text-sm text-slate-500">Grounded in the transcript—these questions probe depth across cognitive levels. Branch any card to go one level deeper.</p>
                 </div>
 
+                {apiErr && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">{apiErr}</div>
+                )}
+
                 <div className="space-y-4">
-                  {(result?.questions ?? []).map((q, i) => {
-                    const cat = getCat(q.category);
-                    const seg = transcript[Math.min(i * 2, transcript.length - 1)];
-                    const segPreview = seg?.text?.slice(0, 55) ?? '';
-                    return (
-                      <div key={i} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                        {/* Card header: badge + branch button */}
-                        <div className="flex items-center justify-between px-5 pt-4 pb-3">
-                          <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full"
-                            style={{ background: cat.bg, color: cat.text, border: `1px solid ${cat.border}` }}>
-                            <span>{cat.icon}</span> {cat.label}
-                          </span>
-                          <button className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg px-2.5 py-1 transition-colors">
-                            <svg width={12} height={12} viewBox="0 0 12 12" fill="none"><path d="M3 2v4a2 2 0 002 2h4M7 6l2 2-2 2" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round"/></svg>
-                            Branch <svg width={10} height={10} viewBox="0 0 10 10" fill="none" className="ml-0.5"><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round"/></svg>
-                          </button>
-                        </div>
-                        {/* Question */}
-                        <div className="px-5 pb-3">
-                          <p className="text-sm text-slate-900 leading-relaxed">{q.question}</p>
-                        </div>
-                        {/* Context footer */}
-                        <div className="px-5 py-3 border-t border-slate-100 flex items-start gap-1.5">
-                          <svg width={13} height={13} viewBox="0 0 13 13" fill="none" className="flex-shrink-0 mt-0.5"><circle cx="6.5" cy="6.5" r="5.5" stroke="#94a3b8" strokeWidth={1.2}/><path d="M6.5 4.5v2.5l1.5 1" stroke="#94a3b8" strokeWidth={1.2} strokeLinecap="round"/></svg>
-                          <p className="text-[11px] text-slate-400 leading-relaxed">
-                            <span className="font-medium text-slate-500">Context:</span>{' '}
-                            Referenced during the {segPreview.toLowerCase()}{segPreview.length >= 55 ? '...' : ''} segment at{' '}
-                            <span className="font-mono text-slate-500">[{q.timestamp || '0:00'}]</span>.
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {(result?.questions ?? []).map((q, i) => (
+                    <QuestionCardBlock
+                      key={`root-${i}`}
+                      q={{
+                        ...q,
+                        id: `root-${i}`,
+                        depth: 0,
+                        parentRootIndex: i,
+                      }}
+                      transcriptSegs={transcript}
+                      branchMap={branchMap}
+                      branchingId={branchingId}
+                      onBranch={handleBranchQuestion}
+                    />
+                  ))}
                 </div>
               </motion.div>
             )}
@@ -780,6 +992,20 @@ export default function TryPage() {
                                   ))}
                                 </div>
                               </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {!c.insights && (
+                          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+                              <div className="flex items-center gap-2">
+                                <Sparkles className="w-3.5 h-3.5 text-slate-400" />
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Babblet Insights</span>
+                              </div>
+                            </div>
+                            <div className="p-5">
+                              <p className="text-xs text-slate-600 leading-relaxed">{c.feedback}</p>
                             </div>
                           </div>
                         )}

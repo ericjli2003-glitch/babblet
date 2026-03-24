@@ -387,7 +387,7 @@ export default function HomePage() {
               Experience Babblet<br /><em style={{ fontStyle: 'italic' }}>in under a minute.</em>
             </h2>
             <p style={{ ...S.sans, ...S.forest, fontSize: '1rem', lineHeight: 1.65, margin: '0 auto', maxWidth: 460, opacity: 0.62 }}>
-              Watch a real student presentation get graded by AI — or upload your own video. No sign-up required, just 5 free credits to explore.
+              Watch a real student presentation graded with Babblet—or upload your own video. No sign-up required, just 9 free credits to explore.
             </p>
           </motion.div>
 
@@ -460,7 +460,7 @@ export default function HomePage() {
                     <svg width={14} height={14} viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 3l4 4-4 4" stroke="#F7F5F0" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" /></svg>
                   </Link>
                   <p style={{ ...S.sans, fontSize: '0.75rem', color: 'var(--bab-forest)', opacity: 0.45, margin: '10px 0 0' }}>
-                    5 free credits · No credit card · No sign-up
+                    9 free credits · No credit card · No sign-up
                   </p>
                 </div>
               </div>
