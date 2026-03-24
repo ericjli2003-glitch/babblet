@@ -205,7 +205,7 @@ export default function HomePage() {
 
           {/* Nav links — center */}
           <nav style={{ display: 'flex', gap: 24, alignItems: 'center', justifySelf: 'center' }}>
-            {[['Features', '#features'], ['About', '/about'], ['Contact', '/contact']].map(([label, href]) => (
+            {[['Features', '#features'], ['Try it out', '/try'], ['About', '/about'], ['Contact', '/contact']].map(([label, href]) => (
               <Link key={label} href={href}
                 style={{ ...S.forest, ...S.sans, fontSize: '0.875rem', fontWeight: 400, opacity: 0.6, textDecoration: 'none', transition: 'opacity 0.15s' }}
                 onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
@@ -371,6 +371,109 @@ export default function HomePage() {
               );
             })}
           </div>
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          TRY IT OUT  (parchment bg)
+      ═════════════════════════════════════════════════════════════════════ */}
+      <section id="try" style={{ background: 'var(--bab-parchment)', padding: '96px 0' }}>
+        <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 24px' }}>
+          <motion.div {...fadeUp()} style={{ textAlign: 'center', marginBottom: 52 }}>
+            <span style={{ ...S.gold, ...S.sans, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 14 }}>
+              Try it free
+            </span>
+            <h2 style={{ ...S.serif, ...S.forest, fontSize: 'clamp(1.875rem, 4vw, 2.75rem)', fontWeight: 400, lineHeight: 1.2, margin: '0 0 18px' }}>
+              Experience Babblet<br /><em style={{ fontStyle: 'italic' }}>in under a minute.</em>
+            </h2>
+            <p style={{ ...S.sans, ...S.forest, fontSize: '1rem', lineHeight: 1.65, margin: '0 auto', maxWidth: 460, opacity: 0.62 }}>
+              Watch a real student presentation get graded by AI — or upload your own video. No sign-up required, just 5 free credits to explore.
+            </p>
+          </motion.div>
+
+          {/* Preview card */}
+          <motion.div {...fadeUp(0.08)}>
+            <div style={{
+              border: '1px solid var(--bab-border)', borderRadius: 14,
+              background: 'var(--bab-white)', overflow: 'hidden',
+              display: 'grid', gridTemplateColumns: '1fr 1fr', minHeight: 280,
+            }}>
+              {/* Left — video thumbnail */}
+              <div style={{ position: 'relative', background: '#0E0F0C', overflow: 'hidden' }}>
+                <video
+                  src="/demo/demo-presentation.mp4"
+                  muted
+                  playsInline
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }}
+                />
+                <div style={{
+                  position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'rgba(14,15,12,0.35)',
+                }}>
+                  <div style={{
+                    width: 56, height: 56, borderRadius: '50%',
+                    background: 'rgba(247,245,240,0.15)', border: '1.5px solid rgba(247,245,240,0.3)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)',
+                  }}>
+                    <svg width={20} height={20} viewBox="0 0 20 20" fill="none">
+                      <path d="M6 4l12 6-12 6V4z" fill="#F7F5F0" />
+                    </svg>
+                  </div>
+                </div>
+                <div style={{
+                  position: 'absolute', bottom: 14, left: 14,
+                  background: 'rgba(26,58,42,0.75)', borderRadius: 6, padding: '4px 10px',
+                  border: '1px solid rgba(247,245,240,0.16)',
+                }}>
+                  <span style={{ ...S.sans, fontSize: '0.7rem', fontWeight: 600, color: 'var(--bab-parchment)' }}>
+                    Demo: OT Presentation
+                  </span>
+                </div>
+              </div>
+
+              {/* Right — feature bullets + CTA */}
+              <div style={{ padding: '32px 32px 28px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  <h3 style={{ ...S.serif, ...S.forest, fontSize: '1.25rem', fontWeight: 400, margin: '0 0 18px', lineHeight: 1.35 }}>
+                    What you get in the trial
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+                    {[
+                      'AI-generated performance score with per-dimension breakdown',
+                      'Identified strengths and areas for improvement',
+                      'Targeted follow-up questions grounded in the transcript',
+                      'Upload your own video for a personalized demo',
+                    ].map((item, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                        <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'rgba(26,58,42,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
+                          <svg width={8} height={8} viewBox="0 0 8 8"><path d="M1 4l2 2 4-4" stroke="var(--bab-forest)" strokeWidth={1.4} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        </div>
+                        <p style={{ ...S.sans, fontSize: '0.8125rem', color: 'var(--bab-forest)', margin: 0, lineHeight: 1.55, opacity: 0.78 }}>{item}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 24 }}>
+                  <Link href="/try"
+                    style={{
+                      ...S.sans, ...S.parch, background: 'var(--bab-forest)', fontWeight: 600,
+                      fontSize: '0.9375rem', borderRadius: 6, padding: '12px 26px',
+                      textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8,
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(26,58,42,0.22)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}>
+                    Try it out — it&apos;s free
+                    <svg width={14} height={14} viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 3l4 4-4 4" stroke="#F7F5F0" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  </Link>
+                  <p style={{ ...S.sans, fontSize: '0.75rem', color: 'var(--bab-forest)', opacity: 0.45, margin: '10px 0 0' }}>
+                    5 free credits · No credit card · No sign-up
+                  </p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
         </div>
       </section>
 
