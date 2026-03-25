@@ -668,71 +668,105 @@ function GateModal({ onUnlock }: { onUnlock: () => void }) {
   );
 }
 
+// ─── Slot types ───────────────────────────────────────────────────────────────
+const MAX_SLOTS = 3;
+const SLOT_COLORS = ['bg-emerald-400', 'bg-sky-400', 'bg-violet-400'] as const;
+
+interface VideoSlot {
+  url: string | null;
+  name: string;
+  result: AnalysisResult | null;
+  loading: boolean;
+  loadingMsg: string;
+  apiErr: string;
+  uploadErr: string;
+  isDemo: boolean;
+}
+
+const makeSlot = (isDemo = false): VideoSlot => ({
+  url: null, name: '', result: null, loading: false, loadingMsg: '', apiErr: '', uploadErr: '', isDemo,
+});
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function TryPage() {
   const [credits, setCredits] = useState(MAX_CREDITS);
   const [showGate, setShowGate] = useState(false);
-  const [videoMode, setVideoMode] = useState<'demo' | 'upload'>('demo');
-  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
-  const [uploadedName, setUploadedName] = useState('');
-  const [uploadErr, setUploadErr] = useState('');
-  const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [slots, setSlots] = useState<VideoSlot[]>([makeSlot(true)]);
+  const [activeSlot, setActiveSlot] = useState(0);
   const [activeTab, setActiveTab] = useState<'overview' | 'questions' | 'rubric'>('overview');
   const [selectedCriterionIdx, setSelectedCriterionIdx] = useState(0);
   const [branchMap, setBranchMap] = useState<Record<string, QBranch[]>>({});
   const [branchingId, setBranchingId] = useState<string | null>(null);
-  const [apiErr, setApiErr] = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
-  const uploadedFileRef = useRef<File | null>(null);
-  const [loadingMsg, setLoadingMsg] = useState('');
 
-  // ── Slot 2 (second video upload) ───────────────────────────────────────────
-  const [activeSlot, setActiveSlot] = useState<0 | 1>(0);
-  const [slot2Url, setSlot2Url] = useState<string | null>(null);
-  const [slot2Name, setSlot2Name] = useState('');
-  const [slot2UploadErr, setSlot2UploadErr] = useState('');
-  const [slot2Result, setSlot2Result] = useState<AnalysisResult | null>(null);
-  const [slot2Loading, setSlot2Loading] = useState(false);
-  const [slot2LoadingMsg, setSlot2LoadingMsg] = useState('');
-  const [slot2ApiErr, setSlot2ApiErr] = useState('');
-  const slot2FileRef = useRef<File | null>(null);
-  const slot2FileInputRef = useRef<HTMLInputElement>(null);
+  const slotFilesRef = useRef<(File | null)[]>([null, null, null]);
+  const fileInputsRef = useRef<(HTMLInputElement | null)[]>([null, null, null]);
+  const addFileInputRef = useRef<HTMLInputElement>(null);
 
-  // On mount: hydrate credits, load demo result immediately
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  const patchSlot = useCallback((idx: number, patch: Partial<VideoSlot>) => {
+    setSlots(prev => prev.map((s, i) => i === idx ? { ...s, ...patch } : s));
+  }, []);
+
+  // On mount: hydrate credits + demo result for slot 0
   useEffect(() => {
     setCredits(getStoredCredits());
     const cached = getCachedResult();
-    if (cached) {
-      setResult(ensureTrialResult(cached));
-    } else {
-      const initial = ensureTrialResult(DEMO_RESULT);
-      setResult(initial);
-      setCachedResult(initial);
-    }
-  }, []);
+    const initial = cached ? ensureTrialResult(cached) : ensureTrialResult(DEMO_RESULT);
+    if (!cached) setCachedResult(initial);
+    patchSlot(0, { result: initial });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    setBranchMap({});
-  }, [result, slot2Result, activeSlot]);
+  useEffect(() => { setBranchMap({}); }, [activeSlot, slots.length]);
 
-  const videoSrc = videoMode === 'upload' && uploadedUrl ? uploadedUrl : '/demo/demo-video.mp4';
+  // ── Deepgram transcription helper ─────────────────────────────────────────
+  const transcribeFile = async (file: File): Promise<{ text: string; segments: Array<{ timestamp: string; text: string }> }> => {
+    const keyRes = await fetch('/api/deepgram-key');
+    if (!keyRes.ok) throw new Error('key_unavailable');
+    const { key } = await keyRes.json() as { key?: string };
+    if (!key) throw new Error('key_unavailable');
+    const dgRes = await fetch(
+      'https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&punctuate=true&language=en&paragraphs=true',
+      { method: 'POST', headers: { Authorization: `Token ${key}`, 'Content-Type': file.type || 'video/mp4' }, body: file }
+    );
+    if (!dgRes.ok) throw new Error(`dg_${dgRes.status}`);
+    type DgP = { start?: number; sentences?: Array<{ text: string }> };
+    type DgR = { results?: { channels?: Array<{ alternatives?: Array<{ transcript?: string; paragraphs?: { paragraphs?: DgP[] } }> }> } };
+    const d = await dgRes.json() as DgR;
+    const alt = d?.results?.channels?.[0]?.alternatives?.[0];
+    const text = alt?.transcript ?? '';
+    const segments = (alt?.paragraphs?.paragraphs ?? [])
+      .map(p => ({ timestamp: `${Math.floor(Math.floor(p.start ?? 0) / 60)}:${String(Math.floor(p.start ?? 0) % 60).padStart(2, '0')}`, text: (p.sentences ?? []).map(s => s.text).join(' ') }))
+      .filter(s => s.text.trim().length > 0);
+    return { text, segments };
+  };
 
-  const handleUpload = useCallback((file: File) => {
-    setUploadErr('');
-    if (!file.type.startsWith('video/')) { setUploadErr('Please upload a video file (MP4, MOV, WebM).'); return; }
-    if (file.size > MAX_FILE_BYTES) { setUploadErr(`File too large. Max ${MAX_FILE_MB} MB.`); return; }
-    setUploadedUrl(URL.createObjectURL(file));
-    setUploadedName(file.name);
-    uploadedFileRef.current = file;
-    setVideoMode('upload');
-    setResult(null);
-  }, []);
+  // ── File selection handler (handles both existing slots and new slot creation) ──
+  const handleFileSelected = useCallback((file: File, targetIdx: number) => {
+    if (!file.type.startsWith('video/')) { patchSlot(targetIdx < slots.length ? targetIdx : 0, { uploadErr: 'Please upload a video file (MP4, MOV, WebM).' }); return; }
+    if (file.size > MAX_FILE_BYTES) { patchSlot(targetIdx < slots.length ? targetIdx : 0, { uploadErr: `File too large. Max ${MAX_FILE_MB} MB.` }); return; }
+    slotFilesRef.current[targetIdx] = file;
+    const patch = { url: URL.createObjectURL(file), name: file.name, result: null as AnalysisResult | null, uploadErr: '', isDemo: false, apiErr: '' };
+    setSlots(prev => {
+      if (targetIdx >= prev.length) return [...prev, { ...makeSlot(false), ...patch }];
+      return prev.map((s, i) => i === targetIdx ? { ...s, ...patch } : s);
+    });
+    setActiveSlot(targetIdx);
+  }, [slots.length, patchSlot]);
 
-  const runAnalysis = async () => {
-    if (videoMode === 'demo') {
+  // ── Switch slot 0 back to demo ────────────────────────────────────────────
+  const switchToDemo = useCallback(() => {
+    patchSlot(0, { isDemo: true, url: null, result: ensureTrialResult(DEMO_RESULT), uploadErr: '', apiErr: '' });
+    setActiveSlot(0);
+  }, [patchSlot]);
+
+  // ── Generic analysis runner ───────────────────────────────────────────────
+  const runAnalysisForSlot = useCallback(async (slotIdx: number) => {
+    const slot = slots[slotIdx];
+    if (!slot) return;
+
+    if (slot.isDemo) {
       const d = ensureTrialResult(DEMO_RESULT);
-      setResult(d);
+      patchSlot(slotIdx, { result: d });
       setCachedResult(d);
       return;
     }
@@ -740,8 +774,7 @@ export default function TryPage() {
     const cur = getStoredCredits();
     if (cur <= 0 && !isUnlocked()) { setShowGate(true); return; }
 
-    setApiErr('');
-    setLoading(true);
+    patchSlot(slotIdx, { apiErr: '', loading: true });
     const newCredits = Math.max(0, cur - 1);
     setStoredCredits(newCredits);
     setCredits(newCredits);
@@ -750,50 +783,21 @@ export default function TryPage() {
     let dgSegments: Array<{ timestamp: string; text: string }> = [];
 
     try {
-      // ── Step 1: Transcribe the actual video with Deepgram ──────────────────
-      const file = uploadedFileRef.current;
+      const file = slotFilesRef.current[slotIdx];
       if (file) {
-        setLoadingMsg('Transcribing your video…');
+        patchSlot(slotIdx, { loadingMsg: 'Transcribing your video…' });
         try {
-          const keyRes = await fetch('/api/deepgram-key');
-          if (!keyRes.ok) throw new Error('key_unavailable');
-          const { key } = await keyRes.json() as { key?: string };
-          if (!key) throw new Error('key_unavailable');
-
-          const dgRes = await fetch(
-            'https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&punctuate=true&language=en&paragraphs=true',
-            {
-              method: 'POST',
-              headers: { Authorization: `Token ${key}`, 'Content-Type': file.type || 'video/mp4' },
-              body: file,
-            }
-          );
-          if (!dgRes.ok) throw new Error(`dg_${dgRes.status}`);
-
-          type DgParagraph = { start?: number; sentences?: Array<{ text: string }> };
-          type DgResponse = { results?: { channels?: Array<{ alternatives?: Array<{ transcript?: string; paragraphs?: { paragraphs?: DgParagraph[] } }> }> } };
-          const dgData = await dgRes.json() as DgResponse;
-          const alt = dgData?.results?.channels?.[0]?.alternatives?.[0];
-          transcriptText = alt?.transcript ?? '';
-          const paras = alt?.paragraphs?.paragraphs ?? [];
-          dgSegments = paras
-            .map((p) => {
-              const secs = Math.floor(p.start ?? 0);
-              const timestamp = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
-              const text = (p.sentences ?? []).map((s) => s.text).join(' ');
-              return { timestamp, text };
-            })
-            .filter((s) => s.text.trim().length > 0);
-        } catch (dgErr) {
-          console.warn('[trial] Deepgram transcription failed, using filename fallback:', dgErr);
-          transcriptText = `[Student presentation: ${uploadedName}] — Uploaded video for analysis.`;
+          const { text, segments } = await transcribeFile(file);
+          transcriptText = text;
+          dgSegments = segments;
+        } catch {
+          transcriptText = `[Student presentation: ${slot.name}] — Uploaded video for analysis.`;
         }
       } else {
-        transcriptText = `[Student presentation: ${uploadedName}] — Uploaded video for analysis.`;
+        transcriptText = `[Student presentation: ${slot.name}] — Uploaded video for analysis.`;
       }
 
-      // ── Step 2: Run Claude analysis on the real transcript ─────────────────
-      setLoadingMsg('Analyzing presentation…');
+      patchSlot(slotIdx, { loadingMsg: 'Analyzing presentation…' });
       const res = await fetch('/api/try', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -801,32 +805,21 @@ export default function TryPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        const fallback = ensureTrialResult(DEMO_RESULT);
-        setResult(fallback);
-        setCachedResult(fallback);
-        setActiveTab('overview');
-        setApiErr(data.error || 'Analysis unavailable — showing demo results.');
+        patchSlot(slotIdx, { apiErr: data.error || 'Analysis unavailable.' });
         return;
       }
-
-      // Inject real Deepgram segments so transcript tab shows actual speech
       const rawResult = data.result as AnalysisResult;
       if (dgSegments.length > 0) rawResult.transcript = dgSegments;
       const normalized = ensureTrialResult(rawResult);
-      setResult(normalized);
-      setCachedResult(normalized);
+      patchSlot(slotIdx, { result: normalized });
+      if (slotIdx === 0) setCachedResult(normalized);
       setActiveTab('overview');
     } catch {
-      const fallback = ensureTrialResult(DEMO_RESULT);
-      setResult(fallback);
-      setCachedResult(fallback);
-      setActiveTab('overview');
-      setApiErr('Network error — showing demo results.');
+      patchSlot(slotIdx, { apiErr: 'Network error. Please try again.' });
     } finally {
-      setLoading(false);
-      setLoadingMsg('');
+      patchSlot(slotIdx, { loading: false, loadingMsg: '' });
     }
-  };
+  }, [slots, patchSlot]);
 
   const executeBranch = useCallback(async (parent: QBranch, userInstruction: string, count: number = 2) => {
     if ((branchMap[parent.id]?.length ?? 0) > 0) return;
@@ -854,12 +847,11 @@ export default function TryPage() {
       setBranchMap((prev) => ({ ...prev, [parent.id]: kids }));
     };
 
-    if (videoMode === 'demo') {
+    const activeSlotData = slots[activeSlot];
+
+    if (activeSlotData?.isDemo) {
       const cur = getStoredCredits();
-      if (cur <= 0 && !isUnlocked()) {
-        setShowGate(true);
-        return;
-      }
+      if (cur <= 0 && !isUnlocked()) { setShowGate(true); return; }
       const next = Math.max(0, cur - 1);
       setStoredCredits(next);
       setCredits(next);
@@ -874,13 +866,10 @@ export default function TryPage() {
     }
 
     const cur = getStoredCredits();
-    if (cur <= 0 && !isUnlocked()) {
-      setShowGate(true);
-      return;
-    }
+    if (cur <= 0 && !isUnlocked()) { setShowGate(true); return; }
 
     setBranchingId(parent.id);
-    setApiErr('');
+    patchSlot(activeSlot, { apiErr: '' });
     const before = cur;
     const next = Math.max(0, cur - 1);
     setStoredCredits(next);
@@ -893,7 +882,7 @@ export default function TryPage() {
         body: JSON.stringify({
           action: 'branch',
           email: 'trial@babblet.io',
-          transcript: transcriptToText(activeSlot === 0 ? result?.transcript : slot2Result?.transcript),
+          transcript: transcriptToText(activeSlotData?.result?.transcript),
           parentQuestion: parent.question,
           parentCategory: parent.category,
           userInstruction: userInstruction.trim() || undefined,
@@ -902,21 +891,21 @@ export default function TryPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setApiErr(data.error || 'Could not branch this question.');
+        patchSlot(activeSlot, { apiErr: data.error || 'Could not branch this question.' });
         setStoredCredits(before);
         setCredits(before);
         return;
       }
       const raw = data.branches as Array<{ question: string; category: string; rationale: string; timestamp?: string }>;
       if (!Array.isArray(raw) || raw.length === 0) {
-        setApiErr('Could not branch this question.');
+        patchSlot(activeSlot, { apiErr: 'Could not branch this question.' });
         setStoredCredits(before);
         setCredits(before);
         return;
       }
       const kids: QBranch[] = raw.slice(0, count).map((t, i) => ({
         question: t.question,
-        category: parent.category,  // always inherit parent's category
+        category: parent.category,
         rationale: t.rationale || '',
         timestamp: t.timestamp || '0:00',
         id: `${parent.id}-b${i}-${Date.now()}`,
@@ -926,13 +915,13 @@ export default function TryPage() {
       }));
       setBranchMap((prev) => ({ ...prev, [parent.id]: kids }));
     } catch {
-      setApiErr('Network error. Please try again.');
+      patchSlot(activeSlot, { apiErr: 'Network error. Please try again.' });
       setStoredCredits(before);
       setCredits(before);
     } finally {
       setBranchingId(null);
     }
-  }, [branchMap, result, videoMode, slot2Result, activeSlot]);
+  }, [branchMap, slots, activeSlot, patchSlot]);
 
   const handleBranchRequest = useCallback((q: QBranch, instruction: string, count: number) => {
     if ((branchMap[q.id]?.length ?? 0) > 0) return;
@@ -945,104 +934,18 @@ export default function TryPage() {
     setStoredCredits(MAX_CREDITS);
   };
 
-  // ── Slot 2 upload & analysis ───────────────────────────────────────────────
-  const handleUploadSlot2 = useCallback((file: File) => {
-    setSlot2UploadErr('');
-    if (!file.type.startsWith('video/')) { setSlot2UploadErr('Please upload a video file (MP4, MOV, WebM).'); return; }
-    if (file.size > MAX_FILE_BYTES) { setSlot2UploadErr(`File too large. Max ${MAX_FILE_MB} MB.`); return; }
-    setSlot2Url(URL.createObjectURL(file));
-    setSlot2Name(file.name);
-    slot2FileRef.current = file;
-    setSlot2Result(null);
-    setActiveSlot(1);
-  }, []);
-
-  const runAnalysisSlot2 = async () => {
-    const cur = getStoredCredits();
-    if (cur <= 0 && !isUnlocked()) { setShowGate(true); return; }
-
-    setSlot2ApiErr('');
-    setSlot2Loading(true);
-    const newCredits = Math.max(0, cur - 1);
-    setStoredCredits(newCredits);
-    setCredits(newCredits);
-
-    let transcriptText = '';
-    let dgSegments: Array<{ timestamp: string; text: string }> = [];
-
-    try {
-      const file = slot2FileRef.current;
-      if (file) {
-        setSlot2LoadingMsg('Transcribing your video…');
-        try {
-          const keyRes = await fetch('/api/deepgram-key');
-          if (!keyRes.ok) throw new Error('key_unavailable');
-          const { key } = await keyRes.json() as { key?: string };
-          if (!key) throw new Error('key_unavailable');
-
-          const dgRes = await fetch(
-            'https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&punctuate=true&language=en&paragraphs=true',
-            {
-              method: 'POST',
-              headers: { Authorization: `Token ${key}`, 'Content-Type': file.type || 'video/mp4' },
-              body: file,
-            }
-          );
-          if (!dgRes.ok) throw new Error(`dg_${dgRes.status}`);
-
-          type DgParagraph = { start?: number; sentences?: Array<{ text: string }> };
-          type DgResponse = { results?: { channels?: Array<{ alternatives?: Array<{ transcript?: string; paragraphs?: { paragraphs?: DgParagraph[] } }> }> } };
-          const dgData = await dgRes.json() as DgResponse;
-          const alt = dgData?.results?.channels?.[0]?.alternatives?.[0];
-          transcriptText = alt?.transcript ?? '';
-          const paras = alt?.paragraphs?.paragraphs ?? [];
-          dgSegments = paras
-            .map((p) => {
-              const secs = Math.floor(p.start ?? 0);
-              const timestamp = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
-              const text = (p.sentences ?? []).map((s) => s.text).join(' ');
-              return { timestamp, text };
-            })
-            .filter((s) => s.text.trim().length > 0);
-        } catch {
-          transcriptText = `[Student presentation: ${slot2Name}] — Uploaded video for analysis.`;
-        }
-      }
-
-      setSlot2LoadingMsg('Analyzing presentation…');
-      const res = await fetch('/api/try', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'full', email: 'trial@babblet.io', transcript: transcriptText }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setSlot2ApiErr(data.error || 'Analysis unavailable.');
-        return;
-      }
-      const rawResult = data.result as AnalysisResult;
-      if (dgSegments.length > 0) rawResult.transcript = dgSegments;
-      const normalized = ensureTrialResult(rawResult);
-      setSlot2Result(normalized);
-      setActiveTab('overview');
-    } catch {
-      setSlot2ApiErr('Network error. Please try again.');
-    } finally {
-      setSlot2Loading(false);
-      setSlot2LoadingMsg('');
-    }
-  };
+  const activeSlotData = slots[activeSlot] ?? slots[0];
+  const activeVideoSrc = activeSlotData.isDemo ? '/demo/demo-video.mp4' : (activeSlotData.url ?? '/demo/demo-video.mp4');
 
   const analysisForUi = useMemo(() => {
-    if (activeSlot === 1) {
-      return slot2Result ? ensureTrialResult(slot2Result) : null;
-    }
-    if (result) return ensureTrialResult(result);
-    if (videoMode === 'demo') return ensureTrialResult(DEMO_RESULT);
+    const s = slots[activeSlot];
+    if (!s) return null;
+    if (s.result) return ensureTrialResult(s.result);
+    if (s.isDemo) return ensureTrialResult(DEMO_RESULT);
     return null;
-  }, [result, videoMode, slot2Result, activeSlot]);
+  }, [slots, activeSlot]);
 
-  const transcript = analysisForUi?.transcript ?? (activeSlot === 0 && videoMode === 'demo' ? DEMO_RESULT.transcript! : []);
+  const transcript = analysisForUi?.transcript ?? (activeSlotData.isDemo ? DEMO_RESULT.transcript! : []);
   const segmentMarks = useMemo(() => {
     if (!transcript.length) return [] as SegmentMark[];
     const base = analysisForUi ?? DEMO_RESULT;
@@ -1054,6 +957,7 @@ export default function TryPage() {
     return buildSegmentAnnotations(base, transcript.length);
   }, [analysisForUi, transcript.length]);
   const sm = analysisForUi?.speechMetrics ?? DEMO_RESULT.speechMetrics!;
+;
 
   return (
     <div className="h-screen flex flex-col bg-[#F9FAFB]">
@@ -1244,7 +1148,7 @@ export default function TryPage() {
                       <h3 className="text-sm font-semibold text-slate-900">Transcript</h3>
                       <p className="text-xs text-slate-500 mt-0.5">S / I marks strength or improvement moments tied to Key Observations.</p>
                     </div>
-                    {loading && (
+                    {activeSlotData.loading && (
                       <div className="flex items-center gap-1.5 text-xs text-slate-400">
                         <Loader2 className="w-3 h-3 animate-spin" /> Analyzing...
                       </div>
@@ -1267,14 +1171,14 @@ export default function TryPage() {
                   />
                 </div>
 
-                {/* Upload CTA — only visible when in demo mode with no upload */}
-                {videoMode === 'demo' && (
+                {/* Upload CTA — only visible when viewing demo */}
+                {activeSlotData.isDemo && (
                   <div className="bg-emerald-800 rounded-2xl p-5 text-white flex items-center justify-between">
                     <div>
                       <p className="text-sm font-bold mb-1">Want to try with your own presentation?</p>
                       <p className="text-xs opacity-75 leading-relaxed">Upload a video and get the same Babblet analysis on your own content.</p>
                     </div>
-                    <button onClick={() => setVideoMode('upload')}
+                    <button onClick={() => fileInputsRef.current[0]?.click()}
                       className="inline-flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 text-xs font-bold px-4 py-2 rounded-lg transition-colors flex-shrink-0 ml-4">
                       <Upload className="w-3.5 h-3.5" /> Upload Video
                     </button>
@@ -1291,13 +1195,13 @@ export default function TryPage() {
                   <p className="text-sm text-slate-500">Grounded in the transcript—these questions probe depth across cognitive levels. Branch any card to go one level deeper.</p>
                 </div>
 
-                {apiErr && (
-                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">{apiErr}</div>
+                {activeSlotData.apiErr && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">{activeSlotData.apiErr}</div>
                 )}
 
                 {(analysisForUi?.questions?.length ?? 0) === 0 && (
                   <p className="text-sm text-slate-500 text-center py-10 rounded-2xl border border-dashed border-slate-200 bg-white">
-                    {videoMode === 'upload' && !result
+                    {activeSlotData.url && !activeSlotData.result
                       ? 'Run Babblet analysis on your video to generate follow-up questions.'
                       : 'No follow-up questions in this result.'}
                   </p>
@@ -1474,116 +1378,104 @@ export default function TryPage() {
           </AnimatePresence>
         </div>
 
-        {/* ── Right sidebar (video panel) ── */}
-        <div className="w-[420px] flex-shrink-0 bg-slate-800 text-white flex flex-col h-full sticky top-0">
+        {/* ── Right sidebar ── */}
+        <div className="w-[420px] flex-shrink-0 bg-slate-800 text-white flex flex-col h-full sticky top-0 overflow-y-auto">
 
-          {/* Slot selector tabs */}
-          <div className="flex-shrink-0 flex items-center gap-1 px-4 pt-4 pb-2">
-            {([0, 1] as const).map((idx) => {
-              const label = idx === 0
-                ? (uploadedName ? uploadedName.replace(/\.[^/.]+$/, '').slice(0, 16) : 'Demo')
-                : (slot2Name ? slot2Name.replace(/\.[^/.]+$/, '').slice(0, 16) : '+ Add video');
-              const hasResult = idx === 0 ? (result !== null || videoMode === 'demo') : slot2Result !== null;
-              const isActive = activeSlot === idx;
-              return (
-                <button
-                  key={idx}
-                  onClick={() => idx === 1 && !slot2Url ? slot2FileInputRef.current?.click() : setActiveSlot(idx)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold transition-all truncate ${
-                    isActive ? 'bg-slate-600 text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-200'
-                  }`}>
-                  {hasResult && <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${idx === 0 ? 'bg-emerald-400' : 'bg-sky-400'}`} />}
-                  <span className="truncate">{label}</span>
-                </button>
-              );
-            })}
-            {/* Hidden file input for slot 2 */}
-            <input ref={slot2FileInputRef} type="file" accept="video/*" className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadSlot2(f); }} />
-          </div>
+          {/* Hidden file inputs — one per slot + one for "add new" */}
+          {[0, 1, 2].map(idx => (
+            <input key={idx} ref={el => { fileInputsRef.current[idx] = el; }} type="file" accept="video/*" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelected(f, idx); if (e.target) e.target.value = ''; }} />
+          ))}
+          <input ref={addFileInputRef} type="file" accept="video/*" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelected(f, slots.length); if (e.target) e.target.value = ''; }} />
 
           {/* Video player */}
-          <div className="flex-shrink-0 px-4 pb-4">
-            {/* Slot 0 */}
-            {activeSlot === 0 && (
-              <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
-                {videoMode === 'upload' && !uploadedUrl ? (
-                  <div
-                    className="absolute inset-0 flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-white/5 transition-colors"
-                    onClick={() => fileRef.current?.click()}
-                    onDragOver={e => e.preventDefault()}
-                    onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleUpload(f); }}
-                  >
-                    <Upload className="w-8 h-8 text-slate-400" />
-                    <p className="text-xs text-slate-400">Drop video or click to upload</p>
-                    <p className="text-[10px] text-slate-500">MP4, MOV, WebM &middot; Max {MAX_FILE_MB} MB</p>
-                    <input ref={fileRef} type="file" accept="video/*" className="hidden"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
-                  </div>
-                ) : (
-                  <video key={videoSrc} src={videoSrc} controls playsInline className="w-full h-full object-cover" />
-                )}
-              </div>
-            )}
-
-            {/* Slot 1 */}
-            {activeSlot === 1 && (
-              <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
-                {!slot2Url ? (
-                  <div
-                    className="absolute inset-0 flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-white/5 transition-colors"
-                    onClick={() => slot2FileInputRef.current?.click()}
-                    onDragOver={e => e.preventDefault()}
-                    onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleUploadSlot2(f); }}
-                  >
-                    <Upload className="w-8 h-8 text-slate-400" />
-                    <p className="text-xs text-slate-400">Drop video or click to upload</p>
-                    <p className="text-[10px] text-slate-500">MP4, MOV, WebM &middot; Max {MAX_FILE_MB} MB</p>
-                  </div>
-                ) : (
-                  <video key={slot2Url} src={slot2Url} controls playsInline className="w-full h-full object-cover" />
-                )}
-              </div>
-            )}
-
-            {/* File info */}
-            <div className="mt-4">
-              <h3 className="font-medium text-sm truncate">
-                {activeSlot === 0
-                  ? (videoMode === 'upload' && uploadedName ? uploadedName : 'Babblet2.mov')
-                  : (slot2Name || 'No video uploaded')}
-              </h3>
-              <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-400">
-                <span>{activeSlot === 1 && slot2Name ? 'Uploaded' : 'Mar 23, 2026'}</span>
-                {activeSlot === 0 && <><span>&bull;</span><span>{videoMode === 'upload' ? 'Uploaded' : '110.6 MB'}</span></>}
-              </div>
+          <div className="flex-shrink-0 p-4 pb-3">
+            <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
+              {activeSlotData.isDemo || activeSlotData.url ? (
+                <video key={activeVideoSrc} src={activeVideoSrc} controls playsInline className="w-full h-full object-cover" />
+              ) : (
+                <div
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-white/5 transition-colors"
+                  onClick={() => fileInputsRef.current[activeSlot]?.click()}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFileSelected(f, activeSlot); }}
+                >
+                  <Upload className="w-8 h-8 text-slate-400" />
+                  <p className="text-xs text-slate-400">Drop video or click to upload</p>
+                  <p className="text-[10px] text-slate-500">MP4, MOV, WebM &middot; Max {MAX_FILE_MB} MB</p>
+                </div>
+              )}
             </div>
 
-            {/* Pacing badge — slot 0 only */}
+            {/* Demo / Upload your own toggle — slot 0 only */}
             {activeSlot === 0 && (
-              <div className="flex flex-wrap gap-2 mt-3">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-300">
-                  <BarChart3 className="w-3 h-3" /> Pacing Good
-                </span>
+              <div className="flex items-center gap-2 mt-3">
+                <button onClick={switchToDemo}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${slots[0].isDemo ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:text-white'}`}>
+                  Demo video
+                </button>
+                <button onClick={() => fileInputsRef.current[0]?.click()}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${!slots[0].isDemo ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:text-white'}`}>
+                  Upload your own
+                </button>
               </div>
             )}
-
-            {/* Upload toggle — slot 0 only */}
-            {activeSlot === 0 && (
-              <div className="flex items-center gap-2 mt-4">
-                {(['demo', 'upload'] as const).map(m => (
-                  <button key={m} onClick={() => { setVideoMode(m); if (m === 'demo') { setResult(ensureTrialResult(DEMO_RESULT)); } }}
-                    className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${videoMode === m ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:text-white'}`}>
-                    {m === 'demo' ? 'Demo video' : 'Upload your own'}
-                  </button>
-                ))}
-              </div>
-            )}
-            {activeSlot === 0 && uploadErr && <p className="mt-2 text-xs text-red-400">{uploadErr}</p>}
-            {activeSlot === 1 && slot2UploadErr && <p className="mt-2 text-xs text-red-400">{slot2UploadErr}</p>}
+            {activeSlotData.uploadErr && <p className="mt-2 text-xs text-red-400">{activeSlotData.uploadErr}</p>}
           </div>
 
-          {/* Score summary in sidebar */}
+          {/* Submissions list */}
+          <div className="flex-shrink-0 px-4 pb-4">
+            <div className="flex items-center justify-between mb-2.5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Submissions</p>
+              <span className="text-[10px] text-slate-600 tabular-nums">{slots.filter(s => s.url || s.isDemo).length} / {MAX_SLOTS}</span>
+            </div>
+
+            <div className="space-y-1.5">
+              {slots.map((slot, idx) => {
+                const isActive = activeSlot === idx;
+                const baseName = slot.isDemo ? 'Demo video' : (slot.name || 'Untitled');
+                const displayName = baseName.replace(/\.[^/.]+$/, '').slice(0, 26);
+                const status = slot.loading
+                  ? (slot.loadingMsg || 'Processing…')
+                  : slot.result ? 'Analyzed'
+                  : slot.url ? 'Ready to analyze'
+                  : 'Demo';
+                return (
+                  <button key={idx} onClick={() => setActiveSlot(idx)}
+                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-left transition-all ${
+                      isActive ? 'bg-slate-600/80 ring-1 ring-slate-500' : 'hover:bg-slate-700/60'
+                    }`}>
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${SLOT_COLORS[idx] ?? 'bg-slate-500'}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-slate-200 truncate">{displayName}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5 truncate">{status}</p>
+                    </div>
+                    <div className="flex-shrink-0 ml-1">
+                      {slot.loading
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                        : slot.result
+                          ? <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${SLOT_COLORS[idx]?.replace('bg-', 'bg-').replace('400', '500/20') ?? ''} ${idx === 0 ? 'bg-emerald-500/20 text-emerald-300' : idx === 1 ? 'bg-sky-500/20 text-sky-300' : 'bg-violet-500/20 text-violet-300'}`}>
+                              {slot.result.letterGrade ?? slot.result.overallScore}
+                            </span>
+                          : null}
+                    </div>
+                  </button>
+                );
+              })}
+
+              {/* Add another video */}
+              {slots.length < MAX_SLOTS && (
+                <button onClick={() => addFileInputRef.current?.click()}
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl border border-dashed border-slate-600/80 text-slate-500 hover:border-slate-500 hover:text-slate-400 transition-all">
+                  <span className="w-2 h-2 rounded-full border border-dashed border-slate-600 flex-shrink-0" />
+                  <span className="text-xs">+ Add another video</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Score summary */}
           {analysisForUi && (
             <div className="border-t border-slate-700 p-4 flex-shrink-0">
               <div className="flex items-center justify-between">
@@ -1601,33 +1493,18 @@ export default function TryPage() {
             </div>
           )}
 
-          {/* Analyze button — slot 0 upload */}
-          {activeSlot === 0 && videoMode === 'upload' && uploadedUrl && !result && (
+          {/* Analyze button — shown when slot has a video but no result yet */}
+          {!activeSlotData.isDemo && activeSlotData.url && !activeSlotData.result && (
             <div className="px-4 pb-4">
               <button
-                onClick={runAnalysis}
-                disabled={loading}
+                onClick={() => runAnalysisForSlot(activeSlot)}
+                disabled={activeSlotData.loading}
                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl transition-colors flex items-center justify-center gap-2.5 disabled:opacity-60">
-                {loading
-                  ? <><Loader2 className="w-4 h-4 animate-spin" /> {loadingMsg || 'Analyzing…'}</>
+                {activeSlotData.loading
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> {activeSlotData.loadingMsg || 'Analyzing…'}</>
                   : <><Sparkles className="w-4 h-4" /> Analyze with Babblet</>}
               </button>
-              {apiErr && <p className="mt-2 text-xs text-red-400">{apiErr}</p>}
-            </div>
-          )}
-
-          {/* Analyze button — slot 1 upload */}
-          {activeSlot === 1 && slot2Url && !slot2Result && (
-            <div className="px-4 pb-4">
-              <button
-                onClick={runAnalysisSlot2}
-                disabled={slot2Loading}
-                className="w-full py-3 bg-sky-600 hover:bg-sky-700 text-white font-semibold text-sm rounded-xl transition-colors flex items-center justify-center gap-2.5 disabled:opacity-60">
-                {slot2Loading
-                  ? <><Loader2 className="w-4 h-4 animate-spin" /> {slot2LoadingMsg || 'Analyzing…'}</>
-                  : <><Sparkles className="w-4 h-4" /> Analyze with Babblet</>}
-              </button>
-              {slot2ApiErr && <p className="mt-2 text-xs text-red-400">{slot2ApiErr}</p>}
+              {activeSlotData.apiErr && <p className="mt-2 text-xs text-red-400">{activeSlotData.apiErr}</p>}
             </div>
           )}
 
