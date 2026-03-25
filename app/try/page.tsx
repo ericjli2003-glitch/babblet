@@ -87,7 +87,7 @@ const DEMO_RESULT: AnalysisResult = {
         overview: 'Delivery was a clear strength of this presentation. Taylor maintained a professional tone, spoke at a measured pace (125 wpm—within the optimal 120–180 range), and used clinical terminology with accuracy and confidence. Only one filler word was detected across the full presentation.',
         strengths: [
           { text: 'Speaking rate of 125 words per minute falls within the optimal comprehension range and allowed for clear articulation of complex clinical terminology without rushing.', refs: [1] },
-          { text: 'Minimal use of filler words (1 instance detected) compared to the class average of 17 demonstrates strong verbal preparation and clinical communication skills.', refs: [2] },
+          { text: 'Minimal use of filler words (1 instance detected) demonstrates strong verbal preparation and clinical communication skills.', refs: [2] },
         ],
         improvements: [
           { text: 'While delivery was fluent, more dynamic emphasis on key findings (e.g., raising vocal intensity when reporting grip strength discrepancy) would help the audience identify critical clinical data points.', refs: [3] },
@@ -1056,7 +1056,7 @@ export default function TryPage() {
                       </span>
                       <div className="text-2xl font-bold text-slate-900 mb-0.5">{sm.fillerWords}</div>
                       <p className="text-[10px] text-slate-500 mb-0.5">Filler Words</p>
-                      <p className="text-[9px] text-slate-600 leading-tight">Class Avg: 17 — Lower filler use improves clarity.</p>
+                      <p className="text-[9px] text-slate-600 leading-tight">Lower filler use improves clarity.</p>
                     </div>
                     {/* Words/min */}
                     <div className="bg-slate-50 rounded-lg p-3">
@@ -1067,7 +1067,7 @@ export default function TryPage() {
                       </span>
                       <div className="text-2xl font-bold text-slate-900 mb-0.5">{sm.wordsPerMin}</div>
                       <p className="text-[10px] text-slate-500 mb-0.5">Words/min</p>
-                      <p className="text-[9px] text-slate-600 leading-tight">Class Avg: 113 — Ideal range 120–180 for comprehension.</p>
+                      <p className="text-[9px] text-slate-600 leading-tight">Ideal range 120–180 for comprehension.</p>
                     </div>
                     {/* Pauses/min */}
                     <div className="bg-slate-50 rounded-lg p-3">
@@ -1078,7 +1078,7 @@ export default function TryPage() {
                       </span>
                       <div className="text-2xl font-bold text-slate-900 mb-0.5">{sm.pausesPerMin}</div>
                       <p className="text-[10px] text-slate-500 mb-0.5">Pauses/min</p>
-                      <p className="text-[9px] text-slate-600 leading-tight">Class Avg: 1.8 — Strategic pauses aid emphasis.</p>
+                      <p className="text-[9px] text-slate-600 leading-tight">Strategic pauses aid emphasis.</p>
                     </div>
                   </div>
                 </div>
