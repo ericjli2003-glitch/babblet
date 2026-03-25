@@ -155,7 +155,7 @@ ${exampleItems}
 }`;
 
       const msg = await anthropic.messages.create({
-        model: 'claude-3-5-haiku-20241022',
+        model: 'claude-sonnet-4-5',
         max_tokens: 1100,
         messages: [{ role: 'user', content: branchPrompt }],
       });
@@ -246,7 +246,7 @@ Rules:
       }
 
       const msg = await anthropic.messages.create({
-        model: 'claude-3-5-haiku-20241022',
+        model: 'claude-sonnet-4-5',
         max_tokens: maxTokens,
         messages: [{ role: 'user', content: prompt }],
       });

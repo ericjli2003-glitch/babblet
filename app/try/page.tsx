@@ -687,6 +687,18 @@ export default function TryPage() {
   const uploadedFileRef = useRef<File | null>(null);
   const [loadingMsg, setLoadingMsg] = useState('');
 
+  // ── Slot 2 (second video upload) ───────────────────────────────────────────
+  const [activeSlot, setActiveSlot] = useState<0 | 1>(0);
+  const [slot2Url, setSlot2Url] = useState<string | null>(null);
+  const [slot2Name, setSlot2Name] = useState('');
+  const [slot2UploadErr, setSlot2UploadErr] = useState('');
+  const [slot2Result, setSlot2Result] = useState<AnalysisResult | null>(null);
+  const [slot2Loading, setSlot2Loading] = useState(false);
+  const [slot2LoadingMsg, setSlot2LoadingMsg] = useState('');
+  const [slot2ApiErr, setSlot2ApiErr] = useState('');
+  const slot2FileRef = useRef<File | null>(null);
+  const slot2FileInputRef = useRef<HTMLInputElement>(null);
+
   // On mount: hydrate credits, load demo result immediately
   useEffect(() => {
     setCredits(getStoredCredits());
@@ -702,7 +714,7 @@ export default function TryPage() {
 
   useEffect(() => {
     setBranchMap({});
-  }, [result]);
+  }, [result, slot2Result, activeSlot]);
 
   const videoSrc = videoMode === 'upload' && uploadedUrl ? uploadedUrl : '/demo/demo-video.mp4';
 
@@ -881,7 +893,7 @@ export default function TryPage() {
         body: JSON.stringify({
           action: 'branch',
           email: 'trial@babblet.io',
-          transcript: transcriptToText(result?.transcript),
+          transcript: transcriptToText(activeSlot === 0 ? result?.transcript : slot2Result?.transcript),
           parentQuestion: parent.question,
           parentCategory: parent.category,
           userInstruction: userInstruction.trim() || undefined,
@@ -920,7 +932,7 @@ export default function TryPage() {
     } finally {
       setBranchingId(null);
     }
-  }, [branchMap, result, videoMode]);
+  }, [branchMap, result, videoMode, slot2Result, activeSlot]);
 
   const handleBranchRequest = useCallback((q: QBranch, instruction: string, count: number) => {
     if ((branchMap[q.id]?.length ?? 0) > 0) return;
@@ -933,13 +945,104 @@ export default function TryPage() {
     setStoredCredits(MAX_CREDITS);
   };
 
+  // ── Slot 2 upload & analysis ───────────────────────────────────────────────
+  const handleUploadSlot2 = useCallback((file: File) => {
+    setSlot2UploadErr('');
+    if (!file.type.startsWith('video/')) { setSlot2UploadErr('Please upload a video file (MP4, MOV, WebM).'); return; }
+    if (file.size > MAX_FILE_BYTES) { setSlot2UploadErr(`File too large. Max ${MAX_FILE_MB} MB.`); return; }
+    setSlot2Url(URL.createObjectURL(file));
+    setSlot2Name(file.name);
+    slot2FileRef.current = file;
+    setSlot2Result(null);
+    setActiveSlot(1);
+  }, []);
+
+  const runAnalysisSlot2 = async () => {
+    const cur = getStoredCredits();
+    if (cur <= 0 && !isUnlocked()) { setShowGate(true); return; }
+
+    setSlot2ApiErr('');
+    setSlot2Loading(true);
+    const newCredits = Math.max(0, cur - 1);
+    setStoredCredits(newCredits);
+    setCredits(newCredits);
+
+    let transcriptText = '';
+    let dgSegments: Array<{ timestamp: string; text: string }> = [];
+
+    try {
+      const file = slot2FileRef.current;
+      if (file) {
+        setSlot2LoadingMsg('Transcribing your video…');
+        try {
+          const keyRes = await fetch('/api/deepgram-key');
+          if (!keyRes.ok) throw new Error('key_unavailable');
+          const { key } = await keyRes.json() as { key?: string };
+          if (!key) throw new Error('key_unavailable');
+
+          const dgRes = await fetch(
+            'https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&punctuate=true&language=en&paragraphs=true',
+            {
+              method: 'POST',
+              headers: { Authorization: `Token ${key}`, 'Content-Type': file.type || 'video/mp4' },
+              body: file,
+            }
+          );
+          if (!dgRes.ok) throw new Error(`dg_${dgRes.status}`);
+
+          type DgParagraph = { start?: number; sentences?: Array<{ text: string }> };
+          type DgResponse = { results?: { channels?: Array<{ alternatives?: Array<{ transcript?: string; paragraphs?: { paragraphs?: DgParagraph[] } }> }> } };
+          const dgData = await dgRes.json() as DgResponse;
+          const alt = dgData?.results?.channels?.[0]?.alternatives?.[0];
+          transcriptText = alt?.transcript ?? '';
+          const paras = alt?.paragraphs?.paragraphs ?? [];
+          dgSegments = paras
+            .map((p) => {
+              const secs = Math.floor(p.start ?? 0);
+              const timestamp = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+              const text = (p.sentences ?? []).map((s) => s.text).join(' ');
+              return { timestamp, text };
+            })
+            .filter((s) => s.text.trim().length > 0);
+        } catch {
+          transcriptText = `[Student presentation: ${slot2Name}] — Uploaded video for analysis.`;
+        }
+      }
+
+      setSlot2LoadingMsg('Analyzing presentation…');
+      const res = await fetch('/api/try', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'full', email: 'trial@babblet.io', transcript: transcriptText }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSlot2ApiErr(data.error || 'Analysis unavailable.');
+        return;
+      }
+      const rawResult = data.result as AnalysisResult;
+      if (dgSegments.length > 0) rawResult.transcript = dgSegments;
+      const normalized = ensureTrialResult(rawResult);
+      setSlot2Result(normalized);
+      setActiveTab('overview');
+    } catch {
+      setSlot2ApiErr('Network error. Please try again.');
+    } finally {
+      setSlot2Loading(false);
+      setSlot2LoadingMsg('');
+    }
+  };
+
   const analysisForUi = useMemo(() => {
+    if (activeSlot === 1) {
+      return slot2Result ? ensureTrialResult(slot2Result) : null;
+    }
     if (result) return ensureTrialResult(result);
     if (videoMode === 'demo') return ensureTrialResult(DEMO_RESULT);
     return null;
-  }, [result, videoMode]);
+  }, [result, videoMode, slot2Result, activeSlot]);
 
-  const transcript = analysisForUi?.transcript ?? (videoMode === 'demo' ? DEMO_RESULT.transcript! : []);
+  const transcript = analysisForUi?.transcript ?? (activeSlot === 0 && videoMode === 'demo' ? DEMO_RESULT.transcript! : []);
   const segmentMarks = useMemo(() => {
     if (!transcript.length) return [] as SegmentMark[];
     const base = analysisForUi ?? DEMO_RESULT;
@@ -1373,56 +1476,111 @@ export default function TryPage() {
 
         {/* ── Right sidebar (video panel) ── */}
         <div className="w-[420px] flex-shrink-0 bg-slate-800 text-white flex flex-col h-full sticky top-0">
+
+          {/* Slot selector tabs */}
+          <div className="flex-shrink-0 flex items-center gap-1 px-4 pt-4 pb-2">
+            {([0, 1] as const).map((idx) => {
+              const label = idx === 0
+                ? (uploadedName ? uploadedName.replace(/\.[^/.]+$/, '').slice(0, 16) : 'Demo')
+                : (slot2Name ? slot2Name.replace(/\.[^/.]+$/, '').slice(0, 16) : '+ Add video');
+              const hasResult = idx === 0 ? (result !== null || videoMode === 'demo') : slot2Result !== null;
+              const isActive = activeSlot === idx;
+              return (
+                <button
+                  key={idx}
+                  onClick={() => idx === 1 && !slot2Url ? slot2FileInputRef.current?.click() : setActiveSlot(idx)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold transition-all truncate ${
+                    isActive ? 'bg-slate-600 text-white' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+                  }`}>
+                  {hasResult && <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${idx === 0 ? 'bg-emerald-400' : 'bg-sky-400'}`} />}
+                  <span className="truncate">{label}</span>
+                </button>
+              );
+            })}
+            {/* Hidden file input for slot 2 */}
+            <input ref={slot2FileInputRef} type="file" accept="video/*" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadSlot2(f); }} />
+          </div>
+
           {/* Video player */}
-          <div className="flex-shrink-0 p-4">
-            <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
-              {videoMode === 'upload' && !uploadedUrl ? (
-                <div
-                  className="absolute inset-0 flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-white/5 transition-colors"
-                  onClick={() => fileRef.current?.click()}
-                  onDragOver={e => e.preventDefault()}
-                  onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleUpload(f); }}
-                >
-                  <Upload className="w-8 h-8 text-slate-400" />
-                  <p className="text-xs text-slate-400">Drop video or click to upload</p>
-                  <p className="text-[10px] text-slate-500">MP4, MOV, WebM &middot; Max {MAX_FILE_MB} MB</p>
-                  <input ref={fileRef} type="file" accept="video/*" className="hidden"
-                    onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
-                </div>
-              ) : (
-                <video key={videoSrc} src={videoSrc} controls playsInline className="w-full h-full object-cover" />
-              )}
-            </div>
+          <div className="flex-shrink-0 px-4 pb-4">
+            {/* Slot 0 */}
+            {activeSlot === 0 && (
+              <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
+                {videoMode === 'upload' && !uploadedUrl ? (
+                  <div
+                    className="absolute inset-0 flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-white/5 transition-colors"
+                    onClick={() => fileRef.current?.click()}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleUpload(f); }}
+                  >
+                    <Upload className="w-8 h-8 text-slate-400" />
+                    <p className="text-xs text-slate-400">Drop video or click to upload</p>
+                    <p className="text-[10px] text-slate-500">MP4, MOV, WebM &middot; Max {MAX_FILE_MB} MB</p>
+                    <input ref={fileRef} type="file" accept="video/*" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
+                  </div>
+                ) : (
+                  <video key={videoSrc} src={videoSrc} controls playsInline className="w-full h-full object-cover" />
+                )}
+              </div>
+            )}
+
+            {/* Slot 1 */}
+            {activeSlot === 1 && (
+              <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
+                {!slot2Url ? (
+                  <div
+                    className="absolute inset-0 flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-white/5 transition-colors"
+                    onClick={() => slot2FileInputRef.current?.click()}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleUploadSlot2(f); }}
+                  >
+                    <Upload className="w-8 h-8 text-slate-400" />
+                    <p className="text-xs text-slate-400">Drop video or click to upload</p>
+                    <p className="text-[10px] text-slate-500">MP4, MOV, WebM &middot; Max {MAX_FILE_MB} MB</p>
+                  </div>
+                ) : (
+                  <video key={slot2Url} src={slot2Url} controls playsInline className="w-full h-full object-cover" />
+                )}
+              </div>
+            )}
 
             {/* File info */}
             <div className="mt-4">
               <h3 className="font-medium text-sm truncate">
-                {videoMode === 'upload' && uploadedName ? uploadedName : 'Babblet2.mov'}
+                {activeSlot === 0
+                  ? (videoMode === 'upload' && uploadedName ? uploadedName : 'Babblet2.mov')
+                  : (slot2Name || 'No video uploaded')}
               </h3>
               <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-400">
-                <span>Uploaded Mar 23, 2026</span>
-                <span>&bull;</span>
-                <span>{videoMode === 'upload' ? 'Uploaded' : '110.6 MB'}</span>
+                <span>{activeSlot === 1 && slot2Name ? 'Uploaded' : 'Mar 23, 2026'}</span>
+                {activeSlot === 0 && <><span>&bull;</span><span>{videoMode === 'upload' ? 'Uploaded' : '110.6 MB'}</span></>}
               </div>
             </div>
 
-            {/* Pacing badge */}
-            <div className="flex flex-wrap gap-2 mt-3">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-300">
-                <BarChart3 className="w-3 h-3" /> Pacing Good
-              </span>
-            </div>
+            {/* Pacing badge — slot 0 only */}
+            {activeSlot === 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-300">
+                  <BarChart3 className="w-3 h-3" /> Pacing Good
+                </span>
+              </div>
+            )}
 
-            {/* Upload toggle */}
-            <div className="flex items-center gap-2 mt-4">
-              {(['demo', 'upload'] as const).map(m => (
-                <button key={m} onClick={() => { setVideoMode(m); if (m === 'demo') { setResult(ensureTrialResult(DEMO_RESULT)); } }}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${videoMode === m ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:text-white'}`}>
-                  {m === 'demo' ? 'Demo video' : 'Upload your own'}
-                </button>
-              ))}
-            </div>
-            {uploadErr && <p className="mt-2 text-xs text-red-400">{uploadErr}</p>}
+            {/* Upload toggle — slot 0 only */}
+            {activeSlot === 0 && (
+              <div className="flex items-center gap-2 mt-4">
+                {(['demo', 'upload'] as const).map(m => (
+                  <button key={m} onClick={() => { setVideoMode(m); if (m === 'demo') { setResult(ensureTrialResult(DEMO_RESULT)); } }}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${videoMode === m ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:text-white'}`}>
+                    {m === 'demo' ? 'Demo video' : 'Upload your own'}
+                  </button>
+                ))}
+              </div>
+            )}
+            {activeSlot === 0 && uploadErr && <p className="mt-2 text-xs text-red-400">{uploadErr}</p>}
+            {activeSlot === 1 && slot2UploadErr && <p className="mt-2 text-xs text-red-400">{slot2UploadErr}</p>}
           </div>
 
           {/* Score summary in sidebar */}
@@ -1443,9 +1601,9 @@ export default function TryPage() {
             </div>
           )}
 
-          {/* Analyze button (for uploads) */}
-          {videoMode === 'upload' && uploadedUrl && !result && (
-            <div className="p-4 border-t border-slate-700">
+          {/* Analyze button — slot 0 upload */}
+          {activeSlot === 0 && videoMode === 'upload' && uploadedUrl && !result && (
+            <div className="px-4 pb-4">
               <button
                 onClick={runAnalysis}
                 disabled={loading}
@@ -1455,6 +1613,21 @@ export default function TryPage() {
                   : <><Sparkles className="w-4 h-4" /> Analyze with Babblet</>}
               </button>
               {apiErr && <p className="mt-2 text-xs text-red-400">{apiErr}</p>}
+            </div>
+          )}
+
+          {/* Analyze button — slot 1 upload */}
+          {activeSlot === 1 && slot2Url && !slot2Result && (
+            <div className="px-4 pb-4">
+              <button
+                onClick={runAnalysisSlot2}
+                disabled={slot2Loading}
+                className="w-full py-3 bg-sky-600 hover:bg-sky-700 text-white font-semibold text-sm rounded-xl transition-colors flex items-center justify-center gap-2.5 disabled:opacity-60">
+                {slot2Loading
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> {slot2LoadingMsg || 'Analyzing…'}</>
+                  : <><Sparkles className="w-4 h-4" /> Analyze with Babblet</>}
+              </button>
+              {slot2ApiErr && <p className="mt-2 text-xs text-red-400">{slot2ApiErr}</p>}
             </div>
           )}
 
