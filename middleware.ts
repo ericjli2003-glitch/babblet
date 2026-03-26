@@ -9,6 +9,7 @@ const PUBLIC_PATHS = [
   '/try',
   '/api/auth',
   '/api/contact',
+  '/api/trial-lead',
   '/api/try',
   '/api/deepgram-key',
   '/icon.svg',

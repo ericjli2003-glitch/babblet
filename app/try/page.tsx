@@ -594,11 +594,31 @@ function GateModal({ onUnlock }: { onUnlock: () => void }) {
     e.preventDefault();
     if (!form.email.includes('@')) { setErr('Enter a valid email.'); return; }
     if (!form.name.trim()) { setErr('Name is required.'); return; }
+    setErr('');
     setLoading(true);
-    await new Promise(r => setTimeout(r, 600));
-    setUnlocked();
-    onUnlock();
-    setLoading(false);
+    try {
+      const res = await fetch('/api/trial-lead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          email: form.email.trim(),
+          institution: form.institution.trim() || undefined,
+          phone: form.phone.trim() || undefined,
+        }),
+      });
+      const data = await res.json() as { error?: string };
+      if (!res.ok) {
+        setErr(data.error || 'Something went wrong. Please try again.');
+        return;
+      }
+      setUnlocked();
+      onUnlock();
+    } catch {
+      setErr('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
