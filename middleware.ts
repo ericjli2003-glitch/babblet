@@ -19,7 +19,7 @@ function isPublic(pathname: string): boolean {
   if (PUBLIC_PATHS.includes(pathname)) return true;
   if (pathname.startsWith('/_next/')) return true;
   if (pathname.startsWith('/favicon')) return true;
-  if (/\.(png|jpg|jpeg|gif|svg|ico|webp|css|js|woff2?|ttf|mp4|webm|ogg|mp3|wav)$/.test(pathname)) return true;
+  if (/\.(png|jpg|jpeg|gif|svg|ico|webp|css|js|woff2?|ttf|mp4|webm|ogg|mp3|wav|txt|xml)$/.test(pathname)) return true;
   return false;
 }
 
