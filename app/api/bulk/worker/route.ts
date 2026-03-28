@@ -10,7 +10,7 @@ import {
   getQueueLength
 } from '@/lib/batch-store';
 import { getPresignedDownloadUrl } from '@/lib/r2';
-import { analyzeWithClaude, isClaudeConfigured, generateQuestionsWithClaude, evaluateWithClaude, generateAllCriterionInsights } from '@/lib/claude';
+import { analyzeWithClaude, isClaudeConfigured, generateQuestionsWithClaude, evaluateWithClaude } from '@/lib/claude';
 import { verifyWithClaude } from '@/lib/verify';
 import { analyzeVideoForSlides, buildPresentationContext, isGeminiConfigured } from '@/lib/gemini';
 import { createClient } from '@deepgram/sdk';
@@ -233,17 +233,16 @@ async function processSubmission(submissionId: string, batchId: string): Promise
         explanation: f.explanation,
       }));
 
-      // Generate criterion insights (non-blocking — don't fail the submission if this errors)
-      let criterionInsights: Record<string, string> = {};
-      try {
-        const slideText = slideContent?.slides?.map(s =>
-          `[Slide ${s.slideNumber}${s.title ? `: ${s.title}` : ''}] ${s.textContent}`
-        ).join('\n') || '';
-        criterionInsights = await generateAllCriterionInsights(transcript, rubricEvaluation, slideText);
-        console.log(`[Worker] Generated criterion insights for ${submissionId}: ${Object.keys(criterionInsights).length} criteria`);
-      } catch (e) {
-        console.error(`[Worker] Criterion insights generation failed for ${submissionId}:`, e);
+      // Extract per-criterion insights from rubric evaluation (generated inline in the same Claude call)
+      const criterionInsights: Record<string, string> = {};
+      if (rubricEvaluation.criteriaBreakdown) {
+        for (const c of rubricEvaluation.criteriaBreakdown) {
+          if (c.criterion && (c as any).insights) {
+            criterionInsights[c.criterion] = (c as any).insights;
+          }
+        }
       }
+      console.log(`[Worker] Extracted criterion insights for ${submissionId}: ${Object.keys(criterionInsights).length} criteria`);
 
       // Update submission with results - only if we have valid grade data
       await updateSubmission(submissionId, {

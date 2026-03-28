@@ -1301,7 +1301,8 @@ JSON format:
       "relevantQuotes": ["Longer exact excerpt 1 from transcript", "Longer exact excerpt 2 — include surrounding context"],
       "strengths": [{ "text": "Strength", "quote": "Substantial supporting excerpt from transcript" }],
       "improvements": [{ "text": "Improvement", "quote": "Substantial relevant excerpt from transcript" }],
-      "missingEvidence": ["Specific evidence missing based on rubric requirements"]
+      "missingEvidence": ["Specific evidence missing based on rubric requirements"],
+      "insights": "**Overview**\n2-3 sentences specific to this criterion.\n\n**What worked well:**\n- Specific strength with evidence [1]\n- Another strength [1]\n\n**Areas to develop:**\n- Specific gap\n- Rubric expectation not met\n\n**Example of excellence:** One sentence describing what a top performance looks like."
     }
   ]
 }
@@ -1313,6 +1314,7 @@ CRITICAL REQUIREMENTS:
 4. "rationale" must cite class context, assignment context, or accuracy checks when applicable
 5. "quote" fields and each string in "relevantQuotes" must be EXACT, CONTIGUOUS words copied from the transcript (no paraphrase). Prefer LONG excerpts: aim for roughly **70–200 words** (about 4–10 sentences) whenever the transcript allows—include the decisive phrase **and** a generous amount of surrounding lines so the citation reads like a full moment from the talk. If the idea spans multiple sentences or list items, include them. Only use a shorter quote when the transcript truly has no more relevant contiguous text.
 6. Write as a professor addressing your student
+7. "insights" must be filled for every criterion — use the exact markdown format shown above
 
 Respond ONLY with valid JSON.`;
 
