@@ -811,56 +811,37 @@ export default function SubmissionDetail({ initialSubmission }: { initialSubmiss
       ? `\n\nRUBRIC FOR "${criterionTitle}" ONLY (analyze ONLY against this):\n${criterionRubricOnly}\n\nDO NOT use other criteria. Focus exclusively on what the above says for ${criterionTitle}.`
       : fullRubricText ? `\n\nFULL RUBRIC (find and use ONLY the section for ${criterionTitle}):\n${fullRubricText.slice(0, 1500)}` : '';
     
-    // Build criterion-specific expectations
-    const criterionExpectations: Record<string, string> = {
-      'Content Knowledge': 'Focus on: concept accuracy, understanding depth, integration of material, factual correctness, use of terminology.',
-      'Structure': 'Focus on: organization, logical flow, transitions between sections, introduction/conclusion quality, coherence.',
-      'Visual Aids': 'Focus on: slide design, visual clarity, appropriate use of graphics, readability, visual support of content.',
-      'Delivery': 'Focus on: speaking pace, eye contact, voice clarity, confidence, engagement, gestures, enthusiasm.',
-    };
-    const expectationsForCriterion = criterionExpectations[criterionTitle] || `Focus on what the rubric says about ${criterionTitle}.`;
-    
     const response = await fetch('/api/contextual-chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: `ANALYZE ONLY: "${criterionTitle}"
+        message: `Analyze ONLY the "${criterionTitle}" criterion. Do NOT mention other rubric categories.
 
-${expectationsForCriterion}
-
-DO NOT mention or evaluate other rubric categories. Your ENTIRE response is about "${criterionTitle}" only.
-
-CRITERION BEING GRADED: "${criterionTitle}"
+CRITERION: "${criterionTitle}"
 SCORE: ${criterionInfo || 'See rubric'}
 
-WHAT TO ANALYZE FOR "${criterionTitle}":
-${criterionTitle === 'Content Knowledge' ? '- Did the student demonstrate understanding of the topic?\n- Were concepts explained accurately?\n- Did they integrate course material?' : ''}${criterionTitle === 'Structure' ? '- Was the presentation well-organized?\n- Were transitions smooth?\n- Did it have a clear beginning, middle, end?' : ''}${criterionTitle === 'Visual Aids' ? '- Were slides/visuals effective?\n- Was text readable and not too dense?\n- Did visuals support the content?' : ''}${criterionTitle === 'Delivery' ? '- How was their speaking pace and clarity?\n- Did they maintain eye contact?\n- Did they appear confident and engaged?' : ''}
+RUBRIC FOR THIS CRITERION:
+${criterionRubricOnly || `Evaluate based on what the rubric says about "${criterionTitle}".`}
 
-FORMAT YOUR RESPONSE (vary structure - avoid repetitive templates):
-- Use different openings: "What stands out...", "A key strength here...", "Notably, the student..."
-- Vary transition words: Moreover, Specifically, In contrast, Notably
-- Mix bullet styles: sometimes lead with the quote, sometimes with the observation
-- Avoid starting every bullet with "The student" - vary phrasing
+Format your response exactly like this (vary phrasing — avoid repetitive templates):
 
-**Overview** (2-3 sentences - ${criterionTitle}-specific, varied tone)
+**Overview**
+2-3 sentences specific to this criterion and what the rubric expects.
 
 **What worked well:**
-- [Strength - vary phrasing] A
-- [Another strength] B
+- [Specific strength with evidence from transcript] A
+- [Another strength] A
 
 **Areas to develop:**
-- [Gap - be specific] A
-- [Rubric expectation] B
+- [Specific gap tied to the rubric] B
+- [What the rubric expects that was missing] B
 
-**Example of excellence:** One sentence.
+**Example of excellence:** One sentence describing what a top score on this criterion looks like.
 
-RUBRIC SECTION FOR "${criterionTitle}":
-${criterionRubricOnly || 'Evaluate based on the criterion name and general expectations.'}
-
-RULES:
-- End each bullet with A (video quote) or B (rubric reference)
+Rules:
+- End each bullet with A (video transcript evidence) or B (rubric reference)
 - Quote the student's words when possible
-- Be specific to ${criterionTitle} - no generic feedback`,
+- Be specific to this criterion only`,
         context: {
           highlightedText: criterionTitle,
           sourceType: 'rubric',
@@ -895,6 +876,43 @@ RULES:
     }
     throw new Error(data.error || 'Failed to get insights');
   }, [submission, sortedSegments, submissionId, batchInfo?.courseId, batchInfo, extractCriterionRubricText]);
+
+  // Auto-generate insights for all criteria in the background when submission loads
+  useEffect(() => {
+    if (!submission || submission.status !== 'ready') return;
+    const criteria = submission.rubricEvaluation?.criteriaBreakdown;
+    if (!criteria || criteria.length === 0) return;
+
+    const missing = criteria.filter(c => !criterionInsights[c.criterion]);
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const generated: Record<string, string> = {};
+      for (const c of missing) {
+        if (cancelled) break;
+        try {
+          const insight = await handleRequestCriterionInsights(c.criterion);
+          if (!cancelled) generated[c.criterion] = insight;
+        } catch {
+          // silently skip failed criteria
+        }
+      }
+      if (!cancelled && Object.keys(generated).length > 0) {
+        setCriterionInsights(prev => {
+          const updated = { ...prev, ...generated };
+          fetch('/api/bulk/submissions', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ submissionId, criterionInsights: updated }),
+          }).catch(console.error);
+          return updated;
+        });
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [submission?.status, submission?.rubricEvaluation?.criteriaBreakdown, handleRequestCriterionInsights, submissionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle Get More insights for Overview sections (alignment, key, verification)
   const handleGetMoreAlignmentInsights = useCallback(async () => {
