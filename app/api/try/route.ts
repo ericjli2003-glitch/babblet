@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { searchCurrentEvents, formatSearchContext } from '@/lib/web-search';
 
 // Tell Vercel/Next.js this route can run up to 60 seconds
 export const maxDuration = 60;
@@ -154,10 +155,14 @@ ${exampleItems}
   ]
 }`;
 
+      const searchResults = await searchCurrentEvents(pq.slice(0, 200), 3);
+      const searchContext = formatSearchContext(searchResults);
+      const promptWithSearch = searchContext ? branchPrompt + searchContext : branchPrompt;
+
       const msg = await anthropic.messages.create({
         model: 'claude-sonnet-4-5',
         max_tokens: 1100,
-        messages: [{ role: 'user', content: branchPrompt }],
+        messages: [{ role: 'user', content: promptWithSearch }],
       });
 
       const raw = msg.content[0].type === 'text' ? msg.content[0].text : '{}';

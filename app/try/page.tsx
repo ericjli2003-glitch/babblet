@@ -123,34 +123,6 @@ const DEMO_RESULT: AnalysisResult = {
 
 const DEMO_TRANSCRIPT_TEXT = DEMO_RESULT.transcript!.map(s => s.text).join('\n\n');
 
-/** Pre-built branch pairs for demo mode (no server call). */
-const DEMO_BRANCHES: Record<number, { question: string; category: string; rationale: string; timestamp: string }[]> = {
-  0: [
-    { question: 'If you repeated the same neuroplasticity assessment in two weeks, what specific behavioral markers would you expect to shift first?', category: 'depth', rationale: 'Tests whether the claim is tied to observable, time-bound outcomes.', timestamp: '1:15' },
-    { question: 'Name one peer-reviewed source you would cite to defend the “typical recovery trajectory” statement.', category: 'evidence', rationale: 'Surfaces whether the assertion is literature-backed.', timestamp: '1:12' },
-  ],
-  1: [
-    { question: 'How would you operationalize “independence in morning self-care” using a standardized OT outcome measure?', category: 'application', rationale: 'Checks alignment between goals and measurable criteria.', timestamp: '1:38' },
-    { question: 'What trade-off exists between maximizing independence and minimizing caregiver burden in your discharge plan?', category: 'synthesis', rationale: 'Exposes competing priorities in discharge planning.', timestamp: '1:40' },
-  ],
-  2: [
-    { question: 'Which telehealth modality would you prioritize for this client given geographic isolation, and why?', category: 'application', rationale: 'Links environmental constraint to a concrete service model.', timestamp: '0:52' },
-    { question: 'What barrier might prevent the partner from supporting home programs you outlined?', category: 'assumption', rationale: 'Surfaces unstated assumptions about informal support.', timestamp: '0:55' },
-  ],
-  3: [
-    { question: 'When would you choose a restorative versus compensatory approach for the expressive aphasia you described?', category: 'depth', rationale: 'Probes clinical reasoning across intervention philosophies.', timestamp: '1:22' },
-    { question: 'How would you document progress on executive functioning for billing and team communication?', category: 'clarification', rationale: 'Connects cognitive deficits to documentation practice.', timestamp: '1:25' },
-  ],
-  4: [
-    { question: 'What would change in your education plan if the primary caregiver could only attend every other week?', category: 'application', rationale: 'Stress-tests plan feasibility under schedule constraints.', timestamp: '1:48' },
-    { question: 'Which assumption about caregiver motivation is riskiest if it turns out to be wrong?', category: 'assumption', rationale: 'Highlights single point of failure in the care model.', timestamp: '1:50' },
-  ],
-};
-
-const NESTED_BRANCH_FALLBACK = [
-  { question: 'How would you document the student’s answer in the SOAP note if you were the supervising clinician?', category: 'application', rationale: 'Bridges discussion back to documentation standards.', timestamp: '1:00' },
-  { question: 'What counterargument would a peer reviewer raise to your last point, and how would you respond?', category: 'depth', rationale: 'Builds argumentative rigor beyond the first reply.', timestamp: '1:05' },
-];
 
 interface QBranch {
   id: string;
@@ -844,46 +816,7 @@ export default function TryPage() {
   const executeBranch = useCallback(async (parent: QBranch, userInstruction: string, count: number = 2) => {
     if ((branchMap[parent.id]?.length ?? 0) > 0) return;
 
-    const runDemoBranches = () => {
-      const rootIdx = parent.parentRootIndex ?? 0;
-      const base =
-        parent.depth === 0
-          ? (DEMO_BRANCHES[rootIdx] ?? DEMO_BRANCHES[0])
-          : NESTED_BRANCH_FALLBACK;
-      // Pad to requested count with fallback items
-      const template = Array.from({ length: count }, (_, i) => base[i] ?? NESTED_BRANCH_FALLBACK[i % NESTED_BRANCH_FALLBACK.length]);
-      const focus = userInstruction.trim();
-      const kids: QBranch[] = template.map((t, i) => ({
-        ...t,
-        // Force child category to match parent so the badge stays aligned
-        category: parent.category,
-        question: focus ? `${t.question} (Your focus: ${focus.slice(0, 140)}${focus.length > 140 ? '…' : ''})` : t.question,
-        rationale: focus ? `${t.rationale} — Guided by: ${focus.slice(0, 160)}` : t.rationale,
-        id: `${parent.id}-b${i}-${Date.now()}`,
-        parentId: parent.id,
-        parentRootIndex: parent.parentRootIndex,
-        depth: parent.depth + 1,
-      }));
-      setBranchMap((prev) => ({ ...prev, [parent.id]: kids }));
-    };
-
     const activeSlotData = slots[activeSlot];
-
-    if (activeSlotData?.isDemo) {
-      const cur = getStoredCredits();
-      if (cur <= 0 && !isUnlocked()) { setShowGate(true); return; }
-      const next = Math.max(0, cur - 1);
-      setStoredCredits(next);
-      setCredits(next);
-      setBranchingId(parent.id);
-      try {
-        await new Promise((r) => setTimeout(r, 380));
-        runDemoBranches();
-      } finally {
-        setBranchingId(null);
-      }
-      return;
-    }
 
     const cur = getStoredCredits();
     if (cur <= 0 && !isUnlocked()) { setShowGate(true); return; }
