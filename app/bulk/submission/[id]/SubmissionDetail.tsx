@@ -2072,9 +2072,17 @@ RULES:
                                     criterionIndex={selectedCriterionIndex}
                                     totalCriteria={effectiveCriteria.length}
                                     onInsightsGenerated={(criterionTitle, insights) => {
-                                      setCriterionInsights(prev => 
-                                        insights ? { ...prev, [criterionTitle]: insights } : (() => { const { [criterionTitle]: _, ...rest } = prev; return rest; })()
-                                      );
+                                      setCriterionInsights(prev => {
+                                        const updated = insights
+                                          ? { ...prev, [criterionTitle]: insights }
+                                          : (() => { const { [criterionTitle]: _, ...rest } = prev; return rest; })();
+                                        fetch('/api/bulk/submissions', {
+                                          method: 'PATCH',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ submissionId, criterionInsights: updated }),
+                                        }).catch(console.error);
+                                        return updated;
+                                      });
                                     }}
                                     onSeekToTime={(ms) => videoPanelRef.current?.seekTo(ms)}
                                     onRequestMoreInsights={handleRequestCriterionInsights}
