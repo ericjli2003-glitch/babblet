@@ -521,7 +521,7 @@ Return ONLY valid JSON in this exact format (no markdown, no extra text):
 {"questions":[{"question":"Question text here","category":"evidence","difficulty":"medium","rationale":"Brief rationale","relevantSnippet":"exact quote from transcript"}]}
 
 Required fields per question:
-- question: The question text (string)
+- question: The question text — maximum 15 words, direct and specific, no preamble
 - category: One of: evidence, assumption, counterargument, limitation, methodology, application, evaluation, synthesis, implication, clarification
 - difficulty: easy, medium, or hard
 - rationale: Brief explanation (1 sentence)
@@ -701,7 +701,7 @@ ${customizationInstruction}
 TRANSCRIPT:
 ${transcript.substring(0, 3000)}
 
-Generate exactly ${count} additional questions that are similar to the original but explore different angles.${customization ? ` Remember to incorporate the customization: "${customization}"` : ''}${currentEventsContext || ''}
+Generate exactly ${count} additional questions that are similar to the original but explore different angles. Keep each question under 15 words — direct, specific, no preamble.${customization ? ` Remember to incorporate the customization: "${customization}"` : ''}${currentEventsContext || ''}
 
 Return JSON:
 {
