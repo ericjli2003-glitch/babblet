@@ -10,7 +10,7 @@ import {
   getQueueLength
 } from '@/lib/batch-store';
 import { getPresignedDownloadUrl } from '@/lib/r2';
-import { analyzeWithClaude, isClaudeConfigured, generateQuestionsWithClaude, evaluateWithClaude } from '@/lib/claude';
+import { analyzeWithClaude, isClaudeConfigured, generateQuestionsWithClaude, evaluateWithClaude, generateAllCriterionInsights } from '@/lib/claude';
 import { verifyWithClaude } from '@/lib/verify';
 import { analyzeVideoForSlides, buildPresentationContext, isGeminiConfigured } from '@/lib/gemini';
 import { createClient } from '@deepgram/sdk';
@@ -233,6 +233,18 @@ async function processSubmission(submissionId: string, batchId: string): Promise
         explanation: f.explanation,
       }));
 
+      // Generate criterion insights (non-blocking — don't fail the submission if this errors)
+      let criterionInsights: Record<string, string> = {};
+      try {
+        const slideText = slideContent?.slides?.map(s =>
+          `[Slide ${s.slideNumber}${s.title ? `: ${s.title}` : ''}] ${s.textContent}`
+        ).join('\n') || '';
+        criterionInsights = await generateAllCriterionInsights(transcript, rubricEvaluation, slideText);
+        console.log(`[Worker] Generated criterion insights for ${submissionId}: ${Object.keys(criterionInsights).length} criteria`);
+      } catch (e) {
+        console.error(`[Worker] Criterion insights generation failed for ${submissionId}:`, e);
+      }
+
       // Update submission with results - only if we have valid grade data
       await updateSubmission(submissionId, {
         analysis: {
@@ -271,6 +283,7 @@ async function processSubmission(submissionId: string, batchId: string): Promise
           presentationType: slideContent.presentationType as 'screen_share' | 'webcam_only' | 'mixed',
           summary: slideContent.summary,
         } : undefined,
+        criterionInsights: Object.keys(criterionInsights).length > 0 ? criterionInsights : undefined,
         status: 'ready',
         completedAt: Date.now(),
       });

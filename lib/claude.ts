@@ -1462,6 +1462,71 @@ Respond ONLY with valid JSON.`;
 }
 
 // ============================================
+// Criterion Insights (batch generation for all criteria)
+// ============================================
+
+export async function generateAllCriterionInsights(
+  transcript: string,
+  rubricEvaluation: RubricEvaluation,
+  slideContent?: string,
+): Promise<Record<string, string>> {
+  const criteria = rubricEvaluation.criteriaBreakdown;
+  if (!criteria || criteria.length === 0) return {};
+
+  const client = getAnthropicClient();
+
+  const criteriaList = criteria.map(c => {
+    const pct = c.maxScore ? Math.round((c.score / c.maxScore) * 100) : null;
+    return `- "${c.criterion}": ${c.score}/${c.maxScore || '?'}${pct !== null ? ` (${pct}%)` : ''} — ${c.feedback || c.rationale || 'No feedback'}`;
+  }).join('\n');
+
+  const slideSection = slideContent ? `\n\nPRESENTATION SLIDES:\n${slideContent.slice(0, 2000)}` : '';
+
+  const response = await client.messages.create({
+    model: config.models.claude,
+    max_tokens: 4000,
+    system: `You are a thoughtful TA analyzing a student presentation. For each rubric criterion, write a concise insight block. Be specific to the transcript — quote the student when possible.`,
+    messages: [{
+      role: 'user',
+      content: `TRANSCRIPT:\n${transcript.slice(0, 8000)}${slideSection}
+
+RUBRIC SCORES:
+${criteriaList}
+
+For EACH criterion above, write an insight block with this format:
+**Overview** (2-3 sentences specific to this criterion)
+
+**What worked well:**
+- [Specific strength with evidence]
+- [Another strength]
+
+**Areas to develop:**
+- [Specific gap]
+- [Rubric expectation not met]
+
+**Example of excellence:** One sentence describing what a top performance would look like.
+
+Return a JSON object where each key is the EXACT criterion name and the value is the insight text (markdown).
+Example: {"Content Knowledge": "**Overview**\\n...", "Structure": "**Overview**\\n..."}
+
+Respond ONLY with valid JSON.`,
+    }],
+  });
+
+  const textContent = response.content.find(c => c.type === 'text');
+  if (!textContent || textContent.type !== 'text') return {};
+
+  try {
+    const jsonMatch = textContent.text.trim().match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return {};
+    return JSON.parse(jsonMatch[0]);
+  } catch {
+    console.error('[Babblet AI] Failed to parse criterion insights JSON');
+    return {};
+  }
+}
+
+// ============================================
 // Document Type Classification
 // ============================================
 
