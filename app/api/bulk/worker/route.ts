@@ -154,35 +154,35 @@ async function processSubmission(submissionId: string, batchId: string): Promise
     const batch = await getBatch(submission.batchId);
     const rubricCriteria = batch?.rubricCriteria;
 
-    // Extract slide content from video if Gemini is configured
-    // This analyzes screen shares in Zoom recordings
-    let slideContent: { slides: Array<{ slideNumber: number; timestamp: number; title?: string; textContent: string; keyPoints: string[]; visualElements?: string[]; dataOrCharts?: string[] }>; presentationType: string; summary: string } | null = null;
-    let presentationContext = '';
-    
-    if (isGeminiConfigured()) {
-      try {
-        console.log(`[Worker] Extracting slide content from video ${submissionId}...`);
-        const slideStart = Date.now();
-        slideContent = await analyzeVideoForSlides(downloadUrl, submission.mimeType || 'video/mp4');
-        console.log(`[Worker] Slide extraction complete: ${slideContent.slides.length} slides in ${Date.now() - slideStart}ms`);
-        
-        if (slideContent.slides.length > 0) {
-          presentationContext = buildPresentationContext(slideContent.slides);
-          console.log(`[Worker] Presentation context built: ${presentationContext.length} chars`);
-        }
-      } catch (slideErr) {
-        console.error(`[Worker] Slide extraction failed (continuing without slides):`, slideErr);
-      }
-    }
-
     // Run analysis pipeline (if AI is configured)
     if (isClaudeConfigured()) {
-      console.log(`[Worker] Analyzing ${submissionId}...`);
-      const analyzeStart = Date.now();
-      
-      // 1. Analyze transcript with presentation context (required for other steps)
-      const analysis = await analyzeWithClaude(transcript, presentationContext || undefined);
-      console.log(`[Worker] Analysis complete for ${submissionId} in ${Date.now() - analyzeStart}ms`);
+      // Run Gemini slide extraction and Claude transcript analysis in PARALLEL
+      // They're independent — Gemini uses the video URL, Claude uses the transcript
+      console.log(`[Worker] Starting parallel: slide extraction + transcript analysis for ${submissionId}`);
+      const parallelAnalyzeStart = Date.now();
+
+      const [slideResult, analysisResult] = await Promise.allSettled([
+        isGeminiConfigured()
+          ? analyzeVideoForSlides(downloadUrl, submission.mimeType || 'video/mp4')
+          : Promise.resolve(null),
+        analyzeWithClaude(transcript),
+      ]);
+
+      const slideContent = slideResult.status === 'fulfilled' ? slideResult.value : null;
+      if (slideResult.status === 'rejected') {
+        console.error(`[Worker] Slide extraction failed (continuing without slides):`, slideResult.reason);
+      }
+
+      if (analysisResult.status === 'rejected') {
+        throw new Error(`Transcript analysis failed: ${analysisResult.reason}`);
+      }
+      const analysis = analysisResult.value;
+
+      const presentationContext = slideContent?.slides?.length
+        ? buildPresentationContext(slideContent.slides)
+        : '';
+
+      console.log(`[Worker] Parallel analysis complete for ${submissionId} in ${Date.now() - parallelAnalyzeStart}ms (${slideContent?.slides?.length ?? 0} slides)`);
       
       // Compute speech metrics from transcript
       const words = transcript.split(/\s+/).filter(w => w.length > 0);
@@ -355,27 +355,32 @@ export async function POST(request: NextRequest) {
     const processed: string[] = [];
     const errors: Array<{ id: string; error: string }> = [];
 
+    // Dequeue all submission IDs upfront, then process in parallel
+    const submissionIds: string[] = [];
     for (let i = 0; i < MAX_SUBMISSIONS_PER_RUN; i++) {
       const submissionId = await getNextQueuedSubmission();
       if (!submissionId) {
         console.log('[Worker] Queue empty, stopping');
         break;
       }
-
-      // Get submission to find batchId for logging
-      const submission = await getSubmission(submissionId);
-      const batchId = submission?.batchId || 'unknown';
-
-      try {
-        await processSubmission(submissionId, batchId);
-        processed.push(submissionId);
-      } catch (error) {
-        errors.push({
-          id: submissionId,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
-      }
+      submissionIds.push(submissionId);
     }
+
+    await Promise.allSettled(
+      submissionIds.map(async (submissionId) => {
+        const sub = await getSubmission(submissionId);
+        const batchId = sub?.batchId || 'unknown';
+        try {
+          await processSubmission(submissionId, batchId);
+          processed.push(submissionId);
+        } catch (error) {
+          errors.push({
+            id: submissionId,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      })
+    );
 
     const workerDuration = Date.now() - workerStartTime;
     console.log(`[Worker] Worker run complete. Processed: ${processed.length}, Errors: ${errors.length}, Duration: ${workerDuration}ms`);
