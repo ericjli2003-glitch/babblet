@@ -659,7 +659,8 @@ export async function generateBranchQuestions(
   transcript: string,
   count: number = 2,
   courseMaterials?: CourseMaterial[],
-  customization?: string
+  customization?: string,
+  currentEventsContext?: string
 ): Promise<GeneratedQuestion[]> {
   const client = getAnthropicClient();
 
@@ -700,7 +701,7 @@ ${customizationInstruction}
 TRANSCRIPT:
 ${transcript.substring(0, 3000)}
 
-Generate exactly ${count} additional questions that are similar to the original but explore different angles.${customization ? ` Remember to incorporate the customization: "${customization}"` : ''}
+Generate exactly ${count} additional questions that are similar to the original but explore different angles.${customization ? ` Remember to incorporate the customization: "${customization}"` : ''}${currentEventsContext || ''}
 
 Return JSON:
 {

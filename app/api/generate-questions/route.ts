@@ -150,7 +150,8 @@ export async function POST(request: NextRequest) {
         transcript,
         settings?.maxQuestions || 2,
         courseMaterials,
-        branchFrom.customization // Pass user's customization hint
+        branchFrom.customization,
+        currentEventsContext
       );
       console.log('[generate-questions] Branch generated', questions.length, 'questions');
     }
