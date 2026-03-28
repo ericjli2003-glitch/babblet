@@ -2061,7 +2061,7 @@ RULES:
                                     status={status}
                                     feedback={c.feedback || c.rationale || 'No detailed feedback available.'}
                                     defaultExpanded={true}
-                                    autoGenerateInsights={true}
+                                    autoGenerateInsights={false}
                                     initialInsights={criterionInsights[c.criterion] || null}
                                     citationSegments={sortedSegments.map(seg => ({ timestamp: normalizeTimestamp(seg.timestamp), text: seg.text }))}
                                     courseReferences={[
