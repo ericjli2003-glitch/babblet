@@ -1322,7 +1322,7 @@ Respond ONLY with valid JSON.`;
     console.log('[Babblet AI] Evaluating presentation with rubric...');
 
     const response = await client.messages.create({
-      model: config.models.claude,
+      model: config.models.claudeSecondary,
       max_tokens: config.api.evaluationMaxTokens,
       messages: [
         {
