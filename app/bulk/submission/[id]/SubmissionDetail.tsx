@@ -123,6 +123,7 @@ export interface Submission {
   completedAt?: number;
   /** Regrade version: 1 = original (no badge), 2+ = show "2nd grading", "3rd grading", etc. */
   gradingCount?: number;
+  criterionInsights?: Record<string, string>;
 }
 
 // ============================================
@@ -293,7 +294,9 @@ export default function SubmissionDetail({ initialSubmission }: { initialSubmiss
     pausesPerMinAvg: number | null;
     count: number;
   } | null>(null);
-  const [criterionInsights, setCriterionInsights] = useState<Record<string, string>>({});
+  const [criterionInsights, setCriterionInsights] = useState<Record<string, string>>(
+    initialSubmission?.criterionInsights ?? {}
+  );
   const [alignmentMoreInsights, setAlignmentMoreInsights] = useState<string | null>(null);
   const [keyMoreInsights, setKeyMoreInsights] = useState<string | null>(null);
   const [verificationMoreInsights, setVerificationMoreInsights] = useState<string | null>(null);
