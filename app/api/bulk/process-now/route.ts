@@ -358,8 +358,6 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
           overallScore: 0,
           overallFeedback: 'Automated grading encountered an error. Manual review recommended.',
           criteriaBreakdown: [],
-          strengths: [],
-          improvements: [],
         };
       }
 
