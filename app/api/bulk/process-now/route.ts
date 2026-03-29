@@ -25,7 +25,6 @@ import {
   type RetrievalResult,
   type CriterionRetrievalResult,
 } from '@/lib/embeddings';
-import { generateCriterionInsight } from '@/lib/generate-criterion-insight';
 
 // Process 1 submission per request - frontend fires multiple parallel requests
 // This gives each video its own 300s timeout
@@ -295,77 +294,55 @@ async function processSubmission(submissionId: string): Promise<{ success: boole
       } : undefined;
 
       // ============================================
-      // GRADING: Try evaluation with retry on failure
-      // Claude should always produce a grade - if it fails, retry once
+      // Run rubric eval, questions, and verification ALL IN PARALLEL
+      // They all only depend on `analysis`, not on each other
       // ============================================
-      let rubricEvaluation = null;
-      let rubricError = null;
-      
-      // First attempt
-      try {
-        rubricEvaluation = await evaluateWithClaude(transcript, fullRubricContext, undefined, analysis, segments, professorContext, gradingScaleConfig);
-        console.log(`[ProcessNow] Rubric evaluation succeeded for ${submissionId}, score: ${rubricEvaluation?.overallScore}`);
-      } catch (err) {
-        console.error(`[ProcessNow] Rubric evaluation attempt 1 FAILED for ${submissionId}:`, err);
-        rubricError = err;
-      }
-      
-      // Retry once if first attempt failed
-      if (!rubricEvaluation && rubricError) {
-        console.log(`[ProcessNow] Retrying rubric evaluation for ${submissionId}...`);
-        try {
-          await new Promise(r => setTimeout(r, 2000)); // Wait 2 seconds before retry
-          rubricEvaluation = await evaluateWithClaude(transcript, fullRubricContext, undefined, analysis, segments, professorContext, gradingScaleConfig);
-          console.log(`[ProcessNow] Rubric evaluation retry succeeded for ${submissionId}, score: ${rubricEvaluation?.overallScore}`);
-        } catch (retryErr) {
-          console.error(`[ProcessNow] Rubric evaluation retry FAILED for ${submissionId}:`, retryErr);
-        }
-      }
+      console.log(`[ProcessNow] Starting parallel: rubric + questions + verify for ${submissionId}`);
+      const parallelStart = Date.now();
 
-      // Generate questions, verify, AND criterion insights in parallel (non-critical)
-      const criteria = rubricEvaluation?.criteriaBreakdown || [];
-      const virtualSubmissionForInsights = {
-        transcript,
-        transcriptSegments: segments,
-        rubricEvaluation,
-        analysis,
-      };
-
-      const insightPromises = criteria.map((c: { criterion: string }, idx: number) =>
-        generateCriterionInsight({
-          criterionTitle: c.criterion,
-          criterionIndex: idx,
-          submission: virtualSubmissionForInsights,
-          batchCourseId: batch?.courseId,
-          batchAssignmentId: batch?.assignmentId,
-          fullRubricText: fullRubricContext || '',
-        }).catch((err) => {
-          console.error(`[ProcessNow] Criterion insight failed for ${c.criterion}:`, err);
-          return null;
-        })
-      );
-
-      const [questionsResult, verifyResult, ...insightResults] = await Promise.allSettled([
+      const [rubricResult, questionsResult, verifyResult] = await Promise.allSettled([
+        evaluateWithClaude(transcript, fullRubricContext, undefined, analysis, segments, professorContext, gradingScaleConfig),
         generateQuestionsWithClaude(transcript, analysis, undefined, { maxQuestions: 5 }),
         claims.length > 0 ? verifyWithClaude(transcript, claims) : Promise.resolve([]),
-        ...insightPromises,
       ]);
+
+      console.log(`[ProcessNow] Parallel rubric+questions+verify done in ${Date.now() - parallelStart}ms`);
+
+      let rubricEvaluation = rubricResult.status === 'fulfilled' ? rubricResult.value : null;
+
+      // Retry rubric once if it failed
+      if (!rubricEvaluation) {
+        console.error(`[ProcessNow] Rubric eval failed, retrying for ${submissionId}:`, (rubricResult as PromiseRejectedResult).reason);
+        try {
+          rubricEvaluation = await evaluateWithClaude(transcript, fullRubricContext, undefined, analysis, segments, professorContext, gradingScaleConfig);
+          console.log(`[ProcessNow] Rubric retry succeeded for ${submissionId}`);
+        } catch (retryErr) {
+          console.error(`[ProcessNow] Rubric retry also failed for ${submissionId}:`, retryErr);
+        }
+      } else {
+        console.log(`[ProcessNow] Rubric eval succeeded for ${submissionId}, score: ${rubricEvaluation?.overallScore}`);
+      }
 
       const questions = questionsResult.status === 'fulfilled' ? questionsResult.value : [];
       const findings = verifyResult.status === 'fulfilled' ? verifyResult.value : [];
-      const criterionInsights: Record<string, string> = {};
-      criteria.forEach((c: { criterion: string }, idx: number) => {
-        const r = insightResults[idx];
-        if (r?.status === 'fulfilled' && r.value && typeof r.value === 'string') {
-          criterionInsights[c.criterion] = r.value;
-        }
-      });
-      if (Object.keys(criterionInsights).length > 0) {
-        console.log(`[ProcessNow] Generated ${Object.keys(criterionInsights).length} criterion insights for ${submissionId}`);
-      }
 
       if (questionsResult.status === 'rejected') {
         console.error(`[ProcessNow] Questions generation FAILED for ${submissionId}:`, questionsResult.reason);
+      }
+
+      // Generate criterion insights in one batched Claude call (not N separate calls)
+      const criterionInsights: Record<string, string> = {};
+      const criteria = rubricEvaluation?.criteriaBreakdown || [];
+      if (criteria.length > 0) {
+        try {
+          const { generateAllCriterionInsights } = await import('@/lib/claude');
+          const slideText = ''; // slide content not available in process-now path
+          const insightMap = await generateAllCriterionInsights(transcript, rubricEvaluation!, slideText);
+          Object.assign(criterionInsights, insightMap);
+          console.log(`[ProcessNow] Generated ${Object.keys(criterionInsights).length} criterion insights for ${submissionId}`);
+        } catch (err) {
+          console.error(`[ProcessNow] Criterion insights batch failed for ${submissionId}:`, err);
+        }
       }
 
       // ============================================
