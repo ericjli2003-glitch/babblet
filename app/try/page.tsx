@@ -8,6 +8,7 @@ import {
   ChevronRight, Sparkles, Mic, X,
 } from 'lucide-react';
 import Link from 'next/link';
+import FeedbackTimeline, { FeedbackTimelineItem } from '@/components/submission/FeedbackTimeline';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MAX_CREDITS = 9;
@@ -693,6 +694,8 @@ export default function TryPage() {
   const slotFilesRef = useRef<(File | null)[]>([null, null, null]);
   const fileInputsRef = useRef<(HTMLInputElement | null)[]>([null, null, null]);
   const addFileInputRef = useRef<HTMLInputElement>(null);
+  const tryVideoRef = useRef<HTMLVideoElement>(null);
+  const [tryVideoTimeMs, setTryVideoTimeMs] = useState(0);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const patchSlot = useCallback((idx: number, patch: Partial<VideoSlot>) => {
@@ -910,7 +913,46 @@ export default function TryPage() {
     return buildSegmentAnnotations(base, transcript.length);
   }, [analysisForUi, transcript.length]);
   const sm = analysisForUi?.speechMetrics ?? DEMO_RESULT.speechMetrics!;
-;
+
+  // Parse "m:ss" or "h:mm:ss" timestamp strings to milliseconds
+  const parseTimestampToMs = (ts: string): number => {
+    const parts = ts.split(':').map(Number);
+    if (parts.length === 2) return (parts[0] * 60 + parts[1]) * 1000;
+    if (parts.length === 3) return (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
+    return 0;
+  };
+
+  // Build timeline items from strengths/improvements, matching to transcript timestamps
+  const tryTimelineItems = useMemo((): FeedbackTimelineItem[] => {
+    if (!analysisForUi) return [];
+    const segs = transcript;
+    if (!segs.length) return [];
+    const items: FeedbackTimelineItem[] = [];
+
+    const process = (
+      arr: Array<{ text: string; quote: string }>,
+      type: 'strength' | 'improvement',
+    ) => {
+      arr.forEach((item, i) => {
+        const segIdx = findSegmentIndexForQuote(item.quote, segs);
+        if (segIdx >= 0 && segs[segIdx]) {
+          const ms = parseTimestampToMs(segs[segIdx].timestamp);
+          items.push({
+            id: `${type}-${i}`,
+            timestampMs: ms,
+            timestampLabel: segs[segIdx].timestamp,
+            type,
+            text: item.text,
+            snippet: item.quote.slice(0, 130),
+          });
+        }
+      });
+    };
+
+    process(analysisForUi.strengths, 'strength');
+    process(analysisForUi.improvements, 'improvement');
+    return items;
+  }, [analysisForUi, transcript]);
 
   return (
     <div className="h-screen flex flex-col bg-[#F9FAFB]">
@@ -1092,6 +1134,18 @@ export default function TryPage() {
                       )}
                     </div>
                   </div>
+                )}
+
+                {/* Feedback Timeline */}
+                {tryTimelineItems.length > 0 && (
+                  <FeedbackTimeline
+                    items={tryTimelineItems}
+                    currentTimeMs={tryVideoTimeMs}
+                    onSeek={(ms) => {
+                      const v = tryVideoRef.current;
+                      if (v) { v.currentTime = ms / 1000; v.play(); }
+                    }}
+                  />
                 )}
 
                 {/* Transcript */}
@@ -1346,7 +1400,15 @@ export default function TryPage() {
           <div className="flex-shrink-0 p-4 pb-3">
             <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
               {activeSlotData.isDemo || activeSlotData.url ? (
-                <video key={activeVideoSrc} src={activeVideoSrc} controls playsInline className="w-full h-full object-cover" />
+                <video
+                  key={activeVideoSrc}
+                  ref={tryVideoRef}
+                  src={activeVideoSrc}
+                  controls
+                  playsInline
+                  className="w-full h-full object-cover"
+                  onTimeUpdate={(e) => setTryVideoTimeMs(Math.round(e.currentTarget.currentTime * 1000))}
+                />
               ) : (
                 <div
                   className="absolute inset-0 flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-white/5 transition-colors"

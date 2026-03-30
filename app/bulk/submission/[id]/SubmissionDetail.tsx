@@ -19,6 +19,7 @@ import RubricCriterion from '@/components/submission/RubricCriterion';
 import ClassInsightCard from '@/components/submission/ClassInsightCard';
 import CollapsibleSection from '@/components/submission/CollapsibleSection';
 import VideoPanel, { VideoPanelRef } from '@/components/submission/VideoPanel';
+import FeedbackTimeline, { FeedbackTimelineItem } from '@/components/submission/FeedbackTimeline';
 import { 
   HighlightContextProvider, 
   ContextualChatPanel,
@@ -57,6 +58,8 @@ export interface Submission {
       maxScore?: number;
       feedback: string;
       rationale?: string;
+      strengths?: Array<string | { text?: string; transcriptRefs?: Array<{ timestamp: number; snippet?: string }> }>;
+      improvements?: Array<string | { text?: string; transcriptRefs?: Array<{ timestamp: number; snippet?: string }> }>;
     }>;
     strengths: Array<string | { text: string; transcriptRefs?: Array<{ segmentId?: string; timestamp: number; snippet: string }> }>;
     improvements: Array<string | { text: string; transcriptRefs?: Array<{ segmentId?: string; timestamp: number; snippet: string }> }>;
@@ -594,6 +597,62 @@ export default function SubmissionDetail({ initialSubmission }: { initialSubmiss
     return 0;
   }, [sortedSegments, currentVideoTime, videoDuration, normalizeTimestamp]);
 
+  // Build feedback timeline items from rubric evaluation transcript refs
+  const feedbackTimelineItems = useMemo((): FeedbackTimelineItem[] => {
+    const rubric = submission?.rubricEvaluation;
+    if (!rubric) return [];
+
+    const fmt = (ms: number) => {
+      const s = Math.floor(ms / 1000);
+      return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+    };
+
+    const items: FeedbackTimelineItem[] = [];
+
+    const pushRefs = (
+      arr: Array<string | { text?: string; transcriptRefs?: Array<{ timestamp: number; snippet?: string }> }>,
+      type: 'strength' | 'improvement',
+      criterion?: string,
+    ) => {
+      (arr || []).forEach((item, i) => {
+        if (!item) return;
+        const text = typeof item === 'string' ? item : (item.text ?? '');
+        const refs = typeof item === 'object' ? item.transcriptRefs : undefined;
+        if (refs?.length) {
+          refs.forEach((ref) => {
+            if (typeof ref.timestamp === 'number' && ref.timestamp >= 0) {
+              items.push({
+                id: `${type}-${criterion ?? 'top'}-${i}-${ref.timestamp}`,
+                timestampMs: ref.timestamp,
+                timestampLabel: fmt(ref.timestamp),
+                type,
+                criterion,
+                text,
+                snippet: ref.snippet,
+              });
+            }
+          });
+        }
+      });
+    };
+
+    // Prefer per-criterion breakdown (most granular)
+    if (rubric.criteriaBreakdown?.length) {
+      rubric.criteriaBreakdown.forEach((c) => {
+        pushRefs(c.strengths || [], 'strength', c.criterion);
+        pushRefs(c.improvements || [], 'improvement', c.criterion);
+      });
+    }
+
+    // Fall back to top-level strengths/improvements if nothing from criteria
+    if (items.length === 0) {
+      pushRefs(rubric.strengths || [], 'strength');
+      pushRefs(rubric.improvements || [], 'improvement');
+    }
+
+    return items;
+  }, [submission?.rubricEvaluation]);
+
   // Handle video time updates
   const handleVideoTimeUpdate = useCallback((timeMs: number) => {
     setCurrentVideoTime(timeMs);
@@ -839,6 +898,7 @@ Format your response exactly like this (vary phrasing — avoid repetitive templ
 **Example of excellence:** One sentence describing what a top score on this criterion looks like.
 
 Rules:
+- Write entirely in third person: "The student...", "The presenter...", "The presentation..." — never "you" or "your"
 - End each bullet with A (video transcript evidence) or B (rubric reference)
 - Quote the student's words when possible
 - Be specific to this criterion only`,
@@ -1348,6 +1408,15 @@ Rules:
                         )}
                       </div>
                     </div>
+                  )}
+
+                  {/* Feedback Timeline */}
+                  {feedbackTimelineItems.length > 0 && (
+                    <FeedbackTimeline
+                      items={feedbackTimelineItems}
+                      currentTimeMs={currentVideoTime}
+                      onSeek={(ms) => videoPanelRef.current?.seekTo(ms)}
+                    />
                   )}
 
                   {/* Annotated Transcript */}

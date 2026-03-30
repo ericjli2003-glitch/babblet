@@ -1240,7 +1240,7 @@ EVALUATION RULES:
 4. ACTUALLY READ the transcript carefully and score what you see, not a template response
 5. If a student does something well → HIGH score for that criterion
 6. If a student misses expectations → LOW score for that criterion
-7. Write feedback as you would to your own student
+7. Write ALL feedback in third person about the student — use "the student", "the presenter", or "the presentation". Never use second person ("you", "your"). Example: "The student demonstrated strong clinical reasoning" not "You demonstrated strong clinical reasoning"
 8. Be specific about what was done well AND what to improve
 9. Explain WHY something is a strength or weakness with evidence from the transcript
 10. Suggest concrete next steps for improvement
@@ -1287,7 +1287,7 @@ JSON format:
     "improvements": [{ "text": "...", "quote": "..." }]
   },
   "overallScore": number,
-  "overallFeedback": "Summary as a professor would write to the student",
+  "overallFeedback": "Third-person summary about the student (e.g., 'The student demonstrates strong clinical reasoning...'). Never use second person.",
   "gradingScaleUsed": "${effectiveScale.type}",
   "maxPossibleScore": ${effectiveScale.maxScore || 100},
   "criteriaBreakdown": [
@@ -1487,7 +1487,7 @@ export async function generateAllCriterionInsights(
   const response = await client.messages.create({
     model: config.models.claude,
     max_tokens: 4000,
-    system: `You are a thoughtful TA analyzing a student presentation. For each rubric criterion, write a concise insight block. Be specific to the transcript — quote the student when possible.`,
+    system: `You are a thoughtful TA analyzing a student presentation. For each rubric criterion, write a concise insight block. Be specific to the transcript — quote the student when possible. Write entirely in third person about the student (e.g., "The student demonstrates...", "The presenter shows..."). Never use second person ("you", "your").`,
     messages: [{
       role: 'user',
       content: `TRANSCRIPT:\n${transcript.slice(0, 8000)}${slideSection}
