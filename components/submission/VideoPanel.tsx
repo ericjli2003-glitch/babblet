@@ -1,8 +1,10 @@
 'use client';
 
 import { useRef, useEffect, useImperativeHandle, forwardRef, useState } from 'react';
-import { Play, Calendar, Volume2, Gauge, Expand } from 'lucide-react';
+import { Play, Calendar, Volume2, Gauge, Expand, Bookmark } from 'lucide-react';
 import TranscriptModal from './TranscriptModal';
+import { VideoBookmarkBar } from './VideoBookmarkPlayer';
+import type { VideoBookmark } from './buildVideoBookmarks';
 
 interface TranscriptEntry {
   timestamp: string;
@@ -32,6 +34,8 @@ interface VideoPanelProps {
   presentationTitle?: string;
   submissionId?: string;
   hideTranscript?: boolean;
+  bookmarks?: VideoBookmark[];
+  onExpandBookmarkPlayer?: () => void;
 }
 
 export interface VideoPanelRef {
@@ -53,10 +57,13 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
   presentationTitle = 'Presentation',
   submissionId,
   hideTranscript = false,
+  bookmarks,
+  onExpandBookmarkPlayer,
 }, ref) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [videoDurationMs, setVideoDurationMs] = useState(0);
 
   useImperativeHandle(ref, () => ({
     seekTo: (timestampMs: number) => {
@@ -136,8 +143,9 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
 
   const handleVideoLoadedMetadata = (e: React.SyntheticEvent<HTMLVideoElement>) => {
     const video = e.currentTarget;
-    if (onDurationChange && video.duration) {
-      onDurationChange(video.duration * 1000);
+    if (video.duration) {
+      setVideoDurationMs(video.duration * 1000);
+      if (onDurationChange) onDurationChange(video.duration * 1000);
     }
   };
 
@@ -170,6 +178,28 @@ const VideoPanel = forwardRef<VideoPanelRef, VideoPanelProps>(function VideoPane
             </div>
           )}
         </div>
+
+        {/* Bookmark bar below video */}
+        {bookmarks && bookmarks.length > 0 && videoDurationMs > 0 && (
+          <div className="mt-3">
+            <VideoBookmarkBar
+              bookmarks={bookmarks}
+              currentTimeMs={currentTimeMs}
+              durationMs={videoDurationMs}
+              onSeek={seekTo}
+              compact
+            />
+            {onExpandBookmarkPlayer && (
+              <button
+                onClick={onExpandBookmarkPlayer}
+                className="mt-2 flex items-center gap-1.5 text-[10px] text-surface-400 hover:text-white transition-colors"
+              >
+                <Bookmark className="w-3 h-3" />
+                Expand with bookmarks ({bookmarks.length})
+              </button>
+            )}
+          </div>
+        )}
 
         {/* File Info */}
         <div className="mt-4">

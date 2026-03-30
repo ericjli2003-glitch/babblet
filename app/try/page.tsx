@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import FeedbackTimeline, { FeedbackTimelineItem } from '@/components/submission/FeedbackTimeline';
+import { VideoBookmarkBar, VideoBookmarkModal } from '@/components/submission/VideoBookmarkPlayer';
+import { buildBookmarksFromTryResult } from '@/components/submission/buildVideoBookmarks';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MAX_CREDITS = 9;
@@ -696,6 +698,8 @@ export default function TryPage() {
   const addFileInputRef = useRef<HTMLInputElement>(null);
   const tryVideoRef = useRef<HTMLVideoElement>(null);
   const [tryVideoTimeMs, setTryVideoTimeMs] = useState(0);
+  const [tryVideoDurationMs, setTryVideoDurationMs] = useState(0);
+  const [showBookmarkModal, setShowBookmarkModal] = useState(false);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const patchSlot = useCallback((idx: number, patch: Partial<VideoSlot>) => {
@@ -952,6 +956,12 @@ export default function TryPage() {
     process(analysisForUi.strengths, 'strength');
     process(analysisForUi.improvements, 'improvement');
     return items;
+  }, [analysisForUi, transcript]);
+
+  // Build bookmark data for the video progress bar
+  const tryBookmarks = useMemo(() => {
+    if (!analysisForUi) return [];
+    return buildBookmarksFromTryResult(analysisForUi, transcript);
   }, [analysisForUi, transcript]);
 
   return (
@@ -1408,6 +1418,7 @@ export default function TryPage() {
                   playsInline
                   className="w-full h-full object-cover"
                   onTimeUpdate={(e) => setTryVideoTimeMs(Math.round(e.currentTarget.currentTime * 1000))}
+                  onLoadedMetadata={(e) => setTryVideoDurationMs(e.currentTarget.duration * 1000)}
                 />
               ) : (
                 <div
@@ -1422,6 +1433,29 @@ export default function TryPage() {
                 </div>
               )}
             </div>
+
+            {/* Video bookmark bar */}
+            {tryBookmarks.length > 0 && tryVideoDurationMs > 0 && (
+              <div className="mt-3">
+                <VideoBookmarkBar
+                  bookmarks={tryBookmarks}
+                  currentTimeMs={tryVideoTimeMs}
+                  durationMs={tryVideoDurationMs}
+                  onSeek={(ms) => {
+                    const v = tryVideoRef.current;
+                    if (v) { v.currentTime = ms / 1000; v.play(); }
+                  }}
+                  compact
+                />
+                <button
+                  onClick={() => setShowBookmarkModal(true)}
+                  className="mt-2 flex items-center gap-1.5 text-[10px] text-slate-400 hover:text-white transition-colors"
+                >
+                  <BookOpen className="w-3 h-3" />
+                  Expand with bookmarks ({tryBookmarks.length})
+                </button>
+              </div>
+            )}
 
             {/* Demo / Upload your own toggle — slot 0 only */}
             {activeSlot === 0 && (
@@ -1532,6 +1566,16 @@ export default function TryPage() {
           </div>
         </div>
       </div>
+
+      {/* Video Bookmark Modal */}
+      <VideoBookmarkModal
+        isOpen={showBookmarkModal}
+        onClose={() => setShowBookmarkModal(false)}
+        videoUrl={activeVideoSrc}
+        bookmarks={tryBookmarks}
+        initialTimeMs={tryVideoTimeMs}
+        title="Presentation Analysis"
+      />
     </div>
   );
 }

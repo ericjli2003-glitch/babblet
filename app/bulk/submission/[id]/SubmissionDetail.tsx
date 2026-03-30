@@ -20,6 +20,8 @@ import ClassInsightCard from '@/components/submission/ClassInsightCard';
 import CollapsibleSection from '@/components/submission/CollapsibleSection';
 import VideoPanel, { VideoPanelRef } from '@/components/submission/VideoPanel';
 import FeedbackTimeline, { FeedbackTimelineItem } from '@/components/submission/FeedbackTimeline';
+import { VideoBookmarkModal } from '@/components/submission/VideoBookmarkPlayer';
+import { buildBookmarksFromSubmission, type VideoBookmark } from '@/components/submission/buildVideoBookmarks';
 import { 
   HighlightContextProvider, 
   ContextualChatPanel,
@@ -307,6 +309,7 @@ export default function SubmissionDetail({ initialSubmission }: { initialSubmiss
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const [videoPanelWidth, setVideoPanelWidth] = useState(420);
   const [isResizing, setIsResizing] = useState(false);
+  const [showBookmarkModal, setShowBookmarkModal] = useState(false);
   const videoPanelRef = useRef<VideoPanelRef>(null);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
   const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -652,6 +655,12 @@ export default function SubmissionDetail({ initialSubmission }: { initialSubmiss
 
     return items;
   }, [submission?.rubricEvaluation]);
+
+  // Build bookmark data for the video timeline bar + modal
+  const videoBookmarks = useMemo((): VideoBookmark[] => {
+    if (!submission) return [];
+    return buildBookmarksFromSubmission(submission, normalizeTimestamp, sortedSegments);
+  }, [submission, normalizeTimestamp, sortedSegments]);
 
   // Handle video time updates
   const handleVideoTimeUpdate = useCallback((timeMs: number) => {
@@ -2237,6 +2246,8 @@ Rules:
               currentTimeMs={currentVideoTime}
               presentationTitle={submission.studentName}
               submissionId={submissionId}
+              bookmarks={videoBookmarks}
+              onExpandBookmarkPlayer={() => setShowBookmarkModal(true)}
             />
     </div>
         </div>
@@ -2296,6 +2307,15 @@ Rules:
           </div>
         </div>
       )}
+      {/* Video Bookmark Modal */}
+      <VideoBookmarkModal
+        isOpen={showBookmarkModal}
+        onClose={() => setShowBookmarkModal(false)}
+        videoUrl={videoUrl}
+        bookmarks={videoBookmarks}
+        initialTimeMs={currentVideoTime}
+        title={submission.studentName}
+      />
     </DashboardLayout>
     </HighlightContextProvider>
   );
