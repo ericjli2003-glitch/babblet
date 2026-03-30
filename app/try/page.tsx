@@ -16,7 +16,7 @@ const MAX_FILE_MB = 300;
 const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
 const CREDIT_KEY = 'babblet_try_credits';
 const UNLOCKED_KEY = 'babblet_try_unlocked';
-const CACHE_KEY = 'babblet_try_result_v3';
+const CACHE_KEY = 'babblet_try_result_v4';
 
 // ─── Pre-computed demo results ────────────────────────────────────────────────
 const DEMO_RESULT: AnalysisResult = {
@@ -30,14 +30,14 @@ const DEMO_RESULT: AnalysisResult = {
     pausesPerMin: 7.6,
   },
   strengths: [
-    { text: 'Comprehensive SOAP note structure with clear delineation between subjective, objective, assessment, and plan sections. Demonstrates strong clinical documentation skills.', quote: 'Beginning with the subjective section of my SOAP note. The client is a 67-year-old male who presents to outpatient occupational therapy following a left hemisphere ischemic stroke six weeks ago.' },
-    { text: 'Appropriate use of clinical terminology and understanding of post-stroke rehabilitation trajectory, including neuroplastic recovery and cognitive-communicative deficits.', quote: 'The assessment indicates the client demonstrates neuroplastic recovery consistent with post-stroke rehabilitation trajectory. He shows expressive aphasia and reduced executive functioning that impact occupational performance.' },
+    { text: 'Comprehensive SOAP note structure with clear delineation between subjective, objective, assessment, and plan sections. Demonstrates strong clinical documentation skills.', quote: 'The client is a 65 year old male with a left CVA currently receiving occupational therapy services in a skilled nursing facility following an acute hospitalization.' },
+    { text: 'Appropriate use of clinical terminology and understanding of post-stroke rehabilitation trajectory, including neuroplastic recovery and cognitive-communicative deficits.', quote: 'The assessment indicates neuroplastic recovery consistent with post-stroke rehabilitation. Expressive aphasia and reduced executive functioning continue to impact occupational performance.' },
     { text: 'Effective inclusion of functional outcome measures and environmental context that demonstrate holistic client evaluation.', quote: 'Grip strength measured at 12 pounds on the right, non-dominant hand, compared to 38 pounds on the left. His living situation includes a single story home with steps at the entrance.' },
   ],
   improvements: [
     { text: 'Discharge criteria could be more specific and measurable. Use standardized outcome measures (e.g., FIM scores) to define clear benchmarks for discharge readiness.', quote: 'Discharge criteria include independence in morning self-care routine and safe community ambulation.' },
     { text: 'Evidence-based justification section lacks specific citations to research studies or clinical practice guidelines. Reference specific frameworks (e.g., AOTA guidelines, Cochrane reviews).', quote: 'The justification for skilled services is grounded in current evidence supporting task-specific training for upper extremity recovery post-stroke.' },
-    { text: 'Consider addressing psychosocial factors and client/family goals more explicitly in the subjective section to strengthen person-centered care documentation.', quote: 'He reports increased confidence in self-care activities over the past two weeks, stating that therapy has helped him regain independence.' },
+    { text: 'Consider addressing psychosocial factors and client/family goals more explicitly in the subjective section to strengthen person-centered care documentation.', quote: 'In this objective section, the client reports increased confidence with daily routines and states that therapy has helped him gain has helped him regain independence.' },
   ],
   rubric: [
     {
