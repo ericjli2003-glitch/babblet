@@ -57,6 +57,27 @@ interface SegmentLike {
   text: string;
 }
 
+function findSegmentForText(text: string, segments: SegmentLike[]): { index: number; segment: SegmentLike } | null {
+  const words = text.toLowerCase().split(/\s+/).filter(w => w.length > 4);
+  if (words.length === 0 || segments.length === 0) return null;
+
+  // Try to find a segment that shares several significant words with the feedback text
+  let bestIdx = -1;
+  let bestScore = 0;
+  for (let i = 0; i < segments.length; i++) {
+    const segLower = segments[i].text.toLowerCase();
+    let score = 0;
+    for (const w of words) {
+      if (segLower.includes(w)) score++;
+    }
+    if (score > bestScore && score >= 3) {
+      bestScore = score;
+      bestIdx = i;
+    }
+  }
+  return bestIdx >= 0 ? { index: bestIdx, segment: segments[bestIdx] } : null;
+}
+
 export function buildBookmarksFromSubmission(
   submission: SubmissionForBookmarks,
   normalizeTimestamp: (t: number) => number,
@@ -90,6 +111,23 @@ export function buildBookmarksFromSubmission(
             });
           }
         });
+      } else if (text && sortedSegments.length > 0) {
+        // Fallback: match feedback text against transcript segments
+        const match = findSegmentForText(text, sortedSegments);
+        if (match) {
+          const rawTs = match.segment.timestamp;
+          const ts = typeof rawTs === 'number' ? normalizeTimestamp(rawTs) : parseTimestampStr(String(rawTs));
+          items.push({
+            id: `${type}-${criterion ?? 'top'}-${i}-fallback`,
+            timestampMs: ts,
+            timestampLabel: fmtMs(ts),
+            type,
+            title: type === 'strength' ? 'Strength' : 'Area for Improvement',
+            text,
+            snippet: match.segment.text.slice(0, 120),
+            criterion,
+          });
+        }
       }
     });
   };
@@ -114,6 +152,23 @@ export function buildBookmarksFromSubmission(
             criterion: c.criterion,
           });
         });
+      } else if (c.feedback && sortedSegments.length > 0) {
+        // Fallback: match criterion feedback against transcript
+        const match = findSegmentForText(c.feedback, sortedSegments);
+        if (match) {
+          const rawTs = match.segment.timestamp;
+          const ts = typeof rawTs === 'number' ? normalizeTimestamp(rawTs) : parseTimestampStr(String(rawTs));
+          items.push({
+            id: `rubric-${c.criterion}-fallback`,
+            timestampMs: ts,
+            timestampLabel: fmtMs(ts),
+            type: 'rubric',
+            title: c.criterion,
+            text: c.feedback,
+            snippet: match.segment.text.slice(0, 120),
+            criterion: c.criterion,
+          });
+        }
       }
     });
   }
@@ -124,26 +179,42 @@ export function buildBookmarksFromSubmission(
     pushRefs(rubric.improvements || [], 'improvement');
   }
 
-  // ── Questions ── (estimate timestamp by distributing across segments)
+  // ── Questions ── (match to relevant transcript segment via snippet text)
   if (submission.questions?.length && sortedSegments.length > 0) {
-    const qLen = submission.questions.length;
-    submission.questions.forEach((q, i) => {
-      const segIdx = Math.min(Math.floor((i / qLen) * sortedSegments.length), sortedSegments.length - 1);
-      const seg = sortedSegments[segIdx];
-      const rawTs = seg?.timestamp;
-      const ts = rawTs != null
-        ? (typeof rawTs === 'number' ? normalizeTimestamp(rawTs) : parseTimestampStr(rawTs))
-        : (i + 1) * 60000;
-      items.push({
-        id: `question-${q.id}`,
-        timestampMs: ts,
-        timestampLabel: fmtMs(ts),
-        type: 'question',
-        title: 'Follow-up Question',
-        text: q.question,
-        snippet: q.relevantSnippet || seg?.text?.slice(0, 100),
-        category: q.category,
-      });
+    submission.questions.forEach((q) => {
+      let ts: number | null = null;
+      let matchedSnippet: string | undefined;
+
+      // Try to find the segment that matches this question's relevantSnippet
+      if (q.relevantSnippet) {
+        const needle = q.relevantSnippet.trim().slice(0, 60).toLowerCase();
+        if (needle.length >= 10) {
+          for (let si = 0; si < sortedSegments.length; si++) {
+            const segText = sortedSegments[si].text.toLowerCase();
+            if (segText.includes(needle.slice(0, 40)) || segText.includes(needle.slice(0, 25))) {
+              const seg = sortedSegments[si];
+              const rawTs = seg.timestamp;
+              ts = typeof rawTs === 'number' ? normalizeTimestamp(rawTs) : parseTimestampStr(String(rawTs));
+              matchedSnippet = seg.text.slice(0, 120);
+              break;
+            }
+          }
+        }
+      }
+
+      // Only create a bookmark if we found a relevant segment
+      if (ts != null) {
+        items.push({
+          id: `question-${q.id}`,
+          timestampMs: ts,
+          timestampLabel: fmtMs(ts),
+          type: 'question',
+          title: 'Follow-up Question',
+          text: q.question,
+          snippet: q.relevantSnippet || matchedSnippet,
+          category: q.category,
+        });
+      }
     });
   }
 

@@ -14,7 +14,7 @@ interface BookmarkCluster {
   dominantType: BookmarkType;
 }
 
-function clusterBookmarks(bookmarks: VideoBookmark[], windowMs = 5000): BookmarkCluster[] {
+function clusterBookmarks(bookmarks: VideoBookmark[], windowMs = 1500): BookmarkCluster[] {
   const sorted = [...bookmarks].sort((a, b) => a.timestampMs - b.timestampMs);
   const clusters: BookmarkCluster[] = [];
 
@@ -229,9 +229,9 @@ function SingleBookmarkCard({ bookmark }: { bookmark: VideoBookmark }) {
           </span>
         )}
       </div>
-      <p className="text-xs text-surface-700 leading-relaxed line-clamp-3">{bookmark.text}</p>
+      <p className="text-xs text-surface-700 leading-relaxed">{bookmark.text}</p>
       {bookmark.snippet && (
-        <p className="mt-1.5 text-[10px] italic text-surface-500 border-l-2 border-surface-200 pl-2 line-clamp-2">
+        <p className="mt-1.5 text-[10px] italic text-surface-500 border-l-2 border-surface-200 pl-2">
           &ldquo;{bookmark.snippet}&rdquo;
         </p>
       )}
@@ -247,7 +247,7 @@ function MiniBookmarkRow({ bookmark }: { bookmark: VideoBookmark }) {
       <Icon className={`w-3 h-3 flex-shrink-0 mt-0.5 ${c.text}`} />
       <div className="min-w-0 flex-1">
         <span className={`text-[10px] font-semibold ${c.text}`}>{TYPE_LABELS[bookmark.type]}</span>
-        <p className="text-[10px] text-surface-700 line-clamp-2 leading-relaxed">{bookmark.text}</p>
+        <p className="text-[10px] text-surface-700 leading-relaxed">{bookmark.text}</p>
       </div>
       <span className={`font-mono text-[9px] font-bold flex-shrink-0 ${c.text}`}>{bookmark.timestampLabel}</span>
     </div>
@@ -311,7 +311,12 @@ function BookmarkSidebarList({
                 <span className="ml-auto text-[9px] text-surface-400 truncate max-w-[80px]">{bm.criterion}</span>
               )}
             </div>
-            <p className="text-[11px] text-surface-700 leading-relaxed line-clamp-2">{bm.text}</p>
+            <p className="text-[11px] text-surface-700 leading-relaxed">{bm.text}</p>
+            {bm.snippet && (
+              <p className="mt-1 text-[10px] italic text-surface-400 border-l-2 border-surface-200 pl-2">
+                &ldquo;{bm.snippet}&rdquo;
+              </p>
+            )}
           </button>
         );
       })}
